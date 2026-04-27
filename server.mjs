@@ -686,7 +686,7 @@ app.post('/api/enroll', (req, res) => {
 });
 
 const PORT = Number(process.env.PORT) || 3001;
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || (process.env.RAILWAY_ENVIRONMENT ? '0.0.0.0' : '127.0.0.1');
 
 export default app;
 

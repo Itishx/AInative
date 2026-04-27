@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "start": "node server.mjs",
     "dev": "concurrently -n client,server -c cyan,yellow \"vite\" \"node server.mjs\"",
     "dev:client": "vite",
     "dev:server": "node server.mjs",
