@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, 'server-data');
+const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'ainative-server-data') : path.join(__dirname, 'server-data');
 const COURSES_FILE = path.join(DATA_DIR, 'published-courses.json');
 
 function fallbackObjective(title) {
@@ -212,6 +212,7 @@ function readCourses() {
   } catch { return []; }
 }
 function writeCourses(courses) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(COURSES_FILE, JSON.stringify(courses, null, 2));
 }
 
@@ -686,9 +687,13 @@ app.post('/api/enroll', (req, res) => {
 const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '127.0.0.1';
 
-app.listen(PORT, HOST, () => {
-  console.log(`AINative API → http://${HOST}:${PORT}`);
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn('⚠  ANTHROPIC_API_KEY not set — copy .env.example to .env');
-  }
-});
+export default app;
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, HOST, () => {
+    console.log(`AINative API → http://${HOST}:${PORT}`);
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.warn('⚠  ANTHROPIC_API_KEY not set — copy .env.example to .env');
+    }
+  });
+}
