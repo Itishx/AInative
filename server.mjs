@@ -2,6 +2,7 @@ import express from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 import multer from 'multer';
+import cors from 'cors';
 import { PDFParse } from 'pdf-parse';
 import fs from 'fs';
 import path from 'path';
@@ -221,14 +222,14 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 dotenv.config();
 
 const app = express();
+app.use(cors({
+  origin: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+  optionsSuccessStatus: 204,
+}));
+app.options('*', cors());
 app.use(express.json({ limit: '4mb' }));
-app.use((_, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  next();
-});
-app.options('*', (_, res) => res.sendStatus(204));
 
 let client = null;
 function getClient() {
