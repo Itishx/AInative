@@ -736,30 +736,37 @@ function LessonCanvas({
                 </svg>
               </div>
             ) : (
-              <div style={{ width: '100%', maxWidth: 820, height: narrow ? 320 : 430, position: 'relative', borderRadius: 28, overflow: 'hidden', border: '1px solid rgba(250,247,240,0.10)', background: `linear-gradient(135deg, ${ambientPalette.base}, ${ambientPalette.mid} 55%, rgba(245, 238, 225, 0.06) 100%)`, boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
-                <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 18% 24%, ${ambientPalette.glowA}, transparent 34%), radial-gradient(circle at 78% 26%, ${ambientPalette.glowC}, transparent 28%), radial-gradient(circle at 66% 76%, ${ambientPalette.glowB}, transparent 34%)` }} />
-                <div style={{ position: 'absolute', left: '-8%', top: '8%', width: '42%', height: '42%', borderRadius: '50%', background: ambientPalette.glowA, filter: 'blur(18px)', animation: 'learnCanvasBlobA 12s ease-in-out infinite' }} />
-                <div style={{ position: 'absolute', right: '-6%', top: '18%', width: '38%', height: '40%', borderRadius: '50%', background: ambientPalette.glowB, filter: 'blur(24px)', animation: 'learnCanvasBlobB 16s ease-in-out infinite' }} />
-                <div style={{ position: 'absolute', left: '24%', bottom: '-10%', width: '48%', height: '46%', borderRadius: '50%', background: ambientPalette.glowC, filter: 'blur(22px)', animation: 'learnCanvasBlobC 14s ease-in-out infinite' }} />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(115deg, rgba(255,255,255,0.02), rgba(255,255,255,0.10), rgba(255,255,255,0.02))', mixBlendMode: 'screen', animation: 'learnCanvasSheen 10s ease-in-out infinite' }} />
-                <div style={{ position: 'absolute', inset: 0, opacity: 0.14, backgroundImage: 'linear-gradient(rgba(250,247,240,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(250,247,240,0.14) 1px, transparent 1px)', backgroundSize: '72px 72px' }} />
-                <div style={{ position: 'absolute', left: 22, bottom: 20, display: 'flex', alignItems: 'end', justifyContent: 'space-between', gap: 20, width: 'calc(100% - 44px)', flexWrap: 'wrap' }}>
-                  <div>
-                    <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.60)', marginBottom: 8 }}>
-                      ambient canvas
-                    </div>
-                    <div style={{ fontFamily: HC.serif, fontSize: narrow ? 24 : 30, lineHeight: 1, letterSpacing: '-0.03em', color: 'rgba(250,247,240,0.88)', maxWidth: 340 }}>
-                      It stays calm until the lesson produces something visual.
-                    </div>
+              <div style={{ width: '100%', maxWidth: 820, position: 'relative', borderRadius: 28, overflow: 'hidden', border: '1px solid rgba(250,247,240,0.10)', background: `linear-gradient(145deg, ${ambientPalette.base}, ${ambientPalette.mid} 60%, rgba(245,238,225,0.04) 100%)`, boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+                <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 82% 14%, ${ambientPalette.glowC}, transparent 28%), radial-gradient(circle at 10% 80%, ${ambientPalette.glowA}, transparent 30%)` }} />
+                <div style={{ position: 'absolute', inset: 0, opacity: 0.08, backgroundImage: 'linear-gradient(rgba(250,247,240,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(250,247,240,0.2) 1px, transparent 1px)', backgroundSize: '56px 56px' }} />
+                <div style={{ position: 'relative', zIndex: 1, padding: narrow ? '24px 22px 26px' : '28px 28px 30px' }}>
+                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.50)', marginBottom: 16 }}>
+                    key facts · {lesson.title}
                   </div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {Array.isArray((lesson as any).facts) && (lesson as any).facts.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {((lesson as any).facts as string[]).map((fact: string, idx: number) => (
+                        <div key={idx} style={{ display: 'flex', gap: 14, alignItems: 'start' }}>
+                          <span style={{ fontFamily: HC.mono, fontSize: 11, color: accent, flexShrink: 0, marginTop: 2, opacity: 0.9 }}>
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                          <span style={{ fontSize: narrow ? 14 : 15, lineHeight: 1.55, color: 'rgba(250,247,240,0.88)', letterSpacing: '-0.01em' }}>
+                            {fact}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(250,247,240,0.72)', fontStyle: 'italic' }}>
+                      {objective}
+                    </div>
+                  )}
+                  <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid rgba(250,247,240,0.10)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     {[
-                      `Chapter ${String(course.currentModule + 1).padStart(2, '0')}`,
-                      `Lesson ${String(course.currentLesson + 1).padStart(2, '0')}`,
                       mod.title,
-                      readyToMoveOn ? 'Ready for quiz' : 'Listening for examples',
+                      readyToMoveOn ? '✓ objective covered' : `Lesson ${String(course.currentLesson + 1).padStart(2, '0')}`,
                     ].map((item) => (
-                      <div key={item} style={{ padding: '10px 14px', borderRadius: 999, background: 'rgba(250,247,240,0.10)', color: HC.paper, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', border: '1px solid rgba(250,247,240,0.10)' }}>
+                      <div key={item} style={{ padding: '7px 12px', borderRadius: 999, background: 'rgba(250,247,240,0.08)', color: 'rgba(250,247,240,0.70)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', border: '1px solid rgba(250,247,240,0.08)' }}>
                         {item}
                       </div>
                     ))}
@@ -1158,7 +1165,7 @@ function LearnContent({ course }: { course: Course }) {
       ]
     : phase === 'REINFORCE'
     ? [
-        { label: 'Another question', action: () => handleQuickPrompt(`Ask me one more simple question about "${lesson?.title}".`, 'CHECK'), primary: false },
+        { label: 'Show example', action: () => handleQuickPrompt(`Give me one short concrete example for "${lesson?.title}".`), primary: false },
         { label: 'Take quiz', action: handleLessonDone, primary: true },
       ]
     : [
