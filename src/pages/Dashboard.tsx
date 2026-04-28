@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HC, btn } from '../theme';
-import { Chrome } from '../components/Chrome';
+import { HC } from '../theme';
 import { useStore } from '../store';
 import type { Course } from '../types';
 
@@ -44,177 +43,167 @@ function formatDeadline(deadline: string) {
   return new Date(deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function ProgressBar({ progress, urgent, tombstone, t }: { progress: number; urgent?: boolean; tombstone?: boolean; t: Palette }) {
-  return (
-    <div style={{ height: 7, borderRadius: 999, background: t.ruleFaint, overflow: 'hidden' }}>
-      <div style={{
-        height: '100%',
-        width: `${Math.round(Math.min(1, progress) * 100)}%`,
-        background: tombstone ? t.mute : urgent ? t.red : t.green,
-        transition: 'width 0.2s ease',
-      }} />
-    </div>
-  );
+function initials(text: string) {
+  return text
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'L';
 }
 
-function StatCard({ label, value, tone, t }: { label: string; value: string | number; tone?: 'red' | 'green'; t: Palette }) {
-  return (
-    <div style={{ background: t.paper, border: `1px solid ${t.ruleFaint}`, padding: '18px 20px', minHeight: 88 }}>
-      <div style={{ fontFamily: t.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute }}>
-        {label}
-      </div>
-      <div style={{ fontFamily: t.serif, fontSize: 42, lineHeight: 1, letterSpacing: '-0.03em', color: tone === 'red' ? t.red : tone === 'green' ? t.green : t.ink, marginTop: 10 }}>
-        {value}
-      </div>
-    </div>
-  );
+function pillTone(course: Course, t: Palette) {
+  if (course.status === 'tombstone') return { label: 'Archived', color: t.mute, bg: 'transparent' };
+  if (course.status === 'completed') return { label: 'Done', color: t.green, bg: 'rgba(45,106,63,0.10)' };
+  if (course.status === 'active-urgent') return { label: 'Urgent', color: t.red, bg: 'rgba(196,34,27,0.10)' };
+  if (courseHasStarted(course)) return { label: 'Active', color: t.green, bg: 'rgba(45,106,63,0.10)' };
+  return { label: 'Planned', color: t.amber, bg: 'rgba(216,148,48,0.12)' };
 }
 
-function CourseCard({ course, onOpen, onDelete, t }: { course: Course; onOpen: () => void; onDelete: () => void; t: Palette }) {
-  const [expanded, setExpanded] = useState(false);
-  const isTomb = course.status === 'tombstone';
-  const urgent = course.status === 'active-urgent';
-  const completed = course.status === 'completed';
-  const started = courseHasStarted(course);
+function CourseCard({
+  course,
+  t,
+  dark,
+  onOpen,
+  onDelete,
+}: {
+  course: Course;
+  t: Palette;
+  dark: boolean;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
   const doneLessons = course.curriculum.modules.flatMap((m) => m.lessons).filter((l) => l.completed).length;
   const totalLessons = course.curriculum.modules.flatMap((m) => m.lessons).length;
   const currentModule = course.curriculum.modules[course.currentModule];
   const currentLesson = currentModule?.lessons[course.currentLesson];
+  const status = pillTone(course, t);
+  const progress = Math.round(course.progress * 100);
   const daysLeft = daysUntil(course.deadline);
-  const statusLabel = isTomb
-    ? 'Archived'
-    : completed
-      ? 'Done'
-      : urgent
-        ? 'Urgent'
-        : started
-          ? 'In progress'
-          : 'Not started';
+  const isArchived = course.status === 'tombstone';
 
   return (
-    <article style={{
-      background: t.paper,
-      border: `1.5px solid ${urgent ? t.red : completed ? t.green : isTomb ? t.ruleFaint : t.ink}`,
-      boxShadow: urgent ? `10px 10px 0 ${t.red}` : completed ? `10px 10px 0 ${t.green}` : 'none',
-      opacity: isTomb ? 0.58 : 1,
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      <div style={{ padding: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'start' }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-              <span style={{
-                fontFamily: t.mono,
-                fontSize: 10,
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
-                color: urgent || isTomb ? t.red : completed ? t.green : t.mute,
-              }}>
-                {statusLabel}
-              </span>
-              <span style={{ fontFamily: t.mono, fontSize: 10, color: t.ruleFaint }}>·</span>
-              <span style={{ fontFamily: t.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.mute }}>
-                {course.curriculum.modules.length} modules
-              </span>
-            </div>
-            <h3 style={{
-              fontFamily: t.serif,
-              fontSize: 34,
-              lineHeight: 1,
-              letterSpacing: '-0.025em',
-              margin: 0,
+    <article
+      style={{
+        background: t.paper,
+        border: `1px solid ${t.ruleFaint}`,
+        borderRadius: 18,
+        padding: 14,
+        boxShadow: dark ? '0 18px 42px rgba(0,0,0,0.18)' : '0 18px 42px rgba(26,21,16,0.06)',
+        opacity: isArchived ? 0.58 : 1,
+        minHeight: 180,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, minWidth: 0 }}>
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              display: 'grid',
+              placeItems: 'center',
+              flexShrink: 0,
+              background: dark ? 'rgba(241,236,223,0.08)' : 'rgba(26,21,16,0.06)',
+              border: `1px solid ${t.ruleFaint}`,
+              fontFamily: t.mono,
+              fontSize: 11,
               color: t.ink,
-              textDecoration: isTomb ? 'line-through' : 'none',
-            }}>
-              {course.subject}
-            </h3>
-          </div>
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontFamily: t.mono, fontSize: 9, letterSpacing: '0.14em', color: t.mute, textTransform: 'uppercase', marginBottom: 5 }}>
-              Deadline
-            </div>
-            <div style={{ fontFamily: t.serif, fontSize: 26, color: urgent ? t.red : t.ink, lineHeight: 1 }}>
-              {formatDeadline(course.deadline)}
-            </div>
-            {!completed && !isTomb && (
-              <div style={{ fontFamily: t.mono, fontSize: 10, color: urgent ? t.red : t.mute, marginTop: 5 }}>
-                {daysLeft <= 0 ? 'due today' : `${daysLeft}d left`}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ marginTop: 22 }}>
-          <ProgressBar progress={course.progress} urgent={urgent} tombstone={isTomb} t={t} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontFamily: t.mono, fontSize: 10, color: t.mute, letterSpacing: '0.08em' }}>
-            <span>{Math.round(course.progress * 100)}%</span>
-            <span>{doneLessons}/{totalLessons} lessons</span>
-          </div>
-        </div>
-
-        <div style={{
-          marginTop: 22,
-          padding: '14px 16px',
-          background: t.bg,
-          border: `1px solid ${t.ruleFaint}`,
-          minHeight: 66,
-        }}>
-          <div style={{ fontFamily: t.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute, marginBottom: 6 }}>
-            {completed ? 'Completed course' : isTomb ? 'Last known lesson' : started ? 'Current lesson' : 'First lesson'}
-          </div>
-          <div style={{ fontFamily: t.serif, fontSize: 18, lineHeight: 1.25, color: t.ink }}>
-            {currentLesson?.title ?? 'No lesson available'}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 22 }}>
-          <button
-            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-            disabled={isTomb}
-            style={{ ...btn.ghost, padding: '10px 0', fontSize: 10, color: isTomb ? t.mute : t.ink, opacity: isTomb ? 0.45 : 1 }}
+            }}
           >
-            {expanded ? 'Hide modules' : 'View modules'}
-          </button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {!isTomb && (
-              <button onClick={onOpen} style={{ ...btn.primary, padding: '11px 16px', fontSize: 10, background: t.ink, color: t.bg }}>
-                {completed ? 'Certificate →' : started ? 'Resume →' : 'Start →'}
-              </button>
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              style={{ ...btn.ghost, padding: '11px 8px', fontSize: 10, color: t.red }}
-            >
-              Delete
-            </button>
+            {initials(course.subject)}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: t.sans, fontSize: 15, fontWeight: 700, color: t.ink, lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {course.subject}
+            </div>
+            <div style={{ marginTop: 5, fontFamily: t.sans, fontSize: 12, color: t.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {currentLesson?.title ?? 'No lesson selected'}
+            </div>
           </div>
         </div>
+        <span
+          style={{
+            flexShrink: 0,
+            borderRadius: 999,
+            padding: '5px 8px',
+            background: status.bg,
+            color: status.color,
+            fontFamily: t.mono,
+            fontSize: 9,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {status.label}
+        </span>
       </div>
 
-      {expanded && !isTomb && (
-        <div style={{ borderTop: `1px solid ${t.ruleFaint}`, background: t.bg, padding: '16px 22px 20px' }}>
-          {course.curriculum.modules.map((m, mi) => {
-            const active = mi === course.currentModule;
-            const done = m.quizPassed;
-            return (
-              <div key={m.title} style={{ padding: '9px 0', borderBottom: mi < course.curriculum.modules.length - 1 ? `1px dashed ${t.ruleFaint}` : 'none' }}>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
-                  <span style={{ fontFamily: t.mono, fontSize: 11, color: done ? t.green : active ? t.red : t.mute }}>
-                    {done ? '✓' : active ? '▸' : '○'}
-                  </span>
-                  <span style={{ fontFamily: t.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: done ? t.green : active ? t.ink : t.mute }}>
-                    {String(mi + 1).padStart(2, '0')} · {m.title}
-                  </span>
-                  <span style={{ marginLeft: 'auto', fontFamily: t.mono, fontSize: 9, color: t.mute }}>
-                    {m.lessons.filter((l) => l.completed).length}/{m.lessons.length}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        {[
+          ['Due', formatDeadline(course.deadline)],
+          ['Left', course.status === 'completed' ? 'Done' : daysLeft <= 0 ? 'Today' : `${daysLeft}d`],
+          ['Lessons', `${doneLessons}/${totalLessons}`],
+        ].map(([label, value]) => (
+          <div key={label} style={{ border: `1px solid ${t.ruleFaint}`, borderRadius: 13, padding: '10px 9px', background: dark ? 'rgba(241,236,223,0.03)' : 'rgba(26,21,16,0.025)' }}>
+            <div style={{ fontFamily: t.mono, fontSize: 8.5, color: t.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}</div>
+            <div style={{ marginTop: 5, fontFamily: t.sans, fontSize: 13, fontWeight: 700, color: t.ink }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 'auto' }}>
+        <div style={{ height: 7, borderRadius: 999, background: t.ruleFaint, overflow: 'hidden' }}>
+          <div
+            style={{
+              height: '100%',
+              width: `${progress}%`,
+              background: course.status === 'active-urgent' ? t.red : course.status === 'completed' ? t.green : t.ink,
+              borderRadius: 999,
+            }}
+          />
         </div>
-      )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, gap: 10 }}>
+          <button
+            onClick={onOpen}
+            disabled={isArchived}
+            style={{
+              border: 'none',
+              borderRadius: 999,
+              background: isArchived ? t.ruleFaint : t.ink,
+              color: t.bg,
+              cursor: isArchived ? 'not-allowed' : 'pointer',
+              padding: '9px 13px',
+              fontFamily: t.mono,
+              fontSize: 9,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              opacity: isArchived ? 0.45 : 1,
+            }}
+          >
+            {course.status === 'completed' ? 'Certificate' : courseHasStarted(course) ? 'Resume' : 'Start'}
+          </button>
+          <button
+            onClick={onDelete}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: t.red,
+              cursor: 'pointer',
+              fontFamily: t.mono,
+              fontSize: 9,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              padding: 8,
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
     </article>
   );
 }
@@ -223,6 +212,7 @@ export default function Dashboard() {
   const { state, dispatch } = useStore();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
   const [dark, setDark] = useState(readDarkMode);
   const t = dark ? HCDashboardDark : HC;
 
@@ -243,16 +233,28 @@ export default function Dashboard() {
     const inProgress = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'completed' && courseHasStarted(c)).length;
     const done = state.courses.filter((c) => c.status === 'completed').length;
     const urgent = state.courses.filter((c) => c.status === 'active-urgent').length;
-    return { notStarted, inProgress, done, urgent, archived: state.courses.filter((c) => c.status === 'tombstone').length };
+    const archived = state.courses.filter((c) => c.status === 'tombstone').length;
+    return { notStarted, inProgress, done, urgent, archived };
   }, [state.courses]);
 
   const filteredCourses = useMemo(() => {
+    const search = query.trim().toLowerCase();
     return state.courses.filter((course) => {
-      if (filter === 'all') return true;
-      if (filter === 'urgent') return course.status === 'active-urgent';
-      return getCourseFilter(course) === filter;
+      if (filter === 'urgent' && course.status !== 'active-urgent') return false;
+      if (filter !== 'all' && filter !== 'urgent' && getCourseFilter(course) !== filter) return false;
+      if (!search) return true;
+      const lesson = course.curriculum.modules[course.currentModule]?.lessons[course.currentLesson]?.title ?? '';
+      return `${course.subject} ${lesson} ${course.curriculum.title}`.toLowerCase().includes(search);
     });
-  }, [filter, state.courses]);
+  }, [filter, query, state.courses]);
+
+  const upcoming = useMemo(() => {
+    return state.courses
+      .filter((course) => course.status !== 'tombstone')
+      .slice()
+      .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+      .slice(0, 5);
+  }, [state.courses]);
 
   function handleDeleteCourse(course: Course) {
     const confirmed = window.confirm(`Delete "${course.subject}" from your dashboard? This will remove your progress for this course.`);
@@ -269,101 +271,265 @@ export default function Dashboard() {
     { key: 'archived', label: 'Archived', count: stats.archived },
   ];
 
+  const sidebarGroups = [
+    { title: 'Essentials', items: ['Home', 'Tasks', 'Calendar', 'Courses', 'Notes'] },
+    { title: 'Projects', items: state.courses.slice(0, 5).map((course) => course.subject) },
+    { title: 'System', items: ['Settings', 'Leaderboard'] },
+  ];
+
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: t.bg }}>
-      <Chrome label="dashboard" right={state.username} />
-
-      <main style={{ flex: 1, overflow: 'auto', padding: '34px clamp(20px, 4vw, 64px) 56px' }}>
-        <section style={{
+    <div style={{ minHeight: '100vh', background: t.bg, padding: 22, color: t.ink, fontFamily: t.sans }}>
+      <div
+        style={{
+          maxWidth: 1320,
+          margin: '0 auto',
+          minHeight: 'calc(100vh - 44px)',
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.35fr) minmax(280px, 0.65fr)',
-          gap: 28,
-          alignItems: 'stretch',
-          marginBottom: 28,
-        }}>
-          <div style={{ background: t.paper, border: `1.5px solid ${t.ink}`, padding: '30px 34px', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', right: -50, top: -70, width: 220, height: 220, borderRadius: '50%', background: 'rgba(196,34,27,0.08)' }} />
-            <div style={{ fontFamily: t.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: t.red, marginBottom: 16 }}>
-              Today
-            </div>
-            <h1 style={{ fontFamily: t.serif, fontSize: 'clamp(44px, 6vw, 84px)', lineHeight: 0.9, letterSpacing: '-0.045em', margin: 0, color: t.ink }}>
-              Hey {state.username}.
-            </h1>
-            <p style={{ fontFamily: t.serif, fontSize: 22, lineHeight: 1.35, color: t.mute, margin: '20px 0 0', maxWidth: 560 }}>
-              {state.courses.length === 0
-                ? 'No courses yet. Pick something and start the clock.'
-                : stats.urgent > 0
-                  ? `${stats.urgent} course${stats.urgent === 1 ? ' needs' : 's need'} attention before the deadline bites.`
-                  : `${stats.inProgress} in progress. ${stats.notStarted} waiting to be started.`}
-            </p>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <StatCard label="In progress" value={stats.inProgress} t={t} />
-            <StatCard label="Not started" value={stats.notStarted} t={t} />
-            <StatCard label="Urgent" value={stats.urgent} tone="red" t={t} />
-            <StatCard label="Done" value={stats.done} tone="green" t={t} />
-          </div>
-        </section>
-
-        <section style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {filters.map((item) => {
-              const active = filter === item.key;
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => setFilter(item.key)}
-                  style={{
-                    border: `1px solid ${active ? t.ink : t.ruleFaint}`,
-                    background: active ? t.ink : t.paper,
-                    color: active ? t.bg : t.ink,
-                    padding: '10px 13px',
-                    borderRadius: 999,
-                    fontFamily: t.mono,
-                    fontSize: 10,
-                    letterSpacing: '0.12em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {item.label} {item.count}
-                </button>
-              );
-            })}
-          </div>
-          <button onClick={() => navigate('/')} style={{ ...btn.primary, padding: '12px 20px', background: t.ink, color: t.bg }}>
-            + New course
+          gridTemplateColumns: '240px minmax(0, 1fr)',
+          gap: 18,
+        }}
+      >
+        <aside
+          style={{
+            border: `1px solid ${t.ruleFaint}`,
+            borderRadius: 22,
+            background: dark ? 'rgba(28,26,22,0.72)' : 'rgba(250,247,240,0.72)',
+            boxShadow: dark ? '0 24px 70px rgba(0,0,0,0.20)' : '0 24px 70px rgba(26,21,16,0.07)',
+            padding: 14,
+            position: 'sticky',
+            top: 22,
+            height: 'calc(100vh - 44px)',
+            overflow: 'auto',
+          }}
+        >
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              width: '100%',
+              border: `1px solid ${t.ruleFaint}`,
+              background: t.paper,
+              borderRadius: 15,
+              padding: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              cursor: 'pointer',
+              color: t.ink,
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ width: 30, height: 30, borderRadius: 10, background: t.ink, color: t.bg, display: 'grid', placeItems: 'center', fontFamily: t.serif, fontSize: 18 }}>L</span>
+            <span>
+              <span style={{ display: 'block', fontFamily: t.sans, fontWeight: 800, fontSize: 13 }}>Learnor</span>
+              <span style={{ display: 'block', fontFamily: t.mono, color: t.mute, fontSize: 9, marginTop: 2 }}>Course workspace</span>
+            </span>
           </button>
-        </section>
 
-        {state.courses.length === 0 ? (
-          <section style={{ border: `1px solid ${t.ruleFaint}`, background: t.paper, padding: 44, textAlign: 'center' }}>
-            <div style={{ fontFamily: t.serif, fontSize: 40, letterSpacing: '-0.025em', color: t.ink }}>No courses yet.</div>
-            <div style={{ fontFamily: t.serif, fontStyle: 'italic', fontSize: 20, color: t.mute, marginTop: 8 }}>Start small. Seven days. One topic.</div>
-            <button onClick={() => navigate('/')} style={{ ...btn.primary, marginTop: 24, background: t.ink, color: t.bg }}>Start your first →</button>
-          </section>
-        ) : filteredCourses.length === 0 ? (
-          <section style={{ border: `1px dashed ${t.ruleFaint}`, background: t.paper, padding: 38, textAlign: 'center', color: t.mute, fontFamily: t.serif, fontSize: 22 }}>
-            Nothing in this bucket.
-          </section>
-        ) : (
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 22 }}>
-            {filteredCourses.map((course) => (
-              <CourseCard
-                key={course.id}
-                course={course}
-                t={t}
-                onDelete={() => handleDeleteCourse(course)}
-                onOpen={() => {
-                  if (course.status === 'completed') navigate(`/certificate/${course.id}`);
-                  else navigate(`/learn/${course.id}`);
-                }}
-              />
-            ))}
-          </section>
-        )}
-      </main>
+          <div style={{ marginTop: 14, position: 'relative' }}>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                border: `1px solid ${t.ruleFaint}`,
+                borderRadius: 13,
+                background: t.paper,
+                color: t.ink,
+                padding: '10px 12px',
+                outline: 'none',
+                fontFamily: t.sans,
+                fontSize: 12,
+              }}
+            />
+          </div>
+
+          {sidebarGroups.map((group) => (
+            <div key={group.title} style={{ marginTop: 22 }}>
+              <div style={{ fontFamily: t.mono, fontSize: 9, color: t.mute, textTransform: 'uppercase', letterSpacing: '0.12em', margin: '0 0 9px 4px' }}>
+                {group.title}
+              </div>
+              <div style={{ display: 'grid', gap: 3 }}>
+                {group.items.length === 0 ? (
+                  <div style={{ color: t.mute, fontSize: 12, padding: '8px 9px' }}>No courses yet</div>
+                ) : group.items.map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => {
+                      if (item === 'Home') navigate('/');
+                      if (item === 'Leaderboard') navigate('/leaderboard');
+                      if (item === 'Settings') navigate('/settings');
+                    }}
+                    style={{
+                      border: 'none',
+                      borderRadius: 11,
+                      background: item === 'Courses' ? t.paper : 'transparent',
+                      color: item === 'Courses' ? t.ink : t.mute,
+                      padding: '8px 9px',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontFamily: t.sans,
+                      fontSize: 12,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </aside>
+
+        <main
+          style={{
+            border: `1px solid ${t.ruleFaint}`,
+            borderRadius: 22,
+            background: dark ? 'rgba(28,26,22,0.78)' : 'rgba(250,247,240,0.82)',
+            boxShadow: dark ? '0 24px 70px rgba(0,0,0,0.22)' : '0 24px 70px rgba(26,21,16,0.08)',
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ padding: '22px 24px 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontFamily: t.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.mute }}>Dashboard</div>
+                <h1 style={{ margin: '6px 0 0', fontFamily: t.sans, fontSize: 34, letterSpacing: '-0.045em', lineHeight: 1, color: t.ink }}>
+                  Hey {state.username}
+                </h1>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => navigate('/browse')}
+                  style={{ border: `1px solid ${t.ruleFaint}`, background: t.paper, color: t.ink, borderRadius: 10, padding: '10px 13px', fontFamily: t.sans, fontSize: 12, cursor: 'pointer' }}
+                >
+                  Browse
+                </button>
+                <button
+                  onClick={() => navigate('/')}
+                  style={{ border: 'none', background: t.ink, color: t.bg, borderRadius: 10, padding: '10px 13px', fontFamily: t.sans, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
+                >
+                  New course
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 18, display: 'flex', gap: 8, borderBottom: `1px solid ${t.ruleFaint}`, paddingBottom: 10, overflowX: 'auto' }}>
+              {filters.map((item) => {
+                const active = filter === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => setFilter(item.key)}
+                    style={{
+                      border: 'none',
+                      borderRadius: 999,
+                      background: active ? t.ink : 'transparent',
+                      color: active ? t.bg : t.mute,
+                      padding: '8px 11px',
+                      fontFamily: t.sans,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {item.label} {item.count}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(235px, 1fr))', gap: 14 }}>
+              {state.courses.length === 0 ? (
+                <section style={{ gridColumn: '1 / -1', border: `1px dashed ${t.ruleFaint}`, borderRadius: 18, padding: 38, textAlign: 'center', background: t.paper }}>
+                  <div style={{ fontFamily: t.sans, fontSize: 24, fontWeight: 800, color: t.ink }}>No courses yet.</div>
+                  <div style={{ marginTop: 6, color: t.mute, fontSize: 14 }}>Start one topic and Learnor will build the path.</div>
+                  <button onClick={() => navigate('/')} style={{ marginTop: 18, border: 'none', borderRadius: 999, background: t.ink, color: t.bg, padding: '11px 16px', fontFamily: t.sans, fontWeight: 800, cursor: 'pointer' }}>
+                    Start your first course
+                  </button>
+                </section>
+              ) : filteredCourses.length === 0 ? (
+                <section style={{ gridColumn: '1 / -1', border: `1px dashed ${t.ruleFaint}`, borderRadius: 18, padding: 34, textAlign: 'center', background: t.paper, color: t.mute }}>
+                  Nothing in this bucket.
+                </section>
+              ) : (
+                filteredCourses.map((course) => (
+                  <CourseCard
+                    key={course.id}
+                    course={course}
+                    t={t}
+                    dark={dark}
+                    onDelete={() => handleDeleteCourse(course)}
+                    onOpen={() => {
+                      if (course.status === 'completed') navigate(`/certificate/${course.id}`);
+                      else navigate(`/learn/${course.id}`);
+                    }}
+                  />
+                ))
+              )}
+            </div>
+
+            <section style={{ marginTop: 18, border: `1px solid ${t.ruleFaint}`, borderRadius: 18, background: t.paper, padding: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontFamily: t.sans, fontSize: 15, fontWeight: 800, color: t.ink }}>Deadline board</div>
+                  <div style={{ marginTop: 3, fontFamily: t.mono, fontSize: 9, color: t.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                    Next courses on the clock
+                  </div>
+                </div>
+                <div style={{ fontFamily: t.sans, color: t.mute, fontSize: 12 }}>Day / Week / Month</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', gap: 14 }}>
+                {(upcoming.length ? upcoming : state.courses.slice(0, 1)).map((course, index) => {
+                  const left = Math.max(0, Math.min(78, daysUntil(course.deadline) * 8));
+                  const width = Math.max(16, Math.round(course.progress * 64) + 18);
+                  return (
+                    <div key={course.id} style={{ display: 'contents' }}>
+                      <div style={{ fontFamily: t.sans, fontSize: 12, color: t.mute, padding: '8px 0' }}>
+                        {course.subject}
+                      </div>
+                      <div style={{ position: 'relative', height: 38, borderLeft: `1px solid ${t.ruleFaint}`, background: `repeating-linear-gradient(90deg, transparent 0, transparent 79px, ${t.ruleFaint} 80px)` }}>
+                        <button
+                          onClick={() => navigate(course.status === 'completed' ? `/certificate/${course.id}` : `/learn/${course.id}`)}
+                          style={{
+                            position: 'absolute',
+                            left: `${left}%`,
+                            top: 6,
+                            width: `${width}%`,
+                            minWidth: 112,
+                            maxWidth: 280,
+                            height: 26,
+                            border: 'none',
+                            borderRadius: 999,
+                            background: index % 3 === 0 ? t.ink : index % 3 === 1 ? t.green : t.amber,
+                            color: index % 3 === 0 ? t.bg : '#141210',
+                            fontFamily: t.sans,
+                            fontSize: 11,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            padding: '0 12px',
+                          }}
+                        >
+                          {formatDeadline(course.deadline)}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
