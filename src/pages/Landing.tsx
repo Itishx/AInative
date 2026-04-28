@@ -98,8 +98,8 @@ function SiteNav({ active, dark, onToggleDark, onNav, onToggleSaas }: {
           background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.04)',
           flexShrink: 0,
         }}>
-          <span style={{ width: 11, height: 11, background: t.red, display: 'inline-block', borderRadius: '50%' }} />
-          <b style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.22em', color: t.ink, textTransform: 'uppercase' }}>LEARNOR</b>
+          <span style={{ width: 10, height: 10, background: t.red, display: 'inline-block', borderRadius: '50%', transform: 'translateY(-3px)' }} />
+          <b style={{ fontFamily: SERIF, fontSize: 25, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
         </a>
         {/* Links */}
         <div style={{
@@ -1017,8 +1017,8 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', gap: 32, paddingBottom: 40, borderBottom: `1px solid ${t.ruleFaint}` }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 11, height: 11, background: t.red, display: 'inline-block' }} />
-              <b style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.22em', color: t.ink, textTransform: 'uppercase' }}>LEARNOR</b>
+              <span style={{ width: 10, height: 10, background: t.red, display: 'inline-block', borderRadius: 999, transform: 'translateY(-4px)' }} />
+              <b style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
             </div>
             <p style={{ fontFamily: SERIF, fontSize: 20, fontStyle: 'italic', lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
               A learning platform with stakes. Finish — or every byte is permanently deleted.

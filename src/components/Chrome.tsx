@@ -57,8 +57,8 @@ export function Chrome({ label, right }: ChromeProps) {
             background: 'rgba(26,21,16,0.045)',
             flexShrink: 0,
           }}>
-            <span style={{ width: 10, height: 10, background: HC.red, display: 'inline-block', borderRadius: 999, flexShrink: 0 }} />
-            <b style={{ fontWeight: 700, letterSpacing: '0.22em' }}>LEARNOR</b>
+            <span style={{ width: 9, height: 9, background: HC.red, display: 'inline-block', borderRadius: 999, flexShrink: 0, transform: 'translateY(-3px)' }} />
+            <b style={{ fontFamily: HC.serif, fontSize: 25, fontWeight: 400, letterSpacing: '-0.055em', textTransform: 'none' }}>Learnor</b>
           </Link>
 
           {label && (

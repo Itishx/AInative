@@ -285,7 +285,7 @@ export default function Anything() {
               background: 'rgba(26,21,16,0.045)',
               color: HC.ink,
             }}>
-              LEARNOR
+              <span style={{ fontFamily: HC.serif, fontSize: 24, letterSpacing: '-0.055em', textTransform: 'none' }}>Learnor</span>
             </button>
             <div style={{
               padding: '10px 14px',
