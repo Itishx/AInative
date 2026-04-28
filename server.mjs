@@ -436,6 +436,7 @@ app.post('/api/chat', async (req, res) => {
     conceptFacts,
     isOpening,
     allowQuestion,
+    wantsVisualExample,
   } = req.body;
 
   try {
@@ -446,6 +447,7 @@ app.post('/api/chat', async (req, res) => {
       ? conceptFacts.join(', ')
       : 'No specific facts provided — teach from high-confidence knowledge only and hedge uncertain claims with "approximately" or "around".';
     const openingTurn = !!isOpening;
+    const visualExampleTurn = !!wantsVisualExample;
     const allowQuestionThisTurn = !openingTurn && !!allowQuestion && currentPhase !== 'HOOK' && currentPhase !== 'REINFORCE';
     const starterText = openingTurn
       ? `Start the lesson "${lessonTitle}". Teach the first tiny idea only.`
@@ -479,6 +481,7 @@ KEY FACTS: ${facts}
 Current phase: ${currentPhase}
 Opening turn: ${openingTurn ? 'yes' : 'no'}
 You may end with one short check-in question this turn: ${allowQuestionThisTurn ? 'yes' : 'no'}
+Student requested a canvas example this turn: ${visualExampleTurn ? 'yes' : 'no'}
 
 You MUST reply ONLY as valid JSON:
 {"text":"...","readyToMoveOn":false,"askedQuestion":false,"visual":null}
@@ -488,6 +491,7 @@ The "visual" field renders on the learning canvas (right side of the screen). Us
 - Showing code → put a fenced code block (three backticks + language tag, then code, then three backticks) in "visual", NOT in "text"
 - Nothing visual this turn → set "visual" to null
 - Never repeat the same content in both "text" and "visual"
+- If the student requested a canvas example, "visual" is REQUIRED. Use a markdown table for data/database concepts, a fenced code block for programming concepts, or a tiny labeled text diagram if neither fits.
 
 CRITICAL BEHAVIOR RULES:
 1. Never dump the full lesson. Teach one tiny idea only.
@@ -562,7 +566,15 @@ If the student is repeating what you already taught back to you, do not re-teach
       }
     }
 
-    const visual = typeof parsed.visual === 'string' && parsed.visual.trim() ? parsed.visual.trim() : null;
+    let visual = typeof parsed.visual === 'string' && parsed.visual.trim() ? parsed.visual.trim() : null;
+    if (visualExampleTurn && !visual) {
+      const lowerLesson = String(lessonTitle || '').toLowerCase();
+      if (/\b(table|database|row|column|record|primary key|orders?|customers?|sql)\b/.test(lowerLesson + ' ' + cleaned)) {
+        visual = `| id | example_value | note |\n|---|---|---|\n| 1001 | First record | Unique id |\n| 1002 | Second record | Unique id |\n| 1003 | Third record | Unique id |`;
+      } else {
+        visual = `\`\`\`txt\n${lessonTitle}\nStep 1 -> concrete example\nStep 2 -> what changes\nStep 3 -> why it matters\n\`\`\``;
+      }
+    }
 
     res.json({
       text: cleaned || buildTutorFallbackReply({

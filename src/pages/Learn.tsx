@@ -893,6 +893,7 @@ function LearnContent({ course }: { course: Course }) {
   const [curriculumOpen, setCurriculumOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [generatingNotes, setGeneratingNotes] = useState(false);
+  const [exampleMode, setExampleMode] = useState(true);
   const [phase, setPhase] = useState<Phase>('HOOK');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -954,7 +955,7 @@ function LearnContent({ course }: { course: Course }) {
   const lessonHasNotes = !!lesson?.notes;
   const canGenerateNotes = currentChat.some((msg) => msg.who === 'tutor');
 
-  async function handleQuickPrompt(prompt: string, phaseOverride?: Phase) {
+  async function handleQuickPrompt(prompt: string, phaseOverride?: Phase, requestOptions?: { wantsVisualExample?: boolean }) {
     if (!mod || !lesson || aiLoading || generatingNotes) return;
     if (phaseOverride && phaseOverride !== phase) {
       setPhase(phaseOverride);
@@ -965,7 +966,16 @@ function LearnContent({ course }: { course: Course }) {
       mod.title,
       lesson.title,
       phaseOverride ?? phase,
+      requestOptions,
     );
+  }
+
+  async function handleShowExample() {
+    if (!lesson) return;
+    const prompt = exampleMode
+      ? `Show me one concrete example for "${lesson.title}" and put the example in the canvas visual. If it is about data, tables, rows, columns, keys, or SQL, use a markdown table in visual. Keep the chat text short.`
+      : `Give me one short concrete example for "${lesson.title}" only.`;
+    await handleQuickPrompt(prompt, undefined, { wantsVisualExample: exampleMode });
   }
 
   async function sendToAI(
@@ -974,7 +984,7 @@ function LearnContent({ course }: { course: Course }) {
     moduleTitle: string,
     lessonTitle: string,
     currentPhase: Phase,
-    options?: { isOpening?: boolean; lessonPlan?: string },
+    options?: { isOpening?: boolean; lessonPlan?: string; wantsVisualExample?: boolean },
   ) {
     setAiLoading(true);
     try {
@@ -1014,6 +1024,7 @@ function LearnContent({ course }: { course: Course }) {
           conceptFacts: lesson?.facts ?? [],
           materialsContext: (course as EnrolledCourse).materialsContext ?? undefined,
           lessonPlan: options?.lessonPlan ?? lessonPlanRef.current ?? undefined,
+          wantsVisualExample: !!options?.wantsVisualExample,
         }),
       });
       const data = await res.json();
@@ -1170,12 +1181,12 @@ function LearnContent({ course }: { course: Course }) {
       ]
     : phase === 'REINFORCE'
     ? [
-        { label: 'Show example', action: () => handleQuickPrompt(`Give me one short concrete example for "${lesson?.title}".`), primary: false },
+        { label: 'Show example', action: handleShowExample, primary: false },
         { label: 'Take quiz', action: handleLessonDone, primary: true },
       ]
     : [
         { label: 'Continue', action: () => handleQuickPrompt('Continue.'), primary: true },
-        { label: 'Show example', action: () => handleQuickPrompt(`Give me one short concrete example for "${lesson?.title}" only.`), primary: false },
+        { label: 'Show example', action: handleShowExample, primary: false },
         { label: 'Simpler', action: () => handleQuickPrompt('Explain the current idea more simply, in very plain language.'), primary: false },
         { label: 'Check me', action: () => handleQuickPrompt(`Ask me one question about "${lesson?.title}".`, 'CHECK'), primary: false },
         { label: 'Take quiz', action: handleLessonDone, primary: false },
@@ -1262,6 +1273,23 @@ function LearnContent({ course }: { course: Course }) {
 
           <div style={{ padding: '12px 18px 14px', borderTop: '1px solid rgba(250,247,240,0.08)', background: 'rgba(0,0,0,0.10)' }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+              {phase !== 'ASSESS' && (
+                <button
+                  onClick={() => setExampleMode((value) => !value)}
+                  disabled={aiLoading || generatingNotes}
+                  style={{
+                    ...btn.ghost,
+                    padding: '8px 10px',
+                    fontSize: 10,
+                    color: exampleMode ? '#7ad08b' : 'rgba(250,247,240,0.54)',
+                    background: exampleMode ? 'rgba(122,208,139,0.10)' : 'rgba(250,247,240,0.04)',
+                    border: `1px solid ${exampleMode ? 'rgba(122,208,139,0.24)' : 'transparent'}`,
+                    opacity: aiLoading || generatingNotes ? 0.5 : 1,
+                  }}
+                >
+                  Example mode {exampleMode ? 'on' : 'off'}
+                </button>
+              )}
               {quickActions.map((action) => (
                 <button
                   key={action.label}
