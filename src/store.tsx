@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
 import type { AppState, Course, LeaderboardEntry, EnrolledCourse } from './types';
+import { supabase } from './lib/supabase';
 
 const BASE_KEY = 'ainative_v3';
 const LEGACY_STORAGE_KEY = 'ainative_v2';
@@ -37,35 +38,49 @@ function checkDeadlines(state: AppState): AppState {
   return { ...state, courses };
 }
 
+function migrateCourses(courses: Course[]): Course[] {
+  return courses.map((c) => ({
+    ...c,
+    curriculum: {
+      ...c.curriculum,
+      modules: c.curriculum.modules.map((m) => ({
+        ...m,
+        lessons: m.lessons.map((l) => ({
+          ...l,
+          objective: l.objective ?? `Understand ${l.title.toLowerCase()}.`,
+        })),
+      })),
+    },
+    lessonChats: c.lessonChats ?? {},
+    moduleChats: c.moduleChats ?? (c.chat ? { [c.currentModule ?? 0]: c.chat } : {}),
+    moduleNotes: c.moduleNotes ?? {},
+  }));
+}
+
 function loadState(userId?: string): AppState {
   try {
-    const raw = localStorage.getItem(storageKey(userId)) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
+    // Try user-namespaced key first
+    const raw = localStorage.getItem(storageKey(userId));
     if (raw) {
       const parsed = JSON.parse(raw) as AppState;
-      // Migrate: add lessonChats/moduleNotes to existing courses
-      parsed.courses = parsed.courses.map((c) => ({
-        ...c,
-        curriculum: {
-          ...c.curriculum,
-          modules: c.curriculum.modules.map((m) => ({
-            ...m,
-            lessons: m.lessons.map((l) => ({
-              ...l,
-              objective: l.objective ?? `Understand ${l.title.toLowerCase()}.`,
-            })),
-          })),
-        },
-        lessonChats: c.lessonChats ?? {},
-        moduleChats: c.moduleChats ?? (c.chat ? { [c.currentModule ?? 0]: c.chat } : {}),
-        moduleNotes: c.moduleNotes ?? {},
-      }));
+      parsed.courses = migrateCourses(parsed.courses);
       return checkDeadlines(parsed);
+    }
+
+    // Migration: old non-namespaced key → user key
+    const legacyRaw = localStorage.getItem(BASE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacyRaw && userId) {
+      const parsed = JSON.parse(legacyRaw) as AppState;
+      parsed.courses = migrateCourses(parsed.courses);
+      const migrated = checkDeadlines(parsed);
+      localStorage.setItem(storageKey(userId), JSON.stringify(migrated));
+      return migrated;
     }
   } catch {}
   return { courses: [], leaderboard: SEED_LEADERBOARD, username: 'you' };
 }
 
-function saveState(state: AppState, userId?: string) {
+function saveLocal(state: AppState, userId?: string) {
   localStorage.setItem(storageKey(userId), JSON.stringify(state));
 }
 
@@ -82,12 +97,22 @@ type Action =
   | { type: 'COMPLETE_LESSON'; id: string; moduleIndex: number; lessonIndex: number; preferredMet: boolean }
   | { type: 'CHECK_DEADLINES' }
   | { type: 'ADD_LEADERBOARD'; entry: LeaderboardEntry }
-  | { type: 'ENROLL_COURSE'; course: EnrolledCourse };
+  | { type: 'ENROLL_COURSE'; course: EnrolledCourse }
+  | { type: '_LOAD_FROM_DB'; courses: Course[]; username?: string };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_USERNAME':
       return { ...state, username: action.username };
+
+    case '_LOAD_FROM_DB': {
+      const courses = migrateCourses(action.courses ?? []);
+      return checkDeadlines({
+        ...state,
+        courses,
+        username: action.username && action.username !== 'you' ? action.username : state.username,
+      });
+    }
 
     case 'ADD_COURSE':
       return { ...state, courses: [action.course, ...state.courses] };
@@ -157,7 +182,6 @@ function reducer(state: AppState, action: Action): AppState {
       const courses = state.courses.map((c) => {
         if (c.id !== action.id) return c;
 
-        // Mark lesson completed; preferred score is tracked separately.
         const modules = c.curriculum.modules.map((m, mi) => {
           if (mi !== action.moduleIndex) return m;
           const lessons = m.lessons.map((l, li) =>
@@ -169,16 +193,13 @@ function reducer(state: AppState, action: Action): AppState {
           return { ...m, lessons, quizPassed: modDone };
         });
 
-        // Advance to next lesson or next module
         let nextMod = action.moduleIndex;
         let nextLesson = action.lessonIndex + 1;
         const curMod = modules[action.moduleIndex];
 
         if (nextLesson >= curMod.lessons.length) {
-          // Done with module — move to next module
           nextMod = action.moduleIndex + 1;
           nextLesson = 0;
-          // Unlock next module
           if (nextMod < modules.length) {
             modules[nextMod] = { ...modules[nextMod], unlocked: true };
           }
@@ -205,7 +226,6 @@ function reducer(state: AppState, action: Action): AppState {
       return checkDeadlines(state);
 
     case 'ENROLL_COURSE':
-      // Avoid duplicate enrolments
       if (state.courses.some((c) => c.id === action.course.id)) return state;
       return { ...state, courses: [action.course, ...state.courses] };
 
@@ -227,17 +247,76 @@ interface StoreCtx {
 
 const Ctx = createContext<StoreCtx | null>(null);
 
-export function StoreProvider({ children, userId, userEmail }: { children: React.ReactNode; userId?: string; userEmail?: string }) {
+export function StoreProvider({
+  children,
+  userId,
+  userEmail,
+}: {
+  children: React.ReactNode;
+  userId?: string;
+  userEmail?: string;
+}) {
   const [state, dispatch] = useReducer(reducer, undefined, () => {
     const s = loadState(userId);
-    // Seed username from email if not set
     if (userEmail && (!s.username || s.username === 'you')) {
       s.username = userEmail.split('@')[0];
     }
     return s;
   });
 
-  useEffect(() => { saveState(state, userId); }, [state, userId]);
+  // Load from Supabase on mount — DB is source of truth
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from('user_courses')
+      .select('courses, username')
+      .eq('user_id', userId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        if (Array.isArray(data.courses) && data.courses.length > 0) {
+          dispatch({ type: '_LOAD_FROM_DB', courses: data.courses, username: data.username ?? undefined });
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  // Save to localStorage immediately, debounce Supabase writes (2s)
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    saveLocal(state, userId);
+    if (!userId) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      supabase
+        .from('user_courses')
+        .upsert({
+          user_id: userId,
+          courses: state.courses,
+          username: state.username,
+          updated_at: new Date().toISOString(),
+        })
+        .then();
+    }, 2000);
+  }, [state, userId]);
+
+  // Leaderboard sync to Supabase
+  useEffect(() => {
+    if (!userId) return;
+    const myEntries = state.leaderboard.filter((e) => !['AIN-MK01','AIN-OJ02','AIN-HA03','AIN-YA05','AIN-PR06'].includes(e.certId));
+    myEntries.forEach((e) => {
+      supabase.from('leaderboard').upsert({
+        cert_id: e.certId,
+        user_id: userId,
+        username: e.user,
+        course: e.course,
+        margin_ms: e.marginMs,
+        days: e.days,
+        streak: e.streak,
+      }).then();
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.leaderboard, userId]);
 
   useEffect(() => {
     const interval = setInterval(() => dispatch({ type: 'CHECK_DEADLINES' }), 60000);
