@@ -610,7 +610,7 @@ function compactTutorDump(text: string, lessonTitle: string, isOpening: boolean,
   const looksDumped =
     isOpening ||
     /[①②③④⑤⑥⑦⑧⑨⑩]|WHAT IT IS|WHY IT MATTERS|THE ANALOGY|WORKED EXAMPLE|CHECK-IN QUESTION/i.test(raw) ||
-    raw.split(/\s+/).filter(Boolean).length > 115 ||
+    raw.split(/\s+/).filter(Boolean).length > 170 ||
     raw.split(/\n/).length > 8;
 
   if (!isOpening && hasStructuredExample && raw.split(/\s+/).filter(Boolean).length < 180) {
@@ -632,14 +632,14 @@ function compactTutorDump(text: string, lessonTitle: string, isOpening: boolean,
     .trim();
 
   const sentences = cleaned.match(/[^.!?]+[.!?]?/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
-  const explainers = sentences.filter((sentence) => !sentence.endsWith('?')).slice(0, isOpening ? 2 : 3);
+  const explainers = sentences.filter((sentence) => !sentence.endsWith('?')).slice(0, isOpening ? 3 : 4);
   const question = sentences.find((sentence) => sentence.endsWith('?'));
   if (allowQuestion && question && explainers.length > 0) {
-    return formatInteractiveParagraphs(explainers, question, isOpening ? 65 : 95) || cleaned;
+    return formatInteractiveParagraphs(explainers, question, isOpening ? 90 : 135) || cleaned;
   }
   return (
-    formatInteractiveParagraphs(explainers, '', isOpening ? 65 : 95) ||
-    trimParagraphs(cleaned.replace(/\?+/g, '.'), isOpening ? 65 : 95)
+    formatInteractiveParagraphs(explainers, '', isOpening ? 90 : 135) ||
+    trimParagraphs(cleaned.replace(/\?+/g, '.'), isOpening ? 90 : 135)
   );
 }
 
@@ -1555,7 +1555,7 @@ function LearnContent({ course }: { course: Course }) {
                   textTransform: 'uppercase',
                   marginBottom: 8,
                 }}>
-                  {m.who === 'user' ? state.username : 'ai tutor'}
+                  {m.who === 'user' ? state.username : 'Learnor'}
                 </div>
                 {m.who === 'user' ? (
                   <div style={{
@@ -1585,7 +1585,7 @@ function LearnContent({ course }: { course: Course }) {
             {aiLoading && (
               <div>
                 <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.16em', color: 'rgba(250,247,240,0.54)', textTransform: 'uppercase', marginBottom: 8 }}>
-                  ai tutor
+                  Learnor
                 </div>
                 <div style={{ fontFamily: HC.sans, fontSize: 15, fontStyle: 'italic', color: 'rgba(250,247,240,0.62)' }}>
                   thinking…

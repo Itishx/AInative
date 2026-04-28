@@ -104,7 +104,7 @@ function buildOpeningTutorReply({ lessonTitle, lessonObjective, conceptDescripti
   const second = descriptionSentences[1] || factSentence || `For now, just focus on the main idea behind ${lessonTitle}; we will build from there one step at a time.`;
 
   return {
-    text: trimWords(`${first} ${second}`, 65),
+    text: trimWords(`${first} ${second}`, 90),
     readyToMoveOn: false,
     askedQuestion: false,
   };
@@ -115,7 +115,7 @@ function normalizeTutorReply(text, { currentPhase, isOpening, allowQuestion }) {
   if (!raw) return '';
 
   if (currentPhase === 'CHECK') {
-    return trimWords(raw.replace(/\n{3,}/g, '\n\n'), 70);
+    return trimWords(raw.replace(/\n{3,}/g, '\n\n'), 95);
   }
 
   const hasStructuredExample = /```|^\s*\|.+\|\s*$/m.test(String(text || ''));
@@ -124,7 +124,7 @@ function normalizeTutorReply(text, { currentPhase, isOpening, allowQuestion }) {
   }
 
   const sentences = splitSentences(raw);
-  const explainers = sentences.filter((sentence) => !sentence.endsWith('?')).slice(0, isOpening ? 2 : 3);
+  const explainers = sentences.filter((sentence) => !sentence.endsWith('?')).slice(0, isOpening ? 3 : 4);
   const question = allowQuestion ? sentences.find((sentence) => sentence.endsWith('?')) : '';
   const paragraphs = [];
 
@@ -139,7 +139,7 @@ function normalizeTutorReply(text, { currentPhase, isOpening, allowQuestion }) {
   }
 
   const compacted = paragraphs.filter(Boolean).join('\n\n').trim();
-  return trimWords(compacted || raw.replace(/\?+/g, '.'), isOpening ? 65 : 95);
+  return trimWords(compacted || raw.replace(/\?+/g, '.'), isOpening ? 90 : 135);
 }
 
 function safeParseTutorPayload(raw) {
@@ -857,15 +857,15 @@ CRITICAL BEHAVIOR RULES:
 4. Never use an analogy unless the student explicitly asked for one.
 5. Stay inside ${lessonTitle}. If the student asks about a future topic, defer it in one short sentence and return to this lesson.
 6. Use only high-confidence facts. If even slightly unsure, hedge with "approximately" or "around".
-7. Keep "text" to 2-3 short sentences under 75 words. Tables and code go in "visual" — they do not count toward the word limit.
+7. Keep "text" to 3-5 short sentences under 130 words. Tables and code go in "visual" — they do not count toward the word limit.
 8. Ask at most one question, and only after you have actually taught something in the same message. The only exception is CHECK phase, where asking the question is the point.
 9. If the student says they do not know, are not sure, or are confused, explain more simply. Do not scold them and do not bounce back with another question immediately.
 10. If the student only says "continue", "next", "ok", "got it", or similar, teach the next small piece. Do NOT say they are ready for the quiz.
 11. Check-in questions must test understanding of the concept just taught. Never ask opinion/feeling questions like "does that surprise you?", "does that make sense?", or "did you know that?"
 
 PHASE RULES:
-- HOOK: Teach the first tiny idea in 2 short sentences. No question.
-- EXPLAIN: Teach one next small piece of the lesson in 2-4 short sentences. If question permission is "yes", end with exactly one simple check-in question and set askedQuestion to true. Otherwise askedQuestion must be false.
+- HOOK: Teach the first tiny idea in 2-3 short sentences. No question.
+- EXPLAIN: Teach one next small piece of the lesson in 3-5 short sentences. If question permission is "yes", end with exactly one simple check-in question and set askedQuestion to true. Otherwise askedQuestion must be false.
 - CHECK: Ask exactly one easy question about only the idea just taught. Prefer a very short multiple-choice question. Put each option on its own line exactly like:
 A) ...
 B) ...
@@ -882,7 +882,7 @@ If the student is repeating what you already taught back to you, do not re-teach
     try {
       response = await getClient().messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 520,
+        max_tokens: 760,
         system: systemPrompt,
         messages: apiMessages,
       });
