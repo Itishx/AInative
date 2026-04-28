@@ -577,35 +577,101 @@ function HowSection() {
 function TutorMockup() {
   const { t } = useTheme();
   const msgs = [
-    { who: 'tutor', text: 'A table is a pile of rows. GROUP BY sorts them into buckets by a key, then collapses each bucket.' },
-    { who: 'user', text: 'So one row per bucket?' },
-    { who: 'tutor', text: 'Exactly. Now — what does `SELECT customer_id, SUM(amount) FROM orders GROUP BY customer_id` return?' },
+    { who: 'tutor', text: 'A primary key is the one value that identifies a row. Keep it unique and the table stays searchable.' },
+    { who: 'user', text: 'show example' },
+    { who: 'tutor', text: 'Perfect — I’ll put the table on the canvas while we talk through it.' },
   ];
   return (
-    <div style={{ border: `1px solid ${t.ink}`, background: t.paper, padding: 18 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.14em', paddingBottom: 12, borderBottom: `1px solid ${t.ruleFaint}` }}>
-        <span>LESSON · GROUP BY</span>
-        <span style={{ color: t.red }}>◉ VOICE ON</span>
-      </div>
-      <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {msgs.map((m, i) => (
-          <div key={i} style={{
-            maxWidth: '85%', alignSelf: m.who === 'user' ? 'flex-end' : 'flex-start',
-            fontFamily: SERIF, fontSize: 15, lineHeight: 1.5, padding: '10px 14px',
-            background: m.who === 'user' ? t.ink : t.bg,
-            color: m.who === 'user' ? t.bg : t.ink,
-            border: m.who === 'user' ? 'none' : `1px solid ${t.ruleFaint}`,
-          }}>{m.text}</div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, padding: 6, border: `1px solid ${t.ink}` }}>
-        <div style={{ width: 32, height: 32, background: t.red, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#faf7f0', fontFamily: MONO, fontSize: 14 }}>●</div>
-        <div style={{ flex: 1, display: 'flex', gap: 3, alignItems: 'center', height: 20 }}>
-          {[8,14,22,10,18,26,12,6,16,22,14,8,20,24,12,6,14,20].map((h, i) => (
-            <div key={i} style={{ width: 3, height: h, background: t.ink }} />
+    <div style={{
+      border: `1px solid ${t.ruleFaint}`,
+      background: '#171410',
+      minHeight: 520,
+      display: 'grid',
+      gridTemplateColumns: '0.92fr 1.4fr',
+      overflow: 'hidden',
+      boxShadow: '0 26px 80px rgba(0,0,0,0.18)',
+    }}>
+      <div style={{ padding: 20, color: '#faf7f0', borderRight: '1px solid rgba(250,247,240,0.10)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em', color: 'rgba(250,247,240,0.50)', textTransform: 'uppercase' }}>
+          Learnor · SQL basics
+        </div>
+        <div style={{ marginTop: 8, fontFamily: SERIF, fontSize: 32, lineHeight: 0.95, letterSpacing: '-0.035em' }}>
+          Primary keys, one step at a time.
+        </div>
+        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {msgs.map((m, i) => (
+            <div key={i} style={{
+              maxWidth: '92%',
+              alignSelf: m.who === 'user' ? 'flex-end' : 'flex-start',
+              fontFamily: HC.sans,
+              fontSize: 14,
+              lineHeight: 1.55,
+              padding: '11px 13px',
+              borderRadius: 16,
+              background: m.who === 'user' ? '#faf7f0' : 'rgba(250,247,240,0.08)',
+              color: m.who === 'user' ? '#171410' : 'rgba(250,247,240,0.86)',
+              border: m.who === 'user' ? 'none' : '1px solid rgba(250,247,240,0.08)',
+            }}>{m.text}</div>
           ))}
         </div>
-        <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.1em' }}>HOLD SPACE</div>
+        <div style={{ marginTop: 'auto' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            {['show example', 'ask again', 'take quiz'].map((label, i) => (
+              <span key={label} style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: '0.10em', color: i === 0 ? '#7ad08b' : 'rgba(250,247,240,0.48)', border: '1px solid rgba(250,247,240,0.10)', padding: '6px 8px', borderRadius: 999 }}>
+                {label}
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 9, border: '1px solid rgba(250,247,240,0.10)', borderRadius: 16, background: 'rgba(250,247,240,0.06)' }}>
+            <div style={{ flex: 1, fontFamily: HC.sans, fontSize: 13, color: 'rgba(250,247,240,0.42)' }}>Ask, answer, or hold space...</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: '#faf7f0', letterSpacing: '0.12em' }}>SEND ↵</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ background: t.bg, color: t.ink, padding: 24, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', marginBottom: 22 }}>
+          <div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.red, letterSpacing: '0.16em', textTransform: 'uppercase' }}>Canvas</div>
+            <div style={{ marginTop: 5, fontFamily: SERIF, fontSize: 34, lineHeight: 0.95, letterSpacing: '-0.035em' }}>Orders table</div>
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>visual example</div>
+        </div>
+
+        <div style={{ border: `1px solid ${t.ruleFaint}`, background: t.paper, padding: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: `1px solid ${t.ruleFaint}` }}>
+            {['order_id', 'customer_id', 'date', 'total'].map((h) => (
+              <div key={h} style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0 10px' }}>{h}</div>
+            ))}
+          </div>
+          {[
+            ['1001', '42', 'Jan 15', '$59.99'],
+            ['1002', '87', 'Jan 16', '$120.00'],
+            ['1003', '42', 'Jan 18', '$34.50'],
+          ].map((row) => (
+            <div key={row[0]} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: `1px dashed ${t.ruleFaint}` }}>
+              {row.map((cell, i) => (
+                <div key={cell} style={{ fontFamily: i === 0 ? MONO : HC.sans, fontSize: 14, color: i === 0 ? t.red : t.ink, padding: '13px 0' }}>{cell}</div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Why it matters</div>
+            <p style={{ margin: '10px 0 0', fontFamily: HC.sans, fontSize: 14, lineHeight: 1.55, color: t.inkSoft }}>
+              The canvas holds the visual so the chat can stay focused.
+            </p>
+          </div>
+          <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Progress</div>
+            <div style={{ marginTop: 14, height: 7, background: t.ruleFaint }}>
+              <div style={{ width: '42%', height: '100%', background: t.red }} />
+            </div>
+            <div style={{ marginTop: 8, fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.10em' }}>LESSON 03 OF 18</div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -740,21 +806,21 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
       <div style={{ maxWidth: 720, marginBottom: 48 }}>
         <Kicker>The product</Kicker>
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-          Calm <i>product.</i><br />Loud <span style={{ color: t.red }}>consequences.</span>
+          Chat on the left.<br />Canvas on the <span style={{ color: t.red }}>right.</span>
         </h2>
         <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
-          The app stays quiet. The deadline does the yelling.
+          Learn by conversation, but never stare at a wall of text. Whenever an example, table, diagram, or code block matters, it opens beside the tutor.
         </p>
       </div>
       {/* Tutor feature */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'start', marginBottom: 96 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '0.72fr 1.28fr', gap: 48, alignItems: 'start', marginBottom: 96 }}>
         <div>
           <Kicker color={t.mute}>Feature 01</Kicker>
-          <h3 style={{ fontFamily: SERIF, fontSize: 56, margin: '12px 0 16px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1 }}>
-            Chat left.<br />Canvas right.
+          <h3 style={{ fontFamily: SERIF, fontSize: 54, margin: '12px 0 16px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1 }}>
+            The course room.
           </h3>
           <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.inkSoft, margin: 0 }}>
-            Tiny explanations. Quick checks. Canvas examples. Notes and quizzes when the lesson is done.
+            The tutor teaches one step at a time in chat. The canvas carries the heavy stuff: examples, tables, code, diagrams, notes, and quiz context.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
             <button onClick={() => navigate('/auth')} style={{
