@@ -370,6 +370,13 @@ app.get('/api/health', (_, res) => res.json({
   hasElevenLabsVoice: !!process.env.ELEVENLABS_VOICE_ID,
 }));
 
+app.get('/api/tts', (_, res) => res.json({
+  ok: true,
+  method: 'POST required for audio generation',
+  hasElevenLabsKey: !!process.env.ELEVENLABS_API_KEY,
+  hasElevenLabsVoice: !!process.env.ELEVENLABS_VOICE_ID,
+}));
+
 app.post('/api/tts', async (req, res) => {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   const voiceId = process.env.ELEVENLABS_VOICE_ID;
