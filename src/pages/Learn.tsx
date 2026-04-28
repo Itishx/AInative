@@ -1101,6 +1101,7 @@ function LearnContent({ course }: { course: Course }) {
   const [exampleMode, setExampleMode] = useState(true);
   const [voiceMode, setVoiceMode] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState('');
+  const [listening, setListening] = useState(false);
   const [speakingTs, setSpeakingTs] = useState<number | null>(null);
   const [spokenWords, setSpokenWords] = useState(0);
   const [phase, setPhase] = useState<Phase>('HOOK');
@@ -1108,6 +1109,9 @@ function LearnContent({ course }: { course: Course }) {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speechUrlRef = useRef<string | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const listeningRef = useRef(false);
+  const voiceTranscriptRef = useRef('');
   const [notesOpen, setNotesOpen] = useState<number | null>(null);
   const [narrow, setNarrow] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 1100 : false));
   // Ref-based guard so React StrictMode's double-effect fire doesn't send two intro messages
@@ -1130,10 +1134,92 @@ function LearnContent({ course }: { course: Course }) {
     setSpokenWords(0);
   }
 
+  function getSpeechRecognitionCtor() {
+    if (typeof window === 'undefined') return null;
+    return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+  }
+
+  async function startVoiceInput() {
+    if (!voiceMode || aiLoading || generatingNotes || listeningRef.current) return;
+    const SpeechRecognition = getSpeechRecognitionCtor();
+    if (!SpeechRecognition) {
+      setVoiceStatus('speech not supported');
+      return;
+    }
+
+    stopVoicePlayback();
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    listeningRef.current = true;
+    voiceTranscriptRef.current = '';
+    setListening(true);
+    setVoiceStatus('listening… release space to send');
+
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i += 1) {
+        transcript += event.results[i][0]?.transcript ?? '';
+      }
+      voiceTranscriptRef.current = transcript.trim();
+      if (transcript.trim()) setInput(transcript.trim());
+    };
+    recognition.onerror = (event: any) => {
+      setVoiceStatus(event?.error === 'not-allowed' ? 'mic permission blocked' : 'speech failed');
+      listeningRef.current = false;
+      setListening(false);
+    };
+    recognition.onend = () => {
+      listeningRef.current = false;
+      setListening(false);
+    };
+
+    try {
+      recognition.start();
+    } catch {
+      listeningRef.current = false;
+      setListening(false);
+      setVoiceStatus('speech failed');
+    }
+  }
+
+  async function stopVoiceInput() {
+    if (!listeningRef.current && !recognitionRef.current) return;
+    const transcript = voiceTranscriptRef.current.trim();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    listeningRef.current = false;
+    setListening(false);
+    try { recognition?.stop?.(); } catch {}
+
+    if (transcript) {
+      setVoiceStatus('sending voice…');
+      setInput('');
+      await sendUserText(transcript);
+      setVoiceStatus(voiceMode ? 'hold space to talk' : '');
+    } else {
+      setVoiceStatus('no speech heard');
+      window.setTimeout(() => setVoiceStatus((value) => value === 'no speech heard' ? '' : value), 1200);
+    }
+  }
+
   async function unlockVoiceMode() {
     setVoiceMode((value) => {
       const next = !value;
-      if (!next) stopVoicePlayback();
+      if (!next) {
+        stopVoicePlayback();
+        try { recognitionRef.current?.abort?.(); } catch {}
+        recognitionRef.current = null;
+        listeningRef.current = false;
+        setListening(false);
+        setVoiceStatus('');
+      } else {
+        setVoiceStatus('hold space to talk');
+      }
       return next;
     });
     try {
@@ -1192,7 +1278,7 @@ function LearnContent({ course }: { course: Course }) {
       };
       audio.onended = () => {
         setSpokenWords(words.length);
-        setVoiceStatus('');
+        setVoiceStatus(voiceMode ? 'hold space to talk' : '');
         window.setTimeout(() => {
           if (audioRef.current === audio) stopVoicePlayback();
         }, 350);
@@ -1218,11 +1304,40 @@ function LearnContent({ course }: { course: Course }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => () => stopVoicePlayback(), []);
+  useEffect(() => () => {
+    stopVoicePlayback();
+    try { recognitionRef.current?.abort?.(); } catch {}
+  }, []);
 
   useEffect(() => {
     if (!voiceMode) stopVoicePlayback();
   }, [voiceMode]);
+
+  useEffect(() => {
+    if (!voiceMode) return undefined;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (aiLoading || generatingNotes) return;
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget = target?.tagName === 'TEXTAREA' || target?.tagName === 'INPUT' || target?.isContentEditable;
+      if (isTypingTarget && input.trim()) return;
+      event.preventDefault();
+      startVoiceInput();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return;
+      event.preventDefault();
+      stopVoiceInput();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [voiceMode, aiLoading, generatingNotes, input]);
 
   useEffect(() => {
     setPhase('HOOK');
@@ -1412,10 +1527,13 @@ function LearnContent({ course }: { course: Course }) {
     }
   }
 
-  async function handleSend() {
-    const text = input.trim();
+  async function sendUserText(rawText: string) {
+    const text = rawText.trim();
     if (!text || !mod || !lesson) return;
-    setInput('');
+    if (listeningRef.current) {
+      await stopVoiceInput();
+      return;
+    }
     const userMsg: ChatMsg = { who: 'user', text, ts: Date.now() };
     dispatch({ type: 'ADD_CHAT', id: course.id, lessonKey, msg: userMsg });
 
@@ -1450,6 +1568,13 @@ function LearnContent({ course }: { course: Course }) {
     const nextPhase: Phase = phase === 'CHECK' ? (isContinueOnly(text) ? 'EXPLAIN' : 'REINFORCE') : phase;
     if (phase === 'CHECK') setPhase(nextPhase);
     await sendToAI([...currentChat, userMsg], course.subject, mod.title, lesson.title, nextPhase);
+  }
+
+  async function handleSend() {
+    const text = input.trim();
+    if (!text) return;
+    setInput('');
+    await sendUserText(text);
   }
 
   async function handleLessonDone() {
@@ -1655,7 +1780,16 @@ function LearnContent({ course }: { course: Course }) {
               ))}
             </div>
 
-            <div style={{ borderRadius: 16, background: 'rgba(250,247,240,0.08)', border: '1px solid rgba(250,247,240,0.08)', padding: 8 }}>
+            <div
+              style={{
+                borderRadius: 16,
+                background: listening ? 'rgba(210,34,26,0.10)' : 'rgba(250,247,240,0.08)',
+                border: `1px solid ${listening ? 'rgba(210,34,26,0.55)' : 'rgba(250,247,240,0.08)'}`,
+                boxShadow: listening ? '0 0 0 4px rgba(210,34,26,0.10)' : 'none',
+                padding: 8,
+                transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
+              }}
+            >
               <textarea
                 ref={composerRef}
                 value={input}
@@ -1682,8 +1816,16 @@ function LearnContent({ course }: { course: Course }) {
                 }}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.44)' }}>
-                  take the quiz whenever you feel ready
+                <div
+                  style={{
+                    fontFamily: HC.mono,
+                    fontSize: 10,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: listening ? '#ff6b61' : voiceMode ? '#7ad08b' : 'rgba(250,247,240,0.44)',
+                  }}
+                >
+                  {voiceMode ? (listening ? 'recording... release space to send' : 'hold space to talk') : 'take the quiz whenever you feel ready'}
                 </div>
                 <button
                   onClick={handleSend}
