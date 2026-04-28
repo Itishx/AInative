@@ -194,6 +194,11 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
     if (resourceUrl.trim() || resourceFile) {
       setMaterialsLoading(true);
       try {
+        async function safeJson(res: Response) {
+          const text = await res.text();
+          try { return JSON.parse(text); } catch { throw new Error(`Server error (${res.status})`); }
+        }
+
         const parts: string[] = [];
         if (resourceUrl.trim()) {
           const res = await fetch('/api/fetch-url', {
@@ -201,7 +206,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: resourceUrl.trim() }),
           });
-          const data = await res.json();
+          const data = await safeJson(res);
           if (data.error) throw new Error(data.error);
           if (data.text) parts.push(`[Source: ${resourceUrl.trim()}]\n${data.text}`);
         }
@@ -209,7 +214,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
           const form = new FormData();
           form.append('files', resourceFile);
           const res = await fetch('/api/upload-materials', { method: 'POST', body: form });
-          const data = await res.json();
+          const data = await safeJson(res);
           if (data.error) throw new Error(data.error);
           if (data.materialsContext) parts.push(data.materialsContext);
         }

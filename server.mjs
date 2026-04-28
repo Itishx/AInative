@@ -673,30 +673,58 @@ app.post('/api/upload-materials', upload.array('files', 10), async (req, res) =>
 app.post('/api/fetch-url', async (req, res) => {
   const { url } = req.body;
   if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url required' });
+
+  let parsed;
+  try { parsed = new URL(url); } catch { return res.status(400).json({ error: 'Invalid URL' }); }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return res.status(400).json({ error: 'Only http/https URLs are supported' });
+  }
+
   try {
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AINative/1.0; +https://a-inative.vercel.app)' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) return res.status(400).json({ error: `URL returned ${response.status}` });
-    const ct = response.headers.get('content-type') || '';
-    if (!ct.includes('text/html') && !ct.includes('text/plain')) {
-      return res.status(400).json({ error: 'URL must point to a webpage or text file' });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 7000);
+    let response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,*/*',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        signal: controller.signal,
+        redirect: 'follow',
+      });
+    } finally {
+      clearTimeout(timer);
     }
+
+    if (!response.ok) {
+      return res.status(400).json({ error: `Page returned ${response.status} — try a different URL` });
+    }
+
     const html = await response.text();
     const text = html
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 15000);
-    if (!text) return res.status(400).json({ error: 'No readable text found at that URL' });
+
+    if (!text || text.length < 100) {
+      return res.status(400).json({ error: 'Not enough readable text found — this page may be JavaScript-rendered. Try copying the content into a PDF instead.' });
+    }
+
     res.json({ text });
   } catch (err) {
     console.error('[fetch-url]', err.message);
-    res.status(500).json({ error: `Could not fetch URL: ${err.message}` });
+    const msg = String(err?.message || '');
+    if (msg.includes('abort') || msg.includes('timeout')) {
+      return res.status(400).json({ error: 'URL took too long to respond (>7s). Try a different URL or paste the content into a PDF.' });
+    }
+    res.status(500).json({ error: `Could not fetch URL: ${msg}` });
   }
 });
 
