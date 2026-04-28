@@ -101,6 +101,35 @@ function normalizeChatCodeFences(text: string) {
     });
 }
 
+function stripSpeechText(text: string) {
+  return String(text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\|[^|\n]+\|/g, ' ')
+    .replace(/[#*_`>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function renderSpokenMessage(text: string, visibleWords: number) {
+  const words = stripSpeechText(text).split(/\s+/).filter(Boolean);
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0 4px' }}>
+      {words.map((word, index) => (
+        <span
+          key={`${word}-${index}`}
+          style={{
+            opacity: index < visibleWords ? 1 : 0.2,
+            transform: index < visibleWords ? 'translateY(0)' : 'translateY(4px)',
+            transition: 'opacity 180ms ease, transform 180ms ease',
+          }}
+        >
+          {word}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function renderChatMessage(text: string) {
   const blocks = normalizeChatCodeFences(text).split(/```/);
 
@@ -1069,9 +1098,14 @@ function LearnContent({ course }: { course: Course }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [generatingNotes, setGeneratingNotes] = useState(false);
   const [exampleMode, setExampleMode] = useState(true);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [speakingTs, setSpeakingTs] = useState<number | null>(null);
+  const [spokenWords, setSpokenWords] = useState(0);
   const [phase, setPhase] = useState<Phase>('HOOK');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechUrlRef = useRef<string | null>(null);
   const [notesOpen, setNotesOpen] = useState<number | null>(null);
   const [narrow, setNarrow] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 1100 : false));
   // Ref-based guard so React StrictMode's double-effect fire doesn't send two intro messages
@@ -1080,6 +1114,63 @@ function LearnContent({ course }: { course: Course }) {
   const lessonKey = `${course.currentModule}:${course.currentLesson}`;
 
   const currentChat = (course.lessonChats?.[lessonKey] ?? []).filter((msg) => !isApiErrorMessage(msg.text));
+
+  function stopVoicePlayback() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (speechUrlRef.current) {
+      URL.revokeObjectURL(speechUrlRef.current);
+      speechUrlRef.current = null;
+    }
+    setSpeakingTs(null);
+    setSpokenWords(0);
+  }
+
+  async function speakTutorReply(text: string, ts: number) {
+    const speechText = stripSpeechText(text);
+    if (!speechText) return;
+    stopVoicePlayback();
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: speechText }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      speechUrlRef.current = url;
+      setSpeakingTs(ts);
+      setSpokenWords(0);
+
+      const words = speechText.split(/\s+/).filter(Boolean);
+      const sync = () => {
+        if (!audioRef.current || audioRef.current !== audio) return;
+        const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Math.max(1.6, words.length * 0.32);
+        const nextCount = Math.min(words.length, Math.max(0, Math.ceil((audio.currentTime / duration) * words.length)));
+        setSpokenWords(nextCount);
+        if (!audio.paused && !audio.ended) requestAnimationFrame(sync);
+      };
+
+      audio.onplay = () => requestAnimationFrame(sync);
+      audio.onended = () => {
+        setSpokenWords(words.length);
+        window.setTimeout(() => {
+          if (audioRef.current === audio) stopVoicePlayback();
+        }, 350);
+      };
+      audio.onerror = () => {
+        if (audioRef.current === audio) stopVoicePlayback();
+      };
+      await audio.play();
+    } catch {
+      stopVoicePlayback();
+    }
+  }
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1090,6 +1181,12 @@ function LearnContent({ course }: { course: Course }) {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  useEffect(() => () => stopVoicePlayback(), []);
+
+  useEffect(() => {
+    if (!voiceMode) stopVoicePlayback();
+  }, [voiceMode]);
 
   useEffect(() => {
     setPhase('HOOK');
@@ -1217,26 +1314,29 @@ function LearnContent({ course }: { course: Course }) {
         setPhase('EXPLAIN');
       }
 
+      const tutorText = normalizedText || buildClientFallbackTutorMessage({
+        lessonTitle,
+        objective: safeObjective,
+        description: lesson?.description ?? '',
+        facts: lesson?.facts ?? [],
+        currentPhase,
+        isOpening: openingTurn,
+        allowQuestion,
+      });
+      const tutorTs = Date.now();
       dispatch({
         type: 'ADD_CHAT',
         id: course.id,
         lessonKey,
         msg: {
           who: 'tutor',
-          text: normalizedText || buildClientFallbackTutorMessage({
-            lessonTitle,
-            objective: safeObjective,
-            description: lesson?.description ?? '',
-            facts: lesson?.facts ?? [],
-            currentPhase,
-            isOpening: openingTurn,
-            allowQuestion,
-          }),
-          ts: Date.now(),
+          text: tutorText,
+          ts: tutorTs,
           readyToMoveOn: !!data.readyToMoveOn,
           visual: clientVisual || responseVisual,
         },
       });
+      if (voiceMode) speakTutorReply(tutorText, tutorTs);
     } catch (e) {
       const openingTurn = !!options?.isOpening;
       const tutorTurnCount = currentChat.filter((m) => m.who === 'tutor').length;
@@ -1257,6 +1357,7 @@ function LearnContent({ course }: { course: Course }) {
         setPhase('EXPLAIN');
       }
 
+      const tutorTs = Date.now();
       dispatch({
         type: 'ADD_CHAT',
         id: course.id,
@@ -1264,11 +1365,12 @@ function LearnContent({ course }: { course: Course }) {
         msg: {
           who: 'tutor',
           text: fallbackText,
-          ts: Date.now(),
+          ts: tutorTs,
           readyToMoveOn: false,
           visual: wantsCanvasVisual ? buildCanvasExampleVisual(lessonTitle, latestUserMessage, fallbackText) : undefined,
         },
       });
+      if (voiceMode) speakTutorReply(fallbackText, tutorTs);
     } finally {
       setAiLoading(false);
     }
@@ -1433,7 +1535,7 @@ function LearnContent({ course }: { course: Course }) {
                   </div>
                 ) : (
                   <div style={{ color: HC.paper, fontFamily: HC.sans, fontSize: 15.5, lineHeight: 1.72, letterSpacing: '-0.005em' }}>
-                    {renderChatMessage(m.text)}
+                    {speakingTs === m.ts ? renderSpokenMessage(m.text, spokenWords) : renderChatMessage(m.text)}
                   </div>
                 )}
                 {m.who === 'tutor' && m.readyToMoveOn && tutorTurnCount >= 5 && (
@@ -1477,6 +1579,21 @@ function LearnContent({ course }: { course: Course }) {
                   Example mode {exampleMode ? 'on' : 'off'}
                 </button>
               )}
+              <button
+                onClick={() => setVoiceMode((value) => !value)}
+                disabled={generatingNotes}
+                style={{
+                  ...btn.ghost,
+                  padding: '8px 10px',
+                  fontSize: 10,
+                  color: voiceMode ? '#7ad08b' : 'rgba(250,247,240,0.54)',
+                  background: voiceMode ? 'rgba(122,208,139,0.10)' : 'rgba(250,247,240,0.04)',
+                  border: `1px solid ${voiceMode ? 'rgba(122,208,139,0.24)' : 'transparent'}`,
+                  opacity: generatingNotes ? 0.5 : 1,
+                }}
+              >
+                Voice {voiceMode ? 'on' : 'off'}
+              </button>
               {quickActions.map((action) => (
                 <button
                   key={action.label}

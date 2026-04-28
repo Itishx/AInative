@@ -365,6 +365,53 @@ function getClient() {
 
 app.get('/api/health', (_, res) => res.json({ ok: true, hasKey: !!process.env.ANTHROPIC_API_KEY }));
 
+app.post('/api/tts', async (req, res) => {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID;
+  const text = String(req.body?.text || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+
+  if (!apiKey || !voiceId) {
+    return res.status(500).json({ error: 'ElevenLabs env vars are not configured.' });
+  }
+  if (!text) {
+    return res.status(400).json({ error: 'text required' });
+  }
+
+  try {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg',
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.48,
+          similarity_boost: 0.82,
+          style: 0.18,
+          use_speaker_boost: true,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      return res.status(response.status).json({ error: `ElevenLabs TTS failed: ${errorText || response.status}` });
+    }
+
+    const audio = Buffer.from(await response.arrayBuffer());
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(audio);
+  } catch (err) {
+    console.error('[tts]', err.message);
+    res.status(500).json({ error: 'Could not generate voice audio.' });
+  }
+});
+
 function decodeHtmlEntities(value) {
   return String(value || '')
     .replace(/&amp;/g, '&')
