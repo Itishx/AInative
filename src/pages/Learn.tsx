@@ -1156,7 +1156,17 @@ function LearnContent({ course }: { course: Course }) {
       });
       if (!res.ok) {
         const errorText = await res.text().catch(() => '');
-        setVoiceStatus(errorText.includes('ElevenLabs env') ? 'voice env missing' : 'voice failed');
+        let message = errorText;
+        try {
+          const parsed = JSON.parse(errorText);
+          message = parsed?.error || errorText;
+        } catch { /* keep text response */ }
+        const lowered = message.toLowerCase();
+        if (lowered.includes('env')) setVoiceStatus('voice env missing');
+        else if (lowered.includes('invalid') || lowered.includes('unauthorized') || res.status === 401) setVoiceStatus('invalid elevenlabs key');
+        else if (lowered.includes('quota') || lowered.includes('credits')) setVoiceStatus('elevenlabs quota/credits');
+        else if (lowered.includes('voice') || res.status === 404) setVoiceStatus('voice id not found');
+        else setVoiceStatus(`voice failed (${res.status})`);
         return;
       }
       const blob = await res.blob();

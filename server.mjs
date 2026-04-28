@@ -363,7 +363,12 @@ function getClient() {
   return client;
 }
 
-app.get('/api/health', (_, res) => res.json({ ok: true, hasKey: !!process.env.ANTHROPIC_API_KEY }));
+app.get('/api/health', (_, res) => res.json({
+  ok: true,
+  hasKey: !!process.env.ANTHROPIC_API_KEY,
+  hasElevenLabsKey: !!process.env.ELEVENLABS_API_KEY,
+  hasElevenLabsVoice: !!process.env.ELEVENLABS_VOICE_ID,
+}));
 
 app.post('/api/tts', async (req, res) => {
   const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -399,7 +404,16 @@ app.post('/api/tts', async (req, res) => {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
-      return res.status(response.status).json({ error: `ElevenLabs TTS failed: ${errorText || response.status}` });
+      let detail = errorText || String(response.status);
+      try {
+        const parsed = JSON.parse(errorText);
+        detail = parsed?.detail?.message || parsed?.detail?.status || parsed?.message || errorText;
+      } catch { /* keep raw ElevenLabs text */ }
+      console.error('[tts:elevenlabs]', response.status, detail);
+      return res.status(response.status).json({
+        error: `ElevenLabs TTS failed: ${detail}`,
+        status: response.status,
+      });
     }
 
     const audio = Buffer.from(await response.arrayBuffer());
