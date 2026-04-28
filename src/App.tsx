@@ -16,39 +16,45 @@ import Logos from './pages/Logos';
 import Settings from './pages/Settings';
 import { HC } from './theme';
 
-function AppRoutes() {
+function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#171410', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.35)' }}>
+      <div style={{ minHeight: '100vh', background: HC.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: HC.mute }}>
           Loading…
         </div>
       </div>
     );
   }
+  if (!user) return <Navigate to="/auth" replace />;
+  return <>{children}</>;
+}
 
-  if (!user) {
-    return <Auth />;
-  }
+function AppRoutes() {
+  const { user } = useAuth();
 
   return (
-    <StoreProvider userId={user.id} userEmail={user.email}>
+    <StoreProvider userId={user?.id} userEmail={user?.email}>
       <BrowserRouter>
         <Routes>
+          {/* Public */}
           <Route path="/" element={<Landing />} />
-          <Route path="/new" element={<NewCourse />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/learn/:id" element={<Learn />} />
-          <Route path="/quiz/:courseId/:modIdx/:lessonIdx" element={<Quiz />} />
+          <Route path="/browse" element={<Browse />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/certificate/:id" element={<Certificate />} />
-          <Route path="/create" element={<CreateCourse />} />
-          <Route path="/browse" element={<Browse />} />
-          <Route path="/anything" element={<Anything />} />
           <Route path="/logos" element={<Logos />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
+
+          {/* Protected */}
+          <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+          <Route path="/new" element={<RequireAuth><NewCourse /></RequireAuth>} />
+          <Route path="/learn/:id" element={<RequireAuth><Learn /></RequireAuth>} />
+          <Route path="/quiz/:courseId/:modIdx/:lessonIdx" element={<RequireAuth><Quiz /></RequireAuth>} />
+          <Route path="/create" element={<RequireAuth><CreateCourse /></RequireAuth>} />
+          <Route path="/anything" element={<RequireAuth><Anything /></RequireAuth>} />
+          <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

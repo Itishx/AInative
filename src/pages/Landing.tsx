@@ -743,7 +743,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
             Tiny explanations. Quick checks. Canvas examples. Notes and quizzes when the lesson is done.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
-            <button onClick={() => navigate('/dashboard')} style={{
+            <button onClick={() => navigate('/auth')} style={{
               background: t.ink, color: t.bg, border: 'none', padding: '14px 22px',
               fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer',
             }}>See it in action →</button>
@@ -1009,7 +1009,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
               <span style={{ width: 10, height: 10, background: t.red, display: 'inline-block', borderRadius: 999, transform: 'translateY(-4px)' }} />
               <b style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
             </div>
-            <p style={{ fontFamily: SERIF, fontSize: 20, fontStyle: 'italic', lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
+            <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
               A learning platform with stakes. Finish — or every byte is permanently deleted.
             </p>
             <div style={{ marginTop: 20, padding: '10px 14px', border: `1px solid ${t.ink}`, display: 'inline-flex', gap: 16, alignItems: 'center', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
@@ -1075,8 +1075,8 @@ export default function Landing() {
   }, []);
 
   function onNav(target: string) {
-    if (target === 'new') { navigate('/new'); return; }
-    if (target === 'dashboard') { navigate('/dashboard'); return; }
+    if (target === 'new') { navigate('/auth'); return; }
+    if (target === 'dashboard') { navigate('/auth'); return; }
     if (target === 'leaderboard-page') { navigate('/leaderboard'); return; }
     if (target === 'browse') { navigate('/browse'); return; }
     if (target === 'create') { navigate('/create'); return; }
