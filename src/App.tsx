@@ -10,6 +10,7 @@ import Certificate from './pages/Certificate';
 import CreateCourse from './pages/CreateCourse';
 import Browse from './pages/Browse';
 import Anything from './pages/Anything';
+import Logos from './pages/Logos';
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/create" element={<CreateCourse />} />
           <Route path="/browse" element={<Browse />} />
           <Route path="/anything" element={<Anything />} />
+          <Route path="/logos" element={<Logos />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
