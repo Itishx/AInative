@@ -569,6 +569,7 @@ function LessonCanvas({
   mod,
   lesson,
   latestTutorText,
+  latestVisual,
   readyToMoveOn,
   narrow,
 }: {
@@ -576,12 +577,14 @@ function LessonCanvas({
   mod: Course['curriculum']['modules'][number];
   lesson: Course['curriculum']['modules'][number]['lessons'][number];
   latestTutorText: string;
+  latestVisual: string;
   readyToMoveOn: boolean;
   narrow: boolean;
 }) {
-  const code = extractFirstCodeBlock(latestTutorText);
-  const table = extractFirstMarkdownTable(latestTutorText);
-  const chartMode = /(trend|chart|graph|growth|volume|increase|decrease|over time)/i.test(latestTutorText);
+  const visualSource = latestVisual || latestTutorText;
+  const code = extractFirstCodeBlock(visualSource);
+  const table = extractFirstMarkdownTable(visualSource);
+  const chartMode = !code && !table && /(trend|chart|graph|growth|volume|increase|decrease|over time)/i.test(latestTutorText);
   const ambientMode = !table && !code && !chartMode;
   const accent = readyToMoveOn ? HC.green : HC.red;
   const objective = normalizeLessonObjective(lesson.objective, lesson.title);
@@ -947,6 +950,7 @@ function LearnContent({ course }: { course: Course }) {
   const tutorTurnCount = currentChat.filter((m) => m.who === 'tutor').length;
   const readyToMoveOn = tutorTurnCount >= 3 && currentChat.some((msg) => msg.who === 'tutor' && !!msg.readyToMoveOn);
   const latestTutorText = lastTutorMsg?.text ?? '';
+  const latestVisual = [...currentChat].reverse().find((m) => m.who === 'tutor' && !!m.visual)?.visual ?? '';
   const lessonHasNotes = !!lesson?.notes;
   const canGenerateNotes = currentChat.some((msg) => msg.who === 'tutor');
 
@@ -1039,6 +1043,7 @@ function LearnContent({ course }: { course: Course }) {
           }),
           ts: Date.now(),
           readyToMoveOn: !!data.readyToMoveOn,
+          visual: typeof data.visual === 'string' && data.visual.trim() ? data.visual.trim() : undefined,
         },
       });
     } catch (e) {
@@ -1408,6 +1413,7 @@ function LearnContent({ course }: { course: Course }) {
                 mod={mod}
                 lesson={lesson}
                 latestTutorText={latestTutorText}
+                latestVisual={latestVisual}
                 readyToMoveOn={readyToMoveOn}
                 narrow={narrow}
               />

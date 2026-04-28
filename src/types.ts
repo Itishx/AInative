@@ -21,6 +21,7 @@ export interface ChatMsg {
   text: string;
   ts: number;
   readyToMoveOn?: boolean;
+  visual?: string;
 }
 
 export interface Curriculum {

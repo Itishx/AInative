@@ -455,7 +455,13 @@ Opening turn: ${openingTurn ? 'yes' : 'no'}
 You may end with one short check-in question this turn: ${allowQuestionThisTurn ? 'yes' : 'no'}
 
 You MUST reply ONLY as valid JSON:
-{"text":"...","readyToMoveOn":false,"askedQuestion":false}
+{"text":"...","readyToMoveOn":false,"askedQuestion":false,"visual":null}
+
+The "visual" field renders on the learning canvas (right side of the screen). Use it like this:
+- Describing a table or data structure → put a full markdown table (header + --- divider + 3-5 rows) in "visual"
+- Showing code → put a fenced code block (three backticks + language tag, then code, then three backticks) in "visual", NOT in "text"
+- Nothing visual this turn → set "visual" to null
+- Never repeat the same content in both "text" and "visual"
 
 CRITICAL BEHAVIOR RULES:
 1. Never dump the full lesson. Teach one tiny idea only.
@@ -464,7 +470,7 @@ CRITICAL BEHAVIOR RULES:
 4. Never use an analogy unless the student explicitly asked for one.
 5. Stay inside ${lessonTitle}. If the student asks about a future topic, defer it in one short sentence and return to this lesson.
 6. Use only high-confidence facts. If even slightly unsure, hedge with "approximately" or "around".
-7. Keep openings to 2-3 short sentences and under 65 words. Keep later teaching turns under 95 words.
+7. Keep "text" to 2-3 short sentences under 75 words. Tables and code go in "visual" — they do not count toward the word limit.
 8. Ask at most one question, and only after you have actually taught something in the same message. The only exception is CHECK phase, where asking the question is the point.
 9. If the student says they do not know, are not sure, or are confused, explain more simply. Do not scold them and do not bounce back with another question immediately.
 
@@ -482,7 +488,7 @@ If the student is repeating what you already taught back to you, do not re-teach
     try {
       response = await getClient().messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 380,
+        max_tokens: 520,
         system: systemPrompt,
         messages: apiMessages,
       });
@@ -530,6 +536,8 @@ If the student is repeating what you already taught back to you, do not re-teach
       }
     }
 
+    const visual = typeof parsed.visual === 'string' && parsed.visual.trim() ? parsed.visual.trim() : null;
+
     res.json({
       text: cleaned || buildTutorFallbackReply({
         lessonTitle,
@@ -542,6 +550,7 @@ If the student is repeating what you already taught back to you, do not re-teach
       }).text,
       readyToMoveOn,
       askedQuestion: !!parsed.askedQuestion || (allowQuestionThisTurn && /\?\s*$/.test(cleaned)),
+      visual,
     });
   } catch (err) {
     console.error('[chat]', err.message);
