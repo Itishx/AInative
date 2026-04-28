@@ -23,6 +23,7 @@ const DARK: T = {
 };
 
 const SERIF = '"Instrument Serif", "EB Garamond", Georgia, serif';
+const SANS = '"Inter", -apple-system, system-ui, sans-serif';
 const MONO  = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace';
 
 const ThemeCtx = createContext<{ t: T; dark: boolean }>({ t: LIGHT, dark: false });
@@ -603,7 +604,7 @@ function TutorMockup() {
             <div key={i} style={{
               maxWidth: '92%',
               alignSelf: m.who === 'user' ? 'flex-end' : 'flex-start',
-              fontFamily: HC.sans,
+              fontFamily: SANS,
               fontSize: 14,
               lineHeight: 1.55,
               padding: '11px 13px',
@@ -623,7 +624,7 @@ function TutorMockup() {
             ))}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 9, border: '1px solid rgba(250,247,240,0.10)', borderRadius: 16, background: 'rgba(250,247,240,0.06)' }}>
-            <div style={{ flex: 1, fontFamily: HC.sans, fontSize: 13, color: 'rgba(250,247,240,0.42)' }}>Ask, answer, or hold space...</div>
+            <div style={{ flex: 1, fontFamily: SANS, fontSize: 13, color: 'rgba(250,247,240,0.42)' }}>Ask, answer, or hold space...</div>
             <div style={{ fontFamily: MONO, fontSize: 9, color: '#faf7f0', letterSpacing: '0.12em' }}>SEND ↵</div>
           </div>
         </div>
@@ -651,7 +652,7 @@ function TutorMockup() {
           ].map((row) => (
             <div key={row[0]} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: `1px dashed ${t.ruleFaint}` }}>
               {row.map((cell, i) => (
-                <div key={cell} style={{ fontFamily: i === 0 ? MONO : HC.sans, fontSize: 14, color: i === 0 ? t.red : t.ink, padding: '13px 0' }}>{cell}</div>
+                <div key={cell} style={{ fontFamily: i === 0 ? MONO : SANS, fontSize: 14, color: i === 0 ? t.red : t.ink, padding: '13px 0' }}>{cell}</div>
               ))}
             </div>
           ))}
@@ -660,7 +661,7 @@ function TutorMockup() {
         <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
             <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Why it matters</div>
-            <p style={{ margin: '10px 0 0', fontFamily: HC.sans, fontSize: 14, lineHeight: 1.55, color: t.inkSoft }}>
+            <p style={{ margin: '10px 0 0', fontFamily: SANS, fontSize: 14, lineHeight: 1.55, color: t.inkSoft }}>
               The canvas holds the visual so the chat can stay focused.
             </p>
           </div>
