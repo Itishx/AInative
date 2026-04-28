@@ -116,7 +116,22 @@ function safeParseTutorPayload(raw) {
     } catch {}
   }
 
-  return { text: cleaned, readyToMoveOn: false, askedQuestion: /\?\s*$/.test(cleaned) };
+  // Truncated JSON — extract "text" field value before the cutoff
+  const textMatch = cleaned.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (textMatch) {
+    return {
+      text: textMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'),
+      readyToMoveOn: false,
+      askedQuestion: false,
+    };
+  }
+
+  // Only fall back to raw if it doesn't look like broken JSON
+  if (!cleaned.startsWith('{')) {
+    return { text: cleaned, readyToMoveOn: false, askedQuestion: /\?\s*$/.test(cleaned) };
+  }
+
+  return { text: '', readyToMoveOn: false, askedQuestion: false };
 }
 
 function buildTutorFallbackReply({
@@ -422,7 +437,7 @@ If the student is repeating what you already taught back to you, do not re-teach
     try {
       response = await getClient().messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 220,
+        max_tokens: 380,
         system: systemPrompt,
         messages: apiMessages,
       });
