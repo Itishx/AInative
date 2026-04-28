@@ -1,4 +1,10 @@
-export const HC = {
+export type Colors = {
+  bg: string; paper: string; ink: string; mute: string;
+  ruleFaint: string; red: string; redDim: string; amber: string; green: string;
+  serif: string; sans: string; mono: string;
+};
+
+export const HC: Colors = {
   bg: '#f4f0e8',
   paper: '#faf7f0',
   ink: '#1a1510',
@@ -12,6 +18,21 @@ export const HC = {
   sans: '"Inter", -apple-system, system-ui, sans-serif',
   mono: '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
 } as const;
+
+export const HCDark: Colors = {
+  bg: '#141210',
+  paper: '#1c1a16',
+  ink: '#f1ecdf',
+  mute: '#8a8373',
+  ruleFaint: 'rgba(241,236,223,0.12)',
+  red: '#e8514a',
+  redDim: '#c43d36',
+  amber: '#e3a447',
+  green: '#6aae7f',
+  serif: '"Instrument Serif", "EB Garamond", Georgia, serif',
+  sans: '"Inter", -apple-system, system-ui, sans-serif',
+  mono: '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+};
 
 export const btn = {
   primary: {

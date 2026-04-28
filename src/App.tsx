@@ -14,7 +14,9 @@ import Browse from './pages/Browse';
 import Anything from './pages/Anything';
 import Logos from './pages/Logos';
 import Settings from './pages/Settings';
+import Slides from './pages/Slides';
 import { HC } from './theme';
+import { ThemeProvider } from './lib/theme';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -44,6 +46,7 @@ function AppRoutes() {
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/certificate/:id" element={<Certificate />} />
           <Route path="/logos" element={<Logos />} />
+          <Route path="/slides" element={<Slides />} />
           <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
 
           {/* Protected */}
@@ -64,8 +67,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
