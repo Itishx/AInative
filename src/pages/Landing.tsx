@@ -30,12 +30,6 @@ const MONO  = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace';
 const ThemeCtx = createContext<{ t: T; dark: boolean }>({ t: LIGHT, dark: false });
 const useTheme = () => useContext(ThemeCtx);
 
-function formatMargin(ms: number) {
-  const d = Math.floor(ms / 86400000);
-  const h = String(Math.floor((ms % 86400000) / 3600000)).padStart(2, '0');
-  return `${d}d ${h}h`;
-}
-
 // ── Shared primitives ─────────────────────────────────────────────────────────
 function Kicker({ children, color }: { children: React.ReactNode; color?: string }) {
   const { t } = useTheme();
@@ -255,11 +249,10 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
 
         {/* Sub */}
         <p style={{
-          fontFamily: SERIF, fontSize: 20, lineHeight: 1.5,
-          color: t.mute, fontStyle: 'italic', margin: '0 auto 48px', maxWidth: 520,
+          fontFamily: SERIF, fontSize: 20, lineHeight: 1.4,
+          color: t.mute, fontStyle: 'italic', margin: '0 auto 42px', maxWidth: 460,
         }}>
-          Pick a deadline. Miss it — every lesson, every note,{' '}
-          every quiz is <u>permanently deleted</u>. Forever.
+          Type a topic. Get a tiny course. Finish before it disappears.
         </p>
 
         {/* Big input box */}
@@ -278,7 +271,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleStart(e); } }}
-                placeholder="What do you want to learn? Be specific — the AI will build you a real curriculum."
+                placeholder="What do you want to learn?"
                 rows={2}
                 style={{
                   flex: 1, border: 'none', outline: 'none', background: 'transparent', resize: 'none',
@@ -536,23 +529,23 @@ function HowSection() {
   const steps = [
     {
       n: '01', kicker: 'Step one', title: 'Say it out loud.',
-      body: 'Type the thing you\'ve been meaning to learn for months. Rust. French. GROUP BY. The AI drafts a full curriculum — modules, lessons, estimated hours — in about six seconds. Edit it if you want. Most people don\'t need to.',
+      body: 'Name the thing. Learnor turns it into short lessons.',
       art: <PromptIllustration />,
     },
     {
       n: '02', kicker: 'Step two', title: 'Pick a deadline.',
-      body: 'Between 3 and 90 days from today. It locks the instant you confirm. There are no extensions, no emergency tickets, no "life happened" clauses. You get one 72-hour pause, to be spent however you like.',
+      body: 'Choose the date. The clock starts when you commit.',
       art: <CalendarIllustration />,
     },
     {
       n: '03', kicker: 'Step three', title: 'Learn or lose it.',
-      body: 'An AI tutor walks you through each lesson. Quizzes gate progress. A countdown lives in the top-right of every screen. If midnight on the deadline rolls over with modules unfinished — everything you built is permanently deleted.',
+      body: 'The tutor teaches step by step. Miss the deadline and it is gone.',
       art: <CountdownIllustration />,
     },
   ];
   return (
     <Wrap id="how" bg={t.paper} pad="120px 32px" borderTop borderBottom>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 64 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 44 }}>
         <div>
           <Kicker>How it works</Kicker>
           <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 0', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
@@ -562,12 +555,12 @@ function HowSection() {
       </div>
       <div style={{ borderTop: `2px solid ${t.ink}` }}>
         {steps.map((s) => (
-          <div key={s.n} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 1fr', borderBottom: `1px solid ${t.ruleFaint}`, padding: '48px 0', gap: 48, alignItems: 'start' }}>
-            <div style={{ fontFamily: SERIF, fontSize: 96, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', fontStyle: 'italic' }}>{s.n}</div>
+          <div key={s.n} style={{ display: 'grid', gridTemplateColumns: '96px 0.9fr 1.1fr', borderBottom: `1px solid ${t.ruleFaint}`, padding: '34px 0', gap: 40, alignItems: 'start' }}>
+            <div style={{ fontFamily: SERIF, fontSize: 70, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', fontStyle: 'italic' }}>{s.n}</div>
             <div>
               <Kicker color={t.mute}>{s.kicker}</Kicker>
-              <h3 style={{ fontFamily: SERIF, fontSize: 44, margin: '12px 0 16px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1.05 }}>{s.title}</h3>
-              <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.5, color: t.inkSoft, margin: 0 }}>{s.body}</p>
+              <h3 style={{ fontFamily: SERIF, fontSize: 38, margin: '10px 0 10px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1.05 }}>{s.title}</h3>
+              <p style={{ fontFamily: SERIF, fontSize: 18, lineHeight: 1.35, color: t.inkSoft, margin: 0 }}>{s.body}</p>
             </div>
             <div>{s.art}</div>
           </div>
@@ -679,32 +672,30 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
   const { t } = useTheme();
   const navigate = useNavigate();
   const trio = [
-    { n: '02', title: 'The tombstone.', body: 'When you miss a deadline, the course becomes a tombstone — locked, struck through, visible on your dashboard forever. Not to shame you. To remind you that last time, the midnight was real.', art: <TombstoneViz /> },
-    { n: '03', title: 'One pause, only.', body: 'Life does happen. You get exactly one 72-hour pause per course, usable any time except the final 24 hours. Use it for a flu, a funeral, a wedding. After that, the clock is the clock.', art: <PauseViz /> },
-    { n: '04', title: 'Public finishers.', body: "The leaderboard only shows people who beat their deadline — sorted by margin. Finish a 30-day course in 24? You climb. The 1,412 who missed don't appear. This is a list of survivors.", art: <LeaderboardViz /> },
+    { n: '02', title: 'Tombstones.', body: 'Miss it and the course locks as a reminder.', art: <TombstoneViz /> },
+    { n: '03', title: 'One pause.', body: 'A single 72-hour save. Spend it carefully.', art: <PauseViz /> },
+    { n: '04', title: 'Finishers.', body: 'Beat the clock and show up on the wall.', art: <LeaderboardViz /> },
   ];
   return (
     <Wrap id="features" pad="120px 32px">
-      <div style={{ maxWidth: 780, marginBottom: 64 }}>
+      <div style={{ maxWidth: 720, marginBottom: 48 }}>
         <Kicker>The product</Kicker>
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
           Calm <i>product.</i><br />Loud <span style={{ color: t.red }}>consequences.</span>
         </h2>
-        <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.5, margin: 0 }}>
-          Most learning apps make you feel productive. This one makes you actually finish.
-          The interface is quiet, editorial, unhurried — because the stakes on the other side are doing the work.
+        <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
+          The app stays quiet. The deadline does the yelling.
         </p>
       </div>
       {/* Tutor feature */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'start', marginBottom: 96 }}>
         <div>
           <Kicker color={t.mute}>Feature 01</Kicker>
-          <h3 style={{ fontFamily: SERIF, fontSize: 56, margin: '12px 0 20px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1 }}>
-            An AI tutor that talks back.
+          <h3 style={{ fontFamily: SERIF, fontSize: 56, margin: '12px 0 16px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1 }}>
+            Chat left.<br />Canvas right.
           </h3>
-          <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.5, color: t.inkSoft, margin: 0 }}>
-            Each lesson is a real conversation — it explains concepts, asks you questions, corrects wrong answers,
-            and only unlocks the next lesson when you pass the quiz. Chat or voice.
+          <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.inkSoft, margin: 0 }}>
+            Tiny explanations. Quick checks. Examples appear when the lesson needs them.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
             <button onClick={() => navigate('/dashboard')} style={{
@@ -720,8 +711,8 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
         {trio.map((f, i) => (
           <div key={f.n} style={{ padding: '40px 32px', borderRight: i < 2 ? `1px solid ${t.ruleFaint}` : 'none' }}>
             <div style={{ fontFamily: MONO, fontSize: 11, color: t.red, letterSpacing: '0.16em' }}>FEATURE {f.n}</div>
-            <h4 style={{ fontFamily: SERIF, fontSize: 32, margin: '10px 0 14px', fontWeight: 400, letterSpacing: '-0.015em', color: t.ink }}>{f.title}</h4>
-            <p style={{ fontFamily: SERIF, fontSize: 17, color: t.inkSoft, lineHeight: 1.5, margin: 0 }}>{f.body}</p>
+            <h4 style={{ fontFamily: SERIF, fontSize: 32, margin: '10px 0 10px', fontWeight: 400, letterSpacing: '-0.015em', color: t.ink }}>{f.title}</h4>
+            <p style={{ fontFamily: SERIF, fontSize: 17, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>{f.body}</p>
             <div style={{ marginTop: 24 }}>{f.art}</div>
           </div>
         ))}
@@ -731,101 +722,23 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
 }
 
 // ── Leaderboard ───────────────────────────────────────────────────────────────
-function LeaderboardSection({ onNav }: { onNav: (k: string) => void }) {
-  const { t } = useTheme();
-  const { state } = useStore();
-  const rows = state.leaderboard;
-  return (
-    <Wrap id="leaderboard" bg={t.paper} pad="120px 32px" borderTop borderBottom>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <Kicker>The wall</Kicker>
-          <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 0', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-            The <i>finishers.</i>
-          </h2>
-        </div>
-        <div style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 22, color: t.mute, maxWidth: 340, textAlign: 'right' }}>
-          1,412 people didn't make this list.<br />They don't get a line.
-        </div>
-      </div>
-      <div style={{ borderTop: `2px solid ${t.ink}`, borderBottom: `1px solid ${t.ink}`, marginTop: 32 }}>
-        <div style={{
-          display: 'grid', gridTemplateColumns: '60px 1fr 1.3fr 180px 100px 100px',
-          padding: '10px 16px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em',
-          textTransform: 'uppercase', color: t.mute, borderBottom: `1px solid ${t.ruleFaint}`,
-        }}>
-          <span>#</span><span>User</span><span>Course</span><span>Margin under</span><span>Days</span><span>Streak</span>
-        </div>
-        {rows.map((r, i) => (
-          <div key={r.certId} style={{
-            display: 'grid', gridTemplateColumns: '60px 1fr 1.3fr 180px 100px 100px',
-            padding: '18px 16px', borderBottom: `1px solid ${t.ruleFaint}`,
-            fontFamily: MONO, fontSize: 13, alignItems: 'center',
-          }}>
-            <span style={{ fontFamily: SERIF, fontSize: i < 3 ? 40 : 22, color: i < 3 ? t.red : t.mute, letterSpacing: '-0.02em', lineHeight: 1 }}>
-              {String(r.rank).padStart(2, '0')}
-            </span>
-            <span style={{ color: t.ink, fontWeight: 500 }}>{r.user}</span>
-            <span style={{ fontFamily: SERIF, fontSize: 18, color: t.ink, fontStyle: 'italic' }}>{r.course}</span>
-            <span style={{ color: t.red }}>-{formatMargin(r.marginMs)}</span>
-            <span style={{ color: t.mute }}>{r.days}d total</span>
-            <span style={{ color: t.ink }}>{r.streak}🔥</span>
-          </div>
-        ))}
-      </div>
-      <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between', fontFamily: MONO, fontSize: 11, color: t.mute }}>
-        <span>showing {rows.length} finishers</span>
-        <button onClick={() => onNav('leaderboard-page')} style={{
-          background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 11,
-          color: t.ink, letterSpacing: '0.16em', textTransform: 'uppercase', textDecoration: 'underline',
-        }}>See the full wall →</button>
-      </div>
-    </Wrap>
-  );
-}
-
-// ── Testimonials ──────────────────────────────────────────────────────────────
-const QUOTES = [
-  { q: "Knowing my French would evaporate at midnight on the 19th was the best motivator I've ever had. I finished 8 days early and actually retained it.", a: 'hansu · finished conversational japanese' },
-  { q: "I lost a Rust course at 00:00:03 and I'm not even mad. The second attempt, six weeks later, I shipped a real CLI.", a: 'ojo_22 · deleted once, finished twice' },
-  { q: "Our whole data team did the SQL course on the same 30-day clock. Four of six made it. The other two are quiet about it.", a: 'mira.k · engineering lead' },
-];
-
-function TestimonialsSection() {
-  const { t } = useTheme();
-  return (
-    <Wrap id="voices" bg={t.paper} pad="100px 32px" borderTop borderBottom>
-      <Kicker>Voices from the wall</Kicker>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, marginTop: 32, borderTop: `2px solid ${t.ink}` }}>
-        {QUOTES.map((q, i) => (
-          <div key={i} style={{ padding: '40px 32px', borderRight: i < 2 ? `1px solid ${t.ruleFaint}` : 'none', borderBottom: `1px solid ${t.ink}` }}>
-            <div style={{ fontFamily: SERIF, fontSize: 72, color: t.red, lineHeight: 0.5, letterSpacing: '-0.02em' }}>"</div>
-            <p style={{ fontFamily: SERIF, fontSize: 22, color: t.ink, lineHeight: 1.45, fontStyle: 'italic', margin: '8px 0 24px' }}>{q.q}</p>
-            <div style={{ fontFamily: MONO, fontSize: 11, color: t.mute, letterSpacing: '0.14em', textTransform: 'uppercase' }}>— {q.a}</div>
-          </div>
-        ))}
-      </div>
-    </Wrap>
-  );
-}
-
 // ── Pricing ───────────────────────────────────────────────────────────────────
 const TIERS = [
   {
     name: 'Free trial', price: '$0', unit: 'one course', sub: 'Try the deadline.',
-    body: 'Run one course up to 14 days. Full product, full stakes. Prove to yourself that fear works.',
+    body: 'One course. Full stakes.',
     list: ['1 course, up to 14 days', 'AI tutor', 'Leaderboard eligible', 'One emergency pause'],
     cta: 'Start free', primary: false,
   },
   {
     name: 'Finisher', price: '$18', unit: '/month', sub: 'Unlimited courses.',
-    body: 'Queue as many courses as you can carry. Every one gets a real deadline. Every one can be deleted.',
+    body: 'More courses. More clocks.',
     list: ['Unlimited courses', '3 concurrent active', 'Priority AI tutor', 'Public profile', 'Export certificates'],
     cta: 'Begin the clock →', primary: true,
   },
   {
     name: 'Team', price: '$12', unit: '/seat · yearly', sub: 'For study cohorts.',
-    body: 'Enroll a team in the same course with the same deadline. One cohort leaderboard. Shared tombstones.',
+    body: 'Same course. Same deadline.',
     list: ['Everything in Finisher', 'Cohort deadlines', 'Private leaderboards', 'Manager dashboard', 'SSO + audit logs'],
     cta: 'Talk to us', primary: false,
   },
@@ -840,8 +753,8 @@ function PricingSection({ onNav }: { onNav: (k: string) => void }) {
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 20px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
           The only thing we won't <i>delete.</i>
         </h2>
-        <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.5, margin: 0 }}>
-          Pay monthly or yearly. Cancel anytime — active courses keep their deadlines.
+        <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
+          Start free. Upgrade when the clock starts working.
         </p>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
@@ -887,23 +800,21 @@ function PricingSection({ onNav }: { onNav: (k: string) => void }) {
 
 // ── FAQ ───────────────────────────────────────────────────────────────────────
 const FAQS: [string, string][] = [
-  ['Is the deletion actually permanent?', "Yes. When the deadline passes, we run a purge job: every lesson draft, every quiz attempt, every note you made, every message you sent the tutor — all of it. The course title remains on your dashboard as a tombstone so you can see it. Nothing else is recoverable."],
-  ['What if my internet dies on the last day?', "Your progress syncs every 30 seconds when online. If you complete the final quiz offline and reconnect after the deadline, the completion is still honored as long as the timestamp in the local log is pre-deadline. This is the only exception we grant, and it's audited."],
-  ['Can I extend a deadline?', "No. Not for any reason. You get one 72-hour pause per course, usable any time except the final 24 hours. That is the only flex. Adding extensions breaks the entire product."],
-  ['What if I finish early?', "You're done, and you go on the leaderboard ranked by margin. Your certificate shows the margin. Your profile shows the margin."],
-  ['Does the AI actually teach well?', "The tutor explains concepts, gives concrete examples, and only unlocks the next lesson when you pass a real quiz. If you're struggling it'll adapt — slower, more examples, different analogies."],
-  ["I'm scared. Is that normal?", "That's the product working. Start with a 7-day course on something small. Build the muscle."],
+  ['Is deletion permanent?', 'Yes. The course content disappears. The tombstone stays.'],
+  ['Can I extend a deadline?', 'No. You get one 72-hour pause per course. That is the only flex.'],
+  ['What if I finish early?', 'You keep the course, get the certificate, and hit the finisher wall.'],
+  ['Does the AI teach well?', 'It teaches in tiny steps, checks understanding, and uses the canvas when useful.'],
 ];
 
 function FAQSection() {
   const { t } = useTheme();
   return (
     <Wrap id="faq" pad="120px 32px">
-      <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 64, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 56, alignItems: 'start' }}>
         <div style={{ position: 'sticky', top: 88 }}>
           <Kicker>Questions</Kicker>
-          <h2 style={{ fontFamily: SERIF, fontSize: 72, margin: '16px 0 24px', fontWeight: 400, letterSpacing: '-0.03em', color: t.ink, lineHeight: 0.95 }}>
-            Everything you'd want to ask before <i>committing.</i>
+          <h2 style={{ fontFamily: SERIF, fontSize: 64, margin: '16px 0 20px', fontWeight: 400, letterSpacing: '-0.03em', color: t.ink, lineHeight: 0.95 }}>
+            The only questions that matter.
           </h2>
           <p style={{ fontFamily: SERIF, fontSize: 18, color: t.mute, lineHeight: 1.5, margin: 0 }}>
             If your question isn't here, email us at ask@learnor.ai.
@@ -911,7 +822,7 @@ function FAQSection() {
         </div>
         <div style={{ borderTop: `2px solid ${t.ink}` }}>
           {FAQS.map(([q, a], i) => (
-            <details key={i} open={i < 2} style={{ borderBottom: `1px solid ${t.ruleFaint}`, padding: '20px 0' }}>
+            <details key={i} style={{ borderBottom: `1px solid ${t.ruleFaint}`, padding: '18px 0' }}>
               <summary style={{
                 cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'baseline', gap: 16,
                 fontFamily: SERIF, fontSize: 26, color: t.ink, letterSpacing: '-0.01em',
@@ -942,22 +853,8 @@ function InstructorSection({ onNav }: { onNav: (k: string) => void }) {
           <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(44px, 6vw, 88px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
             Your knowledge.<br />AI delivery.<br /><i style={{ color: t.red }}>You still get paid.</i>
           </h2>
-          <p style={{ fontFamily: SERIF, fontSize: 20, color: t.inkSoft, lineHeight: 1.6, margin: '0 0 28px' }}>
-            Most people who teach, teach not for the money — but for the love of it.
-            The moment in a classroom where something clicks. That's the real reward.
-          </p>
-          <p style={{ fontFamily: SERIF, fontSize: 20, color: t.inkSoft, lineHeight: 1.6, margin: '0 0 28px' }}>
-            We'll be honest with you: <b style={{ color: t.ink }}>this takes that part away.</b> The AI handles every explanation,
-            every question, every quiz. Your students never hear your voice. They're taught by a system
-            built entirely on top of your notes — but you don't do the teaching.
-          </p>
-          <p style={{ fontFamily: SERIF, fontSize: 20, color: t.inkSoft, lineHeight: 1.6, margin: '0 0 28px', fontStyle: 'italic' }}>
-            If the act of teaching is why you do this — this isn't for you. And that's completely okay.
-          </p>
-          <p style={{ fontFamily: SERIF, fontSize: 20, color: t.inkSoft, lineHeight: 1.6, margin: '0 0 36px' }}>
-            But if you have expertise locked in PDFs and notes that students can't access — and you'd like your
-            work cut in half — this is your path. Upload your materials. AI builds the curriculum.
-            Students enroll. You get paid.
+          <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.4, margin: '0 0 32px' }}>
+            Upload your notes. Learnor turns them into a deadline-driven course. Students learn from the AI. You review, publish, and get paid.
           </p>
           <div style={{ display: 'flex', gap: 12 }}>
             <button onClick={() => navigate('/create')} style={{
@@ -980,15 +877,15 @@ function InstructorSection({ onNav }: { onNav: (k: string) => void }) {
             {[
               {
                 n: '01', title: 'Upload your materials',
-                body: 'PDFs, notes, text files — anything you\'d hand a student. We extract the knowledge from them.',
+                body: 'PDFs, notes, links, handouts.',
               },
               {
                 n: '02', title: 'AI builds the curriculum',
-                body: 'Claude reads your materials and structures them into modules and lessons. You review and approve before anything goes live.',
+                body: 'Modules, lessons, quizzes.',
               },
               {
                 n: '03', title: 'Publish. Get paid.',
-                body: 'Set a price. Students browse the marketplace, enroll, and learn via deadline-enforced AI tutoring — grounded 100% in your content.',
+                body: 'Set a price. Students enroll.',
               },
             ].map((step, i) => (
               <div key={step.n} style={{ display: 'flex', gap: 20, paddingBottom: i < 2 ? 24 : 0, marginBottom: i < 2 ? 24 : 0, borderBottom: i < 2 ? `1px dashed ${t.ruleFaint}` : 'none' }}>
@@ -1006,9 +903,7 @@ function InstructorSection({ onNav }: { onNav: (k: string) => void }) {
               A word of caution
             </div>
             <p style={{ fontFamily: SERIF, fontSize: 16, color: t.inkSoft, lineHeight: 1.55, margin: 0 }}>
-              The AI is not you. It won't tell your stories. It won't pause when a room goes quiet.
-              It will teach your material — accurately, patiently, at 3am — but it will not teach the way you do.
-              <b style={{ color: t.ink }}> Know what you're signing up for.</b>
+              It teaches your material, not your personality. Good for scale. Bad for performance art.
             </p>
           </div>
         </div>
@@ -1157,8 +1052,6 @@ export default function Landing() {
         <TickerStrip />
         <HowSection />
         <FeaturesSection onNav={onNav} />
-        <LeaderboardSection onNav={onNav} />
-        <TestimonialsSection />
         <InstructorSection onNav={onNav} />
         <PricingSection onNav={onNav} />
         <FAQSection />
