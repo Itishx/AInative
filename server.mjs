@@ -645,18 +645,34 @@ Return ONLY valid JSON:
 });
 
 // ── Upload materials ─────────────────────────────────────────────────────────
+async function extractPdfText(buffer) {
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjsLib.getDocument({
+    data: new Uint8Array(buffer),
+    disableWorker: true,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+  }).promise;
+  const pages = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item) => item.str).join(' '));
+  }
+  await doc.destroy();
+  return pages.join('\n').replace(/\s+/g, ' ').trim().slice(0, 15000);
+}
+
 app.post('/api/upload-materials', upload.array('files', 10), async (req, res) => {
   try {
     const texts = [];
     for (const file of req.files ?? []) {
       if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
-        const { PDFParse } = await import('pdf-parse');
-        const parser = new PDFParse({ data: new Uint8Array(file.buffer) });
-        try {
-          const result = await parser.getText();
-          texts.push(`[${file.originalname}]\n${result.text}`);
-        } finally {
-          await parser.destroy();
+        const text = await extractPdfText(file.buffer);
+        if (!text) {
+          texts.push(`[${file.originalname}]\n(PDF could not be parsed — try uploading a .txt file instead)`);
+        } else {
+          texts.push(`[${file.originalname}]\n${text}`);
         }
       } else {
         texts.push(`[${file.originalname}]\n${file.buffer.toString('utf8')}`);
