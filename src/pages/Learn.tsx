@@ -1112,6 +1112,7 @@ function LearnContent({ course }: { course: Course }) {
   const recognitionRef = useRef<any>(null);
   const listeningRef = useRef(false);
   const voiceTranscriptRef = useRef('');
+  const voiceStartedAtRef = useRef(0);
   const [notesOpen, setNotesOpen] = useState<number | null>(null);
   const [narrow, setNarrow] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 1100 : false));
   // Ref-based guard so React StrictMode's double-effect fire doesn't send two intro messages
@@ -1152,6 +1153,7 @@ function LearnContent({ course }: { course: Course }) {
     recognitionRef.current = recognition;
     listeningRef.current = true;
     voiceTranscriptRef.current = '';
+    voiceStartedAtRef.current = Date.now();
     setListening(true);
     setVoiceStatus('listening… release space to send');
 
@@ -1189,12 +1191,36 @@ function LearnContent({ course }: { course: Course }) {
 
   async function stopVoiceInput() {
     if (!listeningRef.current && !recognitionRef.current) return;
-    const transcript = voiceTranscriptRef.current.trim();
     const recognition = recognitionRef.current;
+    const elapsed = Date.now() - voiceStartedAtRef.current;
+    if (elapsed < 700) {
+      await new Promise((resolve) => window.setTimeout(resolve, 700 - elapsed));
+    }
+
+    let settled = false;
+    const waitForFinalTranscript = new Promise<void>((resolve) => {
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const previousOnEnd = recognition?.onend;
+      if (recognition) {
+        recognition.onend = (event: any) => {
+          previousOnEnd?.(event);
+          done();
+        };
+      }
+      window.setTimeout(done, 900);
+    });
+
+    try { recognition?.stop?.(); } catch {}
+    await waitForFinalTranscript;
+
+    const transcript = voiceTranscriptRef.current.trim();
     recognitionRef.current = null;
     listeningRef.current = false;
     setListening(false);
-    try { recognition?.stop?.(); } catch {}
 
     if (transcript) {
       setVoiceStatus('sending voice…');

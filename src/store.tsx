@@ -51,6 +51,17 @@ function migrateCourses(courses: Course[]): Course[] {
   }));
 }
 
+function mergeCourses(primary: Course[], secondary: Course[]): Course[] {
+  const seen = new Set<string>();
+  const merged: Course[] = [];
+  for (const course of [...primary, ...secondary]) {
+    if (!course?.id || seen.has(course.id)) continue;
+    seen.add(course.id);
+    merged.push(course);
+  }
+  return merged;
+}
+
 function loadState(userId?: string): AppState {
   try {
     const userRaw = localStorage.getItem(storageKey(userId));
@@ -109,7 +120,7 @@ function reducer(state: AppState, action: Action): AppState {
       const courses = migrateCourses(action.courses ?? []);
       return checkDeadlines({
         ...state,
-        courses,
+        courses: mergeCourses(courses, state.courses),
         username: action.username && action.username !== 'you' ? action.username : state.username,
       });
     }
