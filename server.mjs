@@ -669,6 +669,37 @@ app.post('/api/upload-materials', upload.array('files', 10), async (req, res) =>
   }
 });
 
+// ── Fetch and extract text from a URL ────────────────────────────────────────
+app.post('/api/fetch-url', async (req, res) => {
+  const { url } = req.body;
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url required' });
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AINative/1.0; +https://a-inative.vercel.app)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return res.status(400).json({ error: `URL returned ${response.status}` });
+    const ct = response.headers.get('content-type') || '';
+    if (!ct.includes('text/html') && !ct.includes('text/plain')) {
+      return res.status(400).json({ error: 'URL must point to a webpage or text file' });
+    }
+    const html = await response.text();
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 15000);
+    if (!text) return res.status(400).json({ error: 'No readable text found at that URL' });
+    res.json({ text });
+  } catch (err) {
+    console.error('[fetch-url]', err.message);
+    res.status(500).json({ error: `Could not fetch URL: ${err.message}` });
+  }
+});
+
 // ── Generate curriculum from instructor materials ─────────────────────────────
 app.post('/api/curriculum-from-materials', async (req, res) => {
   const { topic, days, materialsContext } = req.body;

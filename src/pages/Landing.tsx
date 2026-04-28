@@ -174,14 +174,57 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
   const { state } = useStore();
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
+  const [showResources, setShowResources] = useState(false);
+  const [resourceUrl, setResourceUrl] = useState('');
+  const [resourceFile, setResourceFile] = useState<File | null>(null);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialsError, setMaterialsError] = useState('');
   const navigate = useNavigate();
   const finishers = state.courses.filter((c) => c.status === 'completed').length + 247;
   const deleted   = state.courses.filter((c) => c.status === 'tombstone').length + 1412;
 
-  function handleStart(e: React.FormEvent) {
+  async function handleStart(e: React.FormEvent) {
     e.preventDefault();
     const v = input.trim();
     if (!v) return;
+    setMaterialsError('');
+
+    let materialsContext = '';
+
+    if (resourceUrl.trim() || resourceFile) {
+      setMaterialsLoading(true);
+      try {
+        const parts: string[] = [];
+        if (resourceUrl.trim()) {
+          const res = await fetch('/api/fetch-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: resourceUrl.trim() }),
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          if (data.text) parts.push(`[Source: ${resourceUrl.trim()}]\n${data.text}`);
+        }
+        if (resourceFile) {
+          const form = new FormData();
+          form.append('files', resourceFile);
+          const res = await fetch('/api/upload-materials', { method: 'POST', body: form });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          if (data.materialsContext) parts.push(data.materialsContext);
+        }
+        materialsContext = parts.join('\n\n---\n\n');
+      } catch (err) {
+        setMaterialsError(err instanceof Error ? err.message : 'Failed to load resources');
+        setMaterialsLoading(false);
+        return;
+      }
+      setMaterialsLoading(false);
+    }
+
+    if (materialsContext) {
+      try { sessionStorage.setItem('ainative_materials_context', materialsContext); } catch {}
+    }
     navigate(`/new?topic=${encodeURIComponent(v)}`);
   }
 
@@ -240,6 +283,56 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
               />
             </div>
 
+            {/* Resources toggle row */}
+            <div style={{ borderTop: `1px solid ${t.ruleFaint}`, padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                type="button"
+                onClick={() => setShowResources((s) => !s)}
+                style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', background: 'none', border: 'none', cursor: 'pointer', color: showResources ? t.ink : t.mute, padding: 0 }}
+              >
+                {showResources ? '− hide resources' : '+ add your own resources'}
+              </button>
+              {(resourceUrl || resourceFile) && !showResources && (
+                <span style={{ fontFamily: MONO, fontSize: 10, color: t.green, letterSpacing: '0.1em' }}>
+                  {[resourceUrl && '1 url', resourceFile && '1 pdf'].filter(Boolean).join(' · ')} attached
+                </span>
+              )}
+            </div>
+
+            {/* Resources panel */}
+            {showResources && (
+              <div style={{ padding: '12px 20px 16px', borderTop: `1px dashed ${t.ruleFaint}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, width: 28 }}>url</span>
+                  <input
+                    type="url"
+                    value={resourceUrl}
+                    onChange={(e) => setResourceUrl(e.target.value)}
+                    placeholder="https://… (article, docs page, blog post)"
+                    style={{ flex: 1, border: 'none', borderBottom: `1px solid ${t.ruleFaint}`, outline: 'none', background: 'transparent', fontFamily: MONO, fontSize: 12, color: t.ink, padding: '4px 0' }}
+                  />
+                  {resourceUrl && (
+                    <button type="button" onClick={() => setResourceUrl('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 12, color: t.mute, padding: 0 }}>×</button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, width: 28 }}>pdf</span>
+                  <label style={{ cursor: 'pointer', flex: 1 }}>
+                    <span style={{ fontFamily: MONO, fontSize: 12, color: resourceFile ? t.ink : t.mute, borderBottom: `1px solid ${resourceFile ? t.ink : t.ruleFaint}`, paddingBottom: 2 }}>
+                      {resourceFile ? resourceFile.name : 'choose a pdf file…'}
+                    </span>
+                    <input type="file" accept=".pdf" onChange={(e) => setResourceFile(e.target.files?.[0] ?? null)} style={{ display: 'none' }} />
+                  </label>
+                  {resourceFile && (
+                    <button type="button" onClick={() => setResourceFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 12, color: t.mute, padding: 0 }}>×</button>
+                  )}
+                </div>
+                {materialsError && (
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: t.red, letterSpacing: '0.1em' }}>{materialsError}</div>
+                )}
+              </div>
+            )}
+
             {/* Bottom bar */}
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -258,14 +351,14 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
                   </button>
                 ))}
               </div>
-              <button type="submit" disabled={!input.trim()} style={{
-                background: input.trim() ? t.ink : t.ruleFaint,
-                color: input.trim() ? t.bg : t.mute,
+              <button type="submit" disabled={!input.trim() || materialsLoading} style={{
+                background: input.trim() && !materialsLoading ? t.ink : t.ruleFaint,
+                color: input.trim() && !materialsLoading ? t.bg : t.mute,
                 border: 'none', padding: '12px 24px', flexShrink: 0,
                 fontFamily: MONO, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase',
-                cursor: input.trim() ? 'pointer' : 'not-allowed', transition: 'background 0.15s',
+                cursor: input.trim() && !materialsLoading ? 'pointer' : 'not-allowed', transition: 'background 0.15s',
               }}>
-                Begin the clock →
+                {materialsLoading ? 'loading…' : 'Begin the clock →'}
               </button>
             </div>
           </div>

@@ -39,6 +39,13 @@ export default function NewCourse() {
   const [accepted, setAccepted] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [materialsContext] = useState<string>(() => {
+    try {
+      const v = sessionStorage.getItem('ainative_materials_context') ?? '';
+      if (v) sessionStorage.removeItem('ainative_materials_context');
+      return v;
+    } catch { return ''; }
+  });
 
   function updateCurriculumSummary() {
     setCurriculum((current) => {
@@ -90,13 +97,14 @@ export default function NewCourse() {
     if (!topic) { navigate('/'); return; }
     setLoading(true);
     setError('');
+    const endpoint = materialsContext ? '/api/curriculum-from-materials' : '/api/curriculum';
     apiJson<{
       title: string; level: string; estimatedHours: number;
       modules: Array<{ title: string; lessons: Array<{ title: string; objective: string; minutes: number }> }>;
-    }>('/api/curriculum', {
+    }>(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, days }),
+      body: JSON.stringify({ topic, days, ...(materialsContext ? { materialsContext } : {}) }),
     })
       .then((data) => {
         setCurriculum(data);
@@ -136,7 +144,8 @@ export default function NewCourse() {
       currentModule: 0,
       currentLesson: 0,
       certId: genId(),
-    };
+      ...(materialsContext ? { materialsContext } : {}),
+    } as Course;
     dispatch({ type: 'ADD_COURSE', course });
     navigate('/dashboard');
   }
@@ -182,8 +191,15 @@ export default function NewCourse() {
           {/* Curriculum */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', color: HC.mute, textTransform: 'uppercase' }}>
-                Generated curriculum
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', color: HC.mute, textTransform: 'uppercase' }}>
+                  Generated curriculum
+                </div>
+                {materialsContext && (
+                  <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: HC.green, border: `1px solid ${HC.green}`, padding: '2px 8px' }}>
+                    grounded in your materials
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => { if (editing) updateCurriculumSummary(); setEditing(!editing); }}
