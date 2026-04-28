@@ -463,13 +463,13 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                 {practicalExercises.length > 0 && (
                   <div style={{ marginTop: 28 }}>
                     <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: HC.red, marginBottom: 10 }}>
-                      practical work
+                      optional practice
                     </div>
                     <div style={{ fontFamily: HC.serif, fontSize: 22, letterSpacing: '-0.015em', marginBottom: 8 }}>
-                      Hands-on work comes after the MCQ.
+                      Hands-on task, only if this lesson supports it.
                     </div>
                     <div style={{ fontSize: 14, lineHeight: 1.6, color: HC.mute, marginBottom: 14 }}>
-                      These exercises are separate from your score. Upload what you made, then move on when you're ready.
+                      This is separate from your score. Skip it or upload what you made when it actually helps.
                     </div>
 
                     <div style={{ display: 'grid', gap: 14 }}>

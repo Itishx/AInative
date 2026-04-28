@@ -48,6 +48,32 @@ function trimWords(text, maxWords) {
   return `${words.slice(0, maxWords).join(' ')}...`.trim();
 }
 
+function lessonHasHandsOnMaterial(text) {
+  const value = String(text || '').toLowerCase();
+  return (
+    /```/.test(value) ||
+    /\b(select|insert|update|delete|create table|where|group by|order by|join|from)\b/.test(value) ||
+    /\b(write|run|execute|debug|fix|edit|upload|calculate|build|implement|install|command|terminal|query|code)\b/.test(value)
+  );
+}
+
+function practicalExerciseIsFair(exercise, taughtContent) {
+  const text = `${exercise?.title || ''} ${exercise?.task || ''} ${exercise?.deliverable || ''} ${exercise?.submissionHint || ''}`.toLowerCase();
+  const taught = String(taughtContent || '').toLowerCase();
+  if (!text.trim()) return false;
+  if (!lessonHasHandsOnMaterial(taught)) return false;
+
+  const asksUnsupportedDesign =
+    /\b(design|invent|create a new|topic of your choice|made-up data|from scratch)\b/.test(text) &&
+    !/\bcreate table|schema|columns|rows|record\b/.test(taught);
+
+  const asksUntaughtSql =
+    /\b(sql|query|select|where|join|group by|order by|insert|update|delete)\b/.test(text) &&
+    !/\b(select|where|join|group by|order by|insert|update|delete|query)\b/.test(taught);
+
+  return !asksUnsupportedDesign && !asksUntaughtSql;
+}
+
 function buildOpeningTutorReply({ lessonTitle, lessonObjective, conceptDescription, conceptFacts }) {
   const descriptionSentences = splitSentences(conceptDescription).filter((sentence) => !sentence.endsWith('?'));
   const objectiveSentence = splitSentences(lessonObjective).find((sentence) => !sentence.endsWith('?'));
@@ -625,15 +651,16 @@ ${taughtContent}
 STRICT RULES — read carefully:
 1. Every question MUST be directly answerable from the text above. If the tutor said it, test it. If they didn't, skip it.
 2. MCQ wrong options must be plausible-sounding but clearly wrong to someone who read the tutor's messages.
-3. Practical exercises must ask the student to DO something relevant to the lesson, not just restate facts.
-4. If the lesson is technical, practical exercises should involve code, commands, data work, debugging, or a file they can upload.
-5. If the lesson is non-technical, practical exercises should involve a concrete artifact they can create and upload.
-6. Do NOT invent new facts, definitions, or examples that don't appear in the tutor messages above.`
+3. Practical exercises are OPTIONAL. Return [] unless the tutor clearly taught a concrete hands-on action the student can now perform.
+4. A practical exercise must be directly doable from the tutor messages above. Do not ask for SELECT, WHERE, JOIN, schema design, code, commands, or data work unless those exact skills were already taught.
+5. If the lesson was conceptual, introductory, vocabulary-only, or only showed examples without teaching how to perform the task, practicalExercises MUST be [].
+6. Do NOT ask the student to invent a new database/table/project from scratch unless the tutor explicitly taught table design/schema creation in this lesson.
+7. Do NOT invent new facts, definitions, or examples that don't appear in the tutor messages above.`
   : `No chat history — write fair, introductory-level questions for "${lessonTitle}". Test conceptual understanding, not trivia or memorized syntax.`}
 
 Write:
 - exactly 5 MCQ questions
-- exactly 2 practical exercises
+- 0 to 2 practical exercises. Prefer 0 unless there is a genuinely fair hands-on task from the taught content.
 
 Return ONLY valid JSON (no markdown fences, no explanation):
 {
@@ -644,20 +671,7 @@ Return ONLY valid JSON (no markdown fences, no explanation):
     { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": <0-3> },
     { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": <0-3> }
   ],
-  "practicalExercises": [
-    {
-      "title": "...",
-      "task": "...",
-      "deliverable": "...",
-      "submissionHint": "..."
-    },
-    {
-      "title": "...",
-      "task": "...",
-      "deliverable": "...",
-      "submissionHint": "..."
-    }
-  ]
+  "practicalExercises": []
 }`,
       }],
     });
@@ -669,7 +683,11 @@ Return ONLY valid JSON (no markdown fences, no explanation):
         ...q,
         type: 'mcq',
       }));
-    parsed.practicalExercises = Array.isArray(parsed.practicalExercises) ? parsed.practicalExercises : [];
+    parsed.practicalExercises = Array.isArray(parsed.practicalExercises)
+      ? parsed.practicalExercises
+          .filter((exercise) => practicalExerciseIsFair(exercise, taughtContent))
+          .slice(0, 2)
+      : [];
     res.json(parsed);
   } catch (err) {
     console.error('[quiz]', err.message);
