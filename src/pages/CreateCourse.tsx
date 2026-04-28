@@ -155,7 +155,7 @@ export default function CreateCourse() {
         {step === 'token' && (
           <div>
             <h1 style={{ fontFamily: HC.serif, fontSize: 36, fontWeight: 400, letterSpacing: '-0.02em', margin: '0 0 8px' }}>
-              Teach on AINative.
+              Teach on Learnor.
             </h1>
             <p style={{ fontFamily: HC.serif, fontStyle: 'italic', color: HC.mute, fontSize: 17, margin: '0 0 32px', lineHeight: 1.5 }}>
               Your knowledge. AI delivery. You still get paid.

@@ -285,7 +285,7 @@ export default function Anything() {
               background: 'rgba(26,21,16,0.045)',
               color: HC.ink,
             }}>
-              AINATIVE
+              LEARNOR
             </button>
             <div style={{
               padding: '10px 14px',

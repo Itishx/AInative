@@ -105,7 +105,7 @@ function SiteNav({ active, dark, onToggleDark, onNav, onToggleSaas }: {
           flexShrink: 0,
         }}>
           <span style={{ width: 11, height: 11, background: t.red, display: 'inline-block', borderRadius: '50%' }} />
-          <b style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.22em', color: t.ink, textTransform: 'uppercase' }}>AINATIVE</b>
+          <b style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.22em', color: t.ink, textTransform: 'uppercase' }}>LEARNOR</b>
         </a>
         {/* Links */}
         <div style={{
@@ -456,7 +456,7 @@ function PromptIllustration() {
   const { t } = useTheme();
   return (
     <div style={{ border: `1px solid ${t.ink}`, background: t.bg, padding: 18, minHeight: 220 }}>
-      <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.14em' }}>$ ainative new</div>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.14em' }}>$ learnor new</div>
       <div style={{ fontFamily: SERIF, fontSize: 20, color: t.ink, marginTop: 10, fontStyle: 'italic', lineHeight: 1.3 }}>
         "teach me conversational spanish,<br />intermediate, in 30 days"
       </div>
@@ -906,7 +906,7 @@ function FAQSection() {
             Everything you'd want to ask before <i>committing.</i>
           </h2>
           <p style={{ fontFamily: SERIF, fontSize: 18, color: t.mute, lineHeight: 1.5, margin: 0 }}>
-            If your question isn't here, email us at ask@ainative.com.
+            If your question isn't here, email us at ask@learnor.ai.
           </p>
         </div>
         <div style={{ borderTop: `2px solid ${t.ink}` }}>
@@ -1063,7 +1063,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 11, height: 11, background: t.red, display: 'inline-block' }} />
-              <b style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.22em', color: t.ink, textTransform: 'uppercase' }}>AINATIVE</b>
+              <b style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.22em', color: t.ink, textTransform: 'uppercase' }}>LEARNOR</b>
             </div>
             <p style={{ fontFamily: SERIF, fontSize: 20, fontStyle: 'italic', lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
               A learning platform with stakes. Finish — or every byte is permanently deleted.
@@ -1086,7 +1086,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute }}>
-          <span>© 2026 AINATIVE · all progress subject to deletion</span>
+          <span>© 2026 LEARNOR · all progress subject to deletion</span>
           <span>made with stakes</span>
         </div>
         {/* Giant closing wordmark */}

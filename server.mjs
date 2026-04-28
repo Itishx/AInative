@@ -396,7 +396,7 @@ async function fetchReadableUrl(url, timeoutMs = 7000) {
   try {
     const response = await fetch(safeUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; AINativeResearchBot/1.0; +https://a-inative.vercel.app)',
+        'User-Agent': 'Mozilla/5.0 (compatible; LearnorResearchBot/1.0)',
         'Accept': 'text/html,application/xhtml+xml,text/plain,*/*',
         'Accept-Language': 'en-US,en;q=0.9',
       },
@@ -443,7 +443,7 @@ async function searchWithDuckDuckGo(topic) {
   const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(`${topic} tutorial fundamentals examples`)}`;
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; AINativeResearchBot/1.0)',
+      'User-Agent': 'Mozilla/5.0 (compatible; LearnorResearchBot/1.0)',
       'Accept': 'text/html,application/xhtml+xml,*/*',
     },
   });
@@ -1220,7 +1220,7 @@ export default app;
 
 if (!process.env.VERCEL) {
   app.listen(PORT, HOST, () => {
-    console.log(`AINative API → http://${HOST}:${PORT}`);
+    console.log(`Learnor API → http://${HOST}:${PORT}`);
     if (!process.env.ANTHROPIC_API_KEY) {
       console.warn('⚠  ANTHROPIC_API_KEY not set — copy .env.example to .env');
     }

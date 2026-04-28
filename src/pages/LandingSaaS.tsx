@@ -82,7 +82,7 @@ function SaasNav({ active, onSwitchTheme, onNav }: {
           }}>
             <span style={{ width: 8, height: 8, background: '#fff', borderRadius: '50%' }} />
           </span>
-          <span style={{ fontFamily: I, fontSize: 15, fontWeight: 700, color: S.ink, letterSpacing: '-0.02em' }}>AINative</span>
+          <span style={{ fontFamily: I, fontSize: 15, fontWeight: 700, color: S.ink, letterSpacing: '-0.02em' }}>Learnor</span>
         </a>
 
         <div style={{ flex: 1, display: 'flex', gap: 2, overflowX: 'auto', scrollbarWidth: 'none' }}>
@@ -743,7 +743,7 @@ function SaasFAQSection() {
               Everything you'd ask before <GradText>committing.</GradText>
             </h2>
             <p style={{ fontFamily: I, fontSize: 16, color: S.inkSoft, lineHeight: 1.65 }}>
-              If your question isn't here, email us at ask@ainative.com.
+              If your question isn't here, email us at ask@learnor.ai.
             </p>
           </div>
           <div>
@@ -832,7 +832,7 @@ function SaasFooter({ onNav }: { onNav: (k: string) => void }) {
               <span style={{ width: 28, height: 28, borderRadius: 8, background: GRAD, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ width: 8, height: 8, background: '#fff', borderRadius: '50%' }} />
               </span>
-              <span style={{ fontFamily: I, fontSize: 15, fontWeight: 700, color: S.ink }}>AINative</span>
+              <span style={{ fontFamily: I, fontSize: 15, fontWeight: 700, color: S.ink }}>Learnor</span>
             </div>
             <p style={{ fontFamily: I, fontSize: 15, lineHeight: 1.65, color: S.inkSoft, maxWidth: 280, marginBottom: 20 }}>
               A learning platform with stakes. Finish — or every byte is permanently deleted.
@@ -855,7 +855,7 @@ function SaasFooter({ onNav }: { onNav: (k: string) => void }) {
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, fontFamily: I, fontSize: 12, color: S.mute }}>
-          <span>© 2026 AINative · all progress subject to deletion</span>
+          <span>© 2026 Learnor · all progress subject to deletion</span>
           <span>made with stakes</span>
         </div>
       </div>

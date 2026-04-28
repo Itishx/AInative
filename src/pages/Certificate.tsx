@@ -46,7 +46,7 @@ export default function Certificate() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }}>
               <div>
                 <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: HC.red }}>
-                  AINATIVE · Certificate of Completion
+                  LEARNOR · Certificate of Completion
                 </div>
                 <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', color: HC.mute, marginTop: 6 }}>
                   № {course.certId}
