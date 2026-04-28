@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { HC, btn } from '../theme';
 import { CountdownInline } from '../components/Countdown';
 import { useStore } from '../store';
+import { apiUrl } from '../api';
 import type { Course, ChatMsg, EnrolledCourse } from '../types';
 
 function renderInlineFormatting(text: string) {
@@ -1099,6 +1100,7 @@ function LearnContent({ course }: { course: Course }) {
   const [generatingNotes, setGeneratingNotes] = useState(false);
   const [exampleMode, setExampleMode] = useState(true);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState('');
   const [speakingTs, setSpeakingTs] = useState<number | null>(null);
   const [spokenWords, setSpokenWords] = useState(0);
   const [phase, setPhase] = useState<Phase>('HOOK');
@@ -1128,17 +1130,35 @@ function LearnContent({ course }: { course: Course }) {
     setSpokenWords(0);
   }
 
+  async function unlockVoiceMode() {
+    setVoiceMode((value) => {
+      const next = !value;
+      if (!next) stopVoicePlayback();
+      return next;
+    });
+    try {
+      const ctx = new AudioContext();
+      await ctx.resume();
+      await ctx.close();
+    } catch { /* browser may not need explicit unlock */ }
+  }
+
   async function speakTutorReply(text: string, ts: number) {
     const speechText = stripSpeechText(text);
     if (!speechText) return;
     stopVoicePlayback();
+    setVoiceStatus('preparing voice…');
     try {
-      const res = await fetch('/api/tts', {
+      const res = await fetch(apiUrl('/api/tts'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: speechText }),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        setVoiceStatus(errorText.includes('ElevenLabs env') ? 'voice env missing' : 'voice failed');
+        return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
@@ -1156,18 +1176,24 @@ function LearnContent({ course }: { course: Course }) {
         if (!audio.paused && !audio.ended) requestAnimationFrame(sync);
       };
 
-      audio.onplay = () => requestAnimationFrame(sync);
+      audio.onplay = () => {
+        setVoiceStatus('speaking…');
+        requestAnimationFrame(sync);
+      };
       audio.onended = () => {
         setSpokenWords(words.length);
+        setVoiceStatus('');
         window.setTimeout(() => {
           if (audioRef.current === audio) stopVoicePlayback();
         }, 350);
       };
       audio.onerror = () => {
+        setVoiceStatus('audio playback failed');
         if (audioRef.current === audio) stopVoicePlayback();
       };
       await audio.play();
-    } catch {
+    } catch (err) {
+      setVoiceStatus(err instanceof DOMException && err.name === 'NotAllowedError' ? 'click once to allow audio' : 'voice failed');
       stopVoicePlayback();
     }
   }
@@ -1282,7 +1308,7 @@ function LearnContent({ course }: { course: Course }) {
         .filter((entry) => entry.isFuture)
         .map((entry) => entry.title);
 
-      const res = await fetch('/api/chat', {
+      const res = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1388,7 +1414,7 @@ function LearnContent({ course }: { course: Course }) {
       setAiLoading(true);
       let plan = '';
       try {
-        const planRes = await fetch('/api/lesson-plan', {
+        const planRes = await fetch(apiUrl('/api/lesson-plan'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1432,7 +1458,7 @@ function LearnContent({ course }: { course: Course }) {
   async function generateNotesForLesson() {
     if (!mod || !lesson) return;
     const isLastLessonOfModule = course.currentLesson === mod.lessons.length - 1;
-    const res = await fetch('/api/notes', {
+    const res = await fetch(apiUrl('/api/notes'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1580,7 +1606,7 @@ function LearnContent({ course }: { course: Course }) {
                 </button>
               )}
               <button
-                onClick={() => setVoiceMode((value) => !value)}
+                onClick={unlockVoiceMode}
                 disabled={generatingNotes}
                 style={{
                   ...btn.ghost,
@@ -1594,6 +1620,11 @@ function LearnContent({ course }: { course: Course }) {
               >
                 Voice {voiceMode ? 'on' : 'off'}
               </button>
+              {voiceStatus && (
+                <span style={{ alignSelf: 'center', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.50)' }}>
+                  {voiceStatus}
+                </span>
+              )}
               {quickActions.map((action) => (
                 <button
                   key={action.label}
