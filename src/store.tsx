@@ -59,23 +59,29 @@ function migrateCourses(courses: Course[]): Course[] {
 
 function loadState(userId?: string): AppState {
   try {
-    // Try user-namespaced key first
-    const raw = localStorage.getItem(storageKey(userId));
-    if (raw) {
-      const parsed = JSON.parse(raw) as AppState;
+    const userRaw = localStorage.getItem(storageKey(userId));
+    let userState: AppState | null = null;
+    if (userRaw) {
+      const parsed = JSON.parse(userRaw) as AppState;
       parsed.courses = migrateCourses(parsed.courses);
-      return checkDeadlines(parsed);
+      userState = checkDeadlines(parsed);
+      // If already has courses, use it
+      if (userState.courses.length > 0) return userState;
     }
 
-    // Migration: old non-namespaced key → user key
+    // Migration: check legacy non-namespaced key (even if user key exists but was empty)
     const legacyRaw = localStorage.getItem(BASE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacyRaw && userId) {
       const parsed = JSON.parse(legacyRaw) as AppState;
       parsed.courses = migrateCourses(parsed.courses);
       const migrated = checkDeadlines(parsed);
-      localStorage.setItem(storageKey(userId), JSON.stringify(migrated));
-      return migrated;
+      if (migrated.courses.length > 0) {
+        localStorage.setItem(storageKey(userId), JSON.stringify(migrated));
+        return migrated;
+      }
     }
+
+    if (userState) return userState;
   } catch {}
   return { courses: [], leaderboard: SEED_LEADERBOARD, username: 'you' };
 }
@@ -264,6 +270,9 @@ export function StoreProvider({
     return s;
   });
 
+  // Prevent initial save from clobbering DB before the async load resolves
+  const dbLoadedRef = useRef(false);
+
   // Load from Supabase on mount — DB is source of truth
   useEffect(() => {
     if (!userId) return;
@@ -273,6 +282,7 @@ export function StoreProvider({
       .eq('user_id', userId)
       .maybeSingle()
       .then(({ data, error }) => {
+        dbLoadedRef.current = true;
         if (error || !data) return;
         if (Array.isArray(data.courses) && data.courses.length > 0) {
           dispatch({ type: '_LOAD_FROM_DB', courses: data.courses, username: data.username ?? undefined });
@@ -286,6 +296,8 @@ export function StoreProvider({
   useEffect(() => {
     saveLocal(state, userId);
     if (!userId) return;
+    // Don't write to Supabase until the initial DB load has completed
+    if (!dbLoadedRef.current) return;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       supabase
