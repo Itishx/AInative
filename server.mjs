@@ -168,6 +168,40 @@ function buildTutorFallbackReply({
 
 
 
+async function runCheckerAgent({ lessonTitle, lessonObjective, chatMessages }) {
+  try {
+    const historyText = (Array.isArray(chatMessages) ? chatMessages : [])
+      .filter((m) => m.who === 'user' || m.who === 'tutor')
+      .slice(-12)
+      .map((m) => `${m.who === 'user' ? 'STUDENT' : 'TUTOR'}: ${String(m.text || '').trim()}`)
+      .join('\n');
+
+    const res = await getClient().messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 80,
+      system: 'You are a learning quality checker. Respond ONLY with valid JSON, no markdown.',
+      messages: [{
+        role: 'user',
+        content: `Lesson: "${lessonTitle}"
+Objective: "${lessonObjective}"
+
+Chat:
+${historyText}
+
+Did the student demonstrate genuine understanding — answered a question correctly, explained something in their own words, or showed applied knowledge? Saying "got it", "okay", "next", "continue", "i get it", or "you may continue" does NOT count.
+
+{"approved":true/false}`,
+      }],
+    });
+
+    const text = res.content[0].type === 'text' ? res.content[0].text : '';
+    const result = JSON.parse(text.trim().replace(/^```json\n?|```$/g, ''));
+    return !!result.approved;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeCurriculum(curriculum) {
   if (!curriculum || !Array.isArray(curriculum.modules)) return curriculum;
   return {
@@ -420,6 +454,22 @@ If the student is repeating what you already taught back to you, do not re-teach
       allowQuestion: allowQuestionThisTurn,
     });
 
+    const MIN_TUTOR_TURNS = 3;
+    const tutorTurnCount = (Array.isArray(messages) ? messages : []).filter((m) => m.who === 'tutor').length;
+    let readyToMoveOn = !!parsed.readyToMoveOn;
+
+    if (readyToMoveOn) {
+      if (currentPhase !== 'REINFORCE' || tutorTurnCount < MIN_TUTOR_TURNS) {
+        readyToMoveOn = false;
+      } else {
+        readyToMoveOn = await runCheckerAgent({
+          lessonTitle,
+          lessonObjective: objective,
+          chatMessages: messages,
+        });
+      }
+    }
+
     res.json({
       text: cleaned || buildTutorFallbackReply({
         lessonTitle,
@@ -430,7 +480,7 @@ If the student is repeating what you already taught back to you, do not re-teach
         isOpening: openingTurn,
         allowQuestion: allowQuestionThisTurn,
       }).text,
-      readyToMoveOn: !!parsed.readyToMoveOn,
+      readyToMoveOn,
       askedQuestion: !!parsed.askedQuestion || (allowQuestionThisTurn && /\?\s*$/.test(cleaned)),
     });
   } catch (err) {

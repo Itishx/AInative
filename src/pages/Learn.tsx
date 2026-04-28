@@ -935,7 +935,8 @@ function LearnContent({ course }: { course: Course }) {
   const mod = course.curriculum.modules[course.currentModule];
   const lesson = mod?.lessons[course.currentLesson];
   const lastTutorMsg = [...currentChat].reverse().find((msg) => msg.who === 'tutor');
-  const readyToMoveOn = currentChat.some((msg) => msg.who === 'tutor' && (!!msg.readyToMoveOn || tutorTextUnlocksQuiz(msg.text)));
+  const tutorTurnCount = currentChat.filter((m) => m.who === 'tutor').length;
+  const readyToMoveOn = tutorTurnCount >= 3 && currentChat.some((msg) => msg.who === 'tutor' && !!msg.readyToMoveOn);
   const latestTutorText = lastTutorMsg?.text ?? '';
   const lessonHasNotes = !!lesson?.notes;
   const canGenerateNotes = currentChat.some((msg) => msg.who === 'tutor');
@@ -1191,7 +1192,7 @@ function LearnContent({ course }: { course: Course }) {
                     {renderChatMessage(m.text)}
                   </div>
                 )}
-                {m.who === 'tutor' && (m.readyToMoveOn || tutorTextUnlocksQuiz(m.text)) && (
+                {m.who === 'tutor' && m.readyToMoveOn && tutorTurnCount >= 3 && (
                   <div style={{ marginTop: 10, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#7ad08b' }}>
                     lesson objective covered
                   </div>
