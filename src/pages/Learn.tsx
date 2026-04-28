@@ -329,7 +329,7 @@ function renderMarkdown(text: string) {
   return rendered;
 }
 
-type Phase = 'HOOK' | 'EXPLAIN' | 'CHECK' | 'REINFORCE';
+type Phase = 'ASSESS' | 'HOOK' | 'EXPLAIN' | 'CHECK' | 'REINFORCE';
 
 function normalizeLessonObjective(objective: string | undefined, lessonTitle: string) {
   const value = String(objective ?? '').trim();
@@ -890,6 +890,7 @@ function LearnContent({ course }: { course: Course }) {
   const [narrow, setNarrow] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 1100 : false));
   // Ref-based guard so React StrictMode's double-effect fire doesn't send two intro messages
   const introFiredKey = useRef('');
+  const lessonPlanRef = useRef('');
   const lessonKey = `${course.currentModule}:${course.currentLesson}`;
 
   const currentChat = (course.lessonChats?.[lessonKey] ?? []).filter((msg) => !isApiErrorMessage(msg.text));
@@ -906,9 +907,10 @@ function LearnContent({ course }: { course: Course }) {
 
   useEffect(() => {
     setPhase('HOOK');
+    lessonPlanRef.current = '';
   }, [lessonKey]);
 
-  // Auto intro message on first load of each lesson
+  // Auto intro message on first load of each lesson — ask prior knowledge before teaching
   useEffect(() => {
     const key = `${course.id}-${course.currentModule}-${course.currentLesson}`;
     if (currentChat.length > 0) return;
@@ -917,18 +919,18 @@ function LearnContent({ course }: { course: Course }) {
     const mod = course.curriculum.modules[course.currentModule];
     const lesson = mod?.lessons[course.currentLesson];
     if (!mod || !lesson) return;
-    sendToAI(
-      [{
-        who: 'user',
-        text: `Start the lesson "${lesson.title}". Teach the first tiny thing only.`,
+    dispatch({
+      type: 'ADD_CHAT',
+      id: course.id,
+      lessonKey,
+      msg: {
+        who: 'tutor',
+        text: `Before we dive in — how familiar are you with "${lesson.title}"? Complete beginner, seen it once or twice, or used it before?`,
         ts: Date.now(),
-      }],
-      course.subject,
-      mod.title,
-      lesson.title,
-      'HOOK',
-      { isOpening: true },
-    );
+        readyToMoveOn: false,
+      },
+    });
+    setPhase('ASSESS');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course.id, course.currentModule, course.currentLesson, currentChat.length]);
 
@@ -961,7 +963,7 @@ function LearnContent({ course }: { course: Course }) {
     moduleTitle: string,
     lessonTitle: string,
     currentPhase: Phase,
-    options?: { isOpening?: boolean },
+    options?: { isOpening?: boolean; lessonPlan?: string },
   ) {
     setAiLoading(true);
     try {
@@ -1000,6 +1002,7 @@ function LearnContent({ course }: { course: Course }) {
           conceptDescription: lesson?.description ?? '',
           conceptFacts: lesson?.facts ?? [],
           materialsContext: (course as EnrolledCourse).materialsContext ?? undefined,
+          lessonPlan: options?.lessonPlan ?? lessonPlanRef.current ?? undefined,
         }),
       });
       const data = await res.json();
@@ -1067,6 +1070,35 @@ function LearnContent({ course }: { course: Course }) {
     setInput('');
     const userMsg: ChatMsg = { who: 'user', text, ts: Date.now() };
     dispatch({ type: 'ADD_CHAT', id: course.id, lessonKey, msg: userMsg });
+
+    if (phase === 'ASSESS') {
+      setPhase('HOOK');
+      setAiLoading(true);
+      let plan = '';
+      try {
+        const planRes = await fetch('/api/lesson-plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseTitle: course.subject,
+            moduleTitle: mod.title,
+            lessonTitle: lesson.title,
+            lessonObjective: normalizeLessonObjective(lesson.objective, lesson.title),
+            description: lesson.description ?? '',
+            facts: lesson.facts ?? [],
+            priorKnowledge: text,
+          }),
+        });
+        if (planRes.ok) {
+          const planData = await planRes.json();
+          plan = planData.plan || '';
+          lessonPlanRef.current = plan;
+        }
+      } catch { /* proceed without plan */ }
+      await sendToAI([...currentChat, userMsg], course.subject, mod.title, lesson.title, 'HOOK', { isOpening: true, lessonPlan: plan });
+      return;
+    }
+
     const nextPhase: Phase = phase === 'CHECK' ? 'REINFORCE' : phase;
     if (phase === 'CHECK') setPhase('REINFORCE');
     await sendToAI([...currentChat, userMsg], course.subject, mod.title, lesson.title, nextPhase);
@@ -1117,7 +1149,9 @@ function LearnContent({ course }: { course: Course }) {
     }
   }
 
-  const quickActions = phase === 'CHECK'
+  const quickActions = phase === 'ASSESS'
+    ? []
+    : phase === 'CHECK'
     ? [
         { label: 'I\'m not sure', action: () => handleQuickPrompt('I\'m not sure, can you explain the answer?'), primary: false },
         { label: 'Take quiz', action: handleLessonDone, primary: false },
@@ -1131,7 +1165,7 @@ function LearnContent({ course }: { course: Course }) {
         { label: 'Continue', action: () => handleQuickPrompt('Continue.'), primary: true },
         { label: 'Show example', action: () => handleQuickPrompt(`Give me one short concrete example for "${lesson?.title}" only.`), primary: false },
         { label: 'Simpler', action: () => handleQuickPrompt('Explain the current idea more simply, in very plain language.'), primary: false },
-        ...(phase !== 'CHECK' ? [{ label: 'Check me', action: () => handleQuickPrompt(`Ask me one question about "${lesson?.title}".`, 'CHECK'), primary: false }] : []),
+        { label: 'Check me', action: () => handleQuickPrompt(`Ask me one question about "${lesson?.title}".`, 'CHECK'), primary: false },
         { label: 'Take quiz', action: handleLessonDone, primary: false },
       ];
 
@@ -1247,7 +1281,7 @@ function LearnContent({ course }: { course: Course }) {
                     handleSend();
                   }
                 }}
-                placeholder='Ask for another example, or take the quiz whenever you feel ready…'
+                placeholder={phase === 'ASSESS' ? 'Tell me about your experience with this topic…' : 'Ask for another example, or take the quiz whenever you feel ready…'}
                 disabled={aiLoading || generatingNotes}
                 rows={2}
                 style={{

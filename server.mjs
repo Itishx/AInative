@@ -353,6 +353,47 @@ Rules:
   }
 });
 
+// ── Generate personalized lesson teaching plan ────────────────────────────────
+app.post('/api/lesson-plan', async (req, res) => {
+  const { courseTitle, moduleTitle, lessonTitle, lessonObjective, description, facts, priorKnowledge } = req.body;
+  try {
+    const msg = await getClient().messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      system: 'You are a teaching strategist. Write a direct, practical lesson plan. No headings, no JSON, just plain guidance.',
+      messages: [{
+        role: 'user',
+        content: `You are about to teach a 1-on-1 lesson.
+
+Course: "${courseTitle}"
+Module: "${moduleTitle}"
+Lesson: "${lessonTitle}"
+Objective: "${lessonObjective}"
+Description: ${description}
+Key facts: ${Array.isArray(facts) ? facts.join('; ') : facts || 'none'}
+
+The student just described their prior experience:
+"${priorKnowledge}"
+
+Write a 150-200 word teaching plan for this specific student. Cover:
+- What angle to open with given their experience (skip basics if experienced, slow down if beginner)
+- The single best hook or first idea to land
+- 2-3 steps to build the concept
+- One concrete example to use
+- What check question to ask them
+- One common misconception to watch for
+
+Write as direct instructions to yourself as the tutor, not to the student.`,
+      }],
+    });
+    const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
+    res.json({ plan: text.trim() });
+  } catch (err) {
+    console.error('[lesson-plan]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── AI tutor chat ────────────────────────────────────────────────────────────
 app.post('/api/chat', async (req, res) => {
   const {
@@ -363,6 +404,7 @@ app.post('/api/chat', async (req, res) => {
     lessonObjective,
     lessonScope,
     materialsContext,
+    lessonPlan,
     phase,
     conceptDescription,
     conceptFacts,
@@ -395,6 +437,9 @@ app.post('/api/chat', async (req, res) => {
     const scopeSection = lessonScope ? `\n\nCourse scope — do not teach these future topics: ${(lessonScope.futureLessonTitles || []).slice(0, 8).join(', ') || 'none'}.` : '';
     const materialsSection = materialsContext
       ? `\n\n━━━ INSTRUCTOR MATERIALS (teach ONLY from this) ━━━\n${materialsContext.slice(0, 8000)}\n━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      : '';
+    const planSection = lessonPlan
+      ? `\n\n━━━ YOUR PERSONALIZED TEACHING PLAN ━━━\n${String(lessonPlan).slice(0, 2000)}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nFollow this plan. Adapt if the student goes a different direction, but use the approach it describes.`
       : '';
 
     const systemPrompt = `You are an AI tutor teaching a course called: "${courseTitle}"
@@ -429,7 +474,7 @@ PHASE RULES:
 - CHECK: Ask exactly one easy question about only the idea just taught. Prefer a very short multiple-choice question with A), B), C), and D). Set askedQuestion to true.
 - REINFORCE: If the student is basically correct, confirm briefly and say they can take the quiz or ask for one more example. Set readyToMoveOn to true. If they are wrong or confused, correct the specific mistake in 1-2 short sentences and optionally invite one more example. Set readyToMoveOn to false. askedQuestion must be false.
 
-If the student is repeating what you already taught back to you, do not re-teach the full lesson. Either tighten the explanation or move into a simple check.${scopeSection}${materialsSection}`;
+If the student is repeating what you already taught back to you, do not re-teach the full lesson. Either tighten the explanation or move into a simple check.${scopeSection}${materialsSection}${planSection}`;
 
     const apiMessages = buildTutorApiMessages(messages, starterText);
 
