@@ -38,6 +38,7 @@ export default function NewCourse() {
   const [error, setError] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [committing, setCommitting] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   function updateCurriculumSummary() {
     setCurriculum((current) => {
@@ -180,8 +181,16 @@ export default function NewCourse() {
         <div style={{ flex: 1, overflow: 'auto', padding: '32px 60px', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 48 }}>
           {/* Curriculum */}
           <div>
-            <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', color: HC.mute, textTransform: 'uppercase' }}>
-              Generated curriculum · editable
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', color: HC.mute, textTransform: 'uppercase' }}>
+                Generated curriculum
+              </div>
+              <button
+                onClick={() => { if (editing) updateCurriculumSummary(); setEditing(!editing); }}
+                style={{ ...btn.outline, padding: '6px 12px', fontSize: 10 }}
+              >
+                {editing ? 'Done editing' : 'Edit'}
+              </button>
             </div>
             <h2 style={{ fontFamily: HC.serif, fontSize: 'clamp(32px, 4vw, 54px)', letterSpacing: '-0.025em', margin: '8px 0 0', fontWeight: 400 }}>
               {curriculum.title}
@@ -193,79 +202,43 @@ export default function NewCourse() {
               <span>·</span>
               <span>{curriculum.level}</span>
             </div>
-            <div style={{ marginTop: 18, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button onClick={updateCurriculumSummary} style={{ ...btn.outline, padding: '10px 14px', fontSize: 10 }}>
-                Update curriculum
-              </button>
-              <span style={{ fontFamily: HC.mono, fontSize: 10, color: HC.mute, letterSpacing: '0.12em', textTransform: 'uppercase', alignSelf: 'center' }}>
-                remove setup/filler, edit titles, then update totals
-              </span>
-            </div>
 
             <div style={{ marginTop: 28, borderTop: `1px solid ${HC.ink}` }}>
               {curriculum.modules.map((m, i) => (
                 <details key={m.title} open={i < 2} style={{ borderBottom: `1px solid ${HC.ruleFaint}`, padding: '16px 0' }}>
                   <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontFamily: HC.mono, fontSize: 11, color: HC.red, width: 22 }}>{String(i + 1).padStart(2, '0')}</span>
-                    <input
-                      value={m.title}
-                      onClick={(e) => e.preventDefault()}
-                      onChange={(e) => updateModuleTitle(i, e.target.value)}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        border: `1px solid ${HC.ruleFaint}`,
-                        background: HC.paper,
-                        color: HC.ink,
-                        padding: '8px 10px',
-                        fontFamily: HC.sans,
-                        fontSize: 15,
-                        fontWeight: 600,
-                      }}
-                    />
-                    <span style={{ fontFamily: HC.mono, fontSize: 11, color: HC.mute }}>{m.lessons.length} lessons</span>
-                    <button
-                      onClick={(e) => { e.preventDefault(); removeModule(i); }}
-                      style={{ ...btn.ghost, padding: '6px 8px', color: HC.red, fontSize: 12 }}
-                      title="Remove module"
-                    >
-                      ×
-                    </button>
+                    <span style={{ fontFamily: HC.mono, fontSize: 11, color: HC.red, width: 22, flexShrink: 0 }}>{String(i + 1).padStart(2, '0')}</span>
+                    {editing ? (
+                      <input
+                        value={m.title}
+                        onClick={(e) => e.preventDefault()}
+                        onChange={(e) => updateModuleTitle(i, e.target.value)}
+                        style={{ flex: 1, minWidth: 0, border: `1px solid ${HC.ruleFaint}`, background: HC.paper, color: HC.ink, padding: '8px 10px', fontFamily: HC.sans, fontSize: 15, fontWeight: 600 }}
+                      />
+                    ) : (
+                      <span style={{ flex: 1, fontFamily: HC.sans, fontSize: 15, fontWeight: 600, color: HC.ink }}>{m.title}</span>
+                    )}
+                    <span style={{ fontFamily: HC.mono, fontSize: 11, color: HC.mute, flexShrink: 0 }}>{m.lessons.length} lessons</span>
+                    {editing && (
+                      <button onClick={(e) => { e.preventDefault(); removeModule(i); }} style={{ ...btn.ghost, padding: '6px 8px', color: HC.red, fontSize: 12 }} title="Remove module">×</button>
+                    )}
                   </summary>
                   <div style={{ paddingLeft: 38, marginTop: 10 }}>
                     {m.lessons.map((l, li) => (
-                      <div key={l.title} style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr) 70px 32px',
-                        gap: 8,
-                        alignItems: 'center',
-                        padding: '8px 0',
-                        fontSize: 14,
-                        color: HC.ink,
-                        borderBottom: `1px dashed ${HC.ruleFaint}`,
-                      }}>
-                        <input
-                          value={l.title}
-                          onChange={(e) => updateLesson(i, li, { title: e.target.value })}
-                          style={{ minWidth: 0, border: `1px solid ${HC.ruleFaint}`, background: HC.paper, color: HC.ink, padding: '8px 10px', fontFamily: HC.sans, fontSize: 13 }}
-                        />
-                        <input
-                          value={l.objective ?? ''}
-                          onChange={(e) => updateLesson(i, li, { objective: e.target.value })}
-                          placeholder="Objective"
-                          style={{ minWidth: 0, border: `1px solid ${HC.ruleFaint}`, background: HC.paper, color: HC.ink, padding: '8px 10px', fontFamily: HC.sans, fontSize: 13 }}
-                        />
-                        <input
-                          type="number"
-                          min={1}
-                          value={l.minutes}
-                          onChange={(e) => updateLesson(i, li, { minutes: Number(e.target.value) })}
-                          style={{ width: '100%', border: `1px solid ${HC.ruleFaint}`, background: HC.paper, color: HC.ink, padding: '8px 8px', fontFamily: HC.mono, fontSize: 11 }}
-                        />
-                        <button onClick={() => removeLesson(i, li)} style={{ ...btn.ghost, padding: '6px 4px', color: HC.red, fontSize: 12 }} title="Remove lesson">
-                          ×
-                        </button>
-                      </div>
+                      editing ? (
+                        <div key={l.title + li} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr) 70px 32px', gap: 8, alignItems: 'center', padding: '8px 0', borderBottom: `1px dashed ${HC.ruleFaint}` }}>
+                          <input value={l.title} onChange={(e) => updateLesson(i, li, { title: e.target.value })} style={{ minWidth: 0, border: `1px solid ${HC.ruleFaint}`, background: HC.paper, color: HC.ink, padding: '8px 10px', fontFamily: HC.sans, fontSize: 13 }} />
+                          <input value={l.objective ?? ''} onChange={(e) => updateLesson(i, li, { objective: e.target.value })} placeholder="Objective" style={{ minWidth: 0, border: `1px solid ${HC.ruleFaint}`, background: HC.paper, color: HC.ink, padding: '8px 10px', fontFamily: HC.sans, fontSize: 13 }} />
+                          <input type="number" min={1} value={l.minutes} onChange={(e) => updateLesson(i, li, { minutes: Number(e.target.value) })} style={{ width: '100%', border: `1px solid ${HC.ruleFaint}`, background: HC.paper, color: HC.ink, padding: '8px 8px', fontFamily: HC.mono, fontSize: 11 }} />
+                          <button onClick={() => removeLesson(i, li)} style={{ ...btn.ghost, padding: '6px 4px', color: HC.red, fontSize: 12 }} title="Remove lesson">×</button>
+                        </div>
+                      ) : (
+                        <div key={l.title + li} style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '9px 0', borderBottom: `1px dashed ${HC.ruleFaint}` }}>
+                          <span style={{ fontFamily: HC.sans, fontSize: 13, color: HC.ink, fontWeight: 500, minWidth: 0, flex: '0 0 auto', maxWidth: '45%' }}>{l.title}</span>
+                          <span style={{ fontFamily: HC.sans, fontSize: 12, color: HC.mute, flex: 1, minWidth: 0 }}>{l.objective}</span>
+                          <span style={{ fontFamily: HC.mono, fontSize: 11, color: HC.mute, flexShrink: 0 }}>{l.minutes}m</span>
+                        </div>
+                      )
                     ))}
                   </div>
                 </details>
