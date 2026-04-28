@@ -41,7 +41,7 @@ export default function CreateCourse() {
         materialsContext = uploadData.materialsContext;
       }
 
-      setLoadingMsg('Building curriculum…');
+      setLoadingMsg(materialsContext ? 'Building curriculum from your materials…' : 'Researching sources and building curriculum…');
       const endpoint = materialsContext ? '/api/curriculum-from-materials' : '/api/curriculum';
       const currData = await apiJson<InstructorCurriculum>(endpoint, {
         method: 'POST',
@@ -49,7 +49,7 @@ export default function CreateCourse() {
         body: JSON.stringify({ topic, days, materialsContext }),
       });
       // Attach materialsContext so the AI tutor is grounded in it
-      setCurriculum({ ...currData, materialsContext } as InstructorCurriculum);
+      setCurriculum({ ...currData, materialsContext: currData.materialsContext || materialsContext } as InstructorCurriculum);
       setStep('review');
     } catch (e) {
       setSubmitError((e as Error).message);

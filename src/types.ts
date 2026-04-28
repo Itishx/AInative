@@ -51,6 +51,7 @@ export interface Course {
   currentModule: number;
   currentLesson: number;
   certId?: string;
+  materialsContext?: string;
 }
 
 export interface MCQQuestion {
@@ -92,6 +93,8 @@ export interface InstructorCurriculum {
   estimatedHours: number;
   modules: { title: string; lessons: { title: string; objective: string; minutes: number }[] }[];
   materialsContext: string;
+  researchSources?: { title: string; url: string }[];
+  researchStatus?: string;
 }
 
 export interface PublishedCourse {

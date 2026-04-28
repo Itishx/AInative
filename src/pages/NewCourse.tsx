@@ -33,6 +33,9 @@ export default function NewCourse() {
   const [curriculum, setCurriculum] = useState<null | {
     title: string; level: string; estimatedHours: number;
     modules: Array<{ title: string; lessons: Array<{ title: string; objective: string; minutes: number }> }>;
+    materialsContext?: string;
+    researchSources?: Array<{ title: string; url: string }>;
+    researchStatus?: string;
   }>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,6 +49,7 @@ export default function NewCourse() {
       return v;
     } catch { return ''; }
   });
+  const [generatedMaterialsContext, setGeneratedMaterialsContext] = useState('');
 
   function updateCurriculumSummary() {
     setCurriculum((current) => {
@@ -101,6 +105,9 @@ export default function NewCourse() {
     apiJson<{
       title: string; level: string; estimatedHours: number;
       modules: Array<{ title: string; lessons: Array<{ title: string; objective: string; minutes: number }> }>;
+      materialsContext?: string;
+      researchSources?: Array<{ title: string; url: string }>;
+      researchStatus?: string;
     }>(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -108,6 +115,7 @@ export default function NewCourse() {
     })
       .then((data) => {
         setCurriculum(data);
+        setGeneratedMaterialsContext(data.materialsContext || materialsContext);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -122,6 +130,7 @@ export default function NewCourse() {
     }
     setCommitting(true);
     const deadline = addDays(days);
+    const effectiveMaterialsContext = generatedMaterialsContext || curriculum.materialsContext || materialsContext;
     const modules: Module[] = curriculum.modules.map((m, i) => ({
       title: m.title,
       lessons: m.lessons.map((l) => ({ ...l, completed: false, quizPassed: false })),
@@ -144,7 +153,7 @@ export default function NewCourse() {
       currentModule: 0,
       currentLesson: 0,
       certId: genId(),
-      ...(materialsContext ? { materialsContext } : {}),
+      ...(effectiveMaterialsContext ? { materialsContext: effectiveMaterialsContext } : {}),
     } as Course;
     dispatch({ type: 'ADD_COURSE', course });
     navigate('/dashboard');
@@ -195,9 +204,9 @@ export default function NewCourse() {
                 <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', color: HC.mute, textTransform: 'uppercase' }}>
                   Generated curriculum
                 </div>
-                {materialsContext && (
+                {(generatedMaterialsContext || materialsContext) && (
                   <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: HC.green, border: `1px solid ${HC.green}`, padding: '2px 8px' }}>
-                    grounded in your materials
+                    {materialsContext ? 'grounded in your materials' : 'researched from web'}
                   </div>
                 )}
               </div>

@@ -333,17 +333,259 @@ function getClient() {
 
 app.get('/api/health', (_, res) => res.json({ ok: true, hasKey: !!process.env.ANTHROPIC_API_KEY }));
 
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#\d+;/g, ' ');
+}
+
+function extractReadableText(html) {
+  return decodeHtmlEntities(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeUrl(raw) {
+  try {
+    const parsed = new URL(raw);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return '';
+  }
+}
+
+async function fetchReadableUrl(url, timeoutMs = 7000) {
+  const safeUrl = normalizeUrl(url);
+  if (!safeUrl) return '';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(safeUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; AINativeResearchBot/1.0; +https://a-inative.vercel.app)',
+        'Accept': 'text/html,application/xhtml+xml,text/plain,*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!response.ok) return '';
+    const contentType = response.headers.get('content-type') || '';
+    if (!/text|html|json|xml/i.test(contentType)) return '';
+    return extractReadableText(await response.text()).slice(0, 9000);
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function searchWithTavily(topic) {
+  if (!process.env.TAVILY_API_KEY) return [];
+  const response = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: process.env.TAVILY_API_KEY,
+      query: `${topic} tutorial fundamentals practical examples`,
+      search_depth: 'basic',
+      max_results: 8,
+      include_answer: false,
+      include_raw_content: false,
+    }),
+  });
+  if (!response.ok) throw new Error(`Tavily search failed: ${response.status}`);
+  const data = await response.json();
+  return (data.results || [])
+    .map((result) => ({
+      title: result.title || result.url,
+      url: normalizeUrl(result.url),
+      snippet: result.content || '',
+    }))
+    .filter((result) => result.url);
+}
+
+async function searchWithDuckDuckGo(topic) {
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(`${topic} tutorial fundamentals examples`)}`;
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; AINativeResearchBot/1.0)',
+      'Accept': 'text/html,application/xhtml+xml,*/*',
+    },
+  });
+  if (!response.ok) return [];
+  const html = await response.text();
+  const matches = [...html.matchAll(/<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const seen = new Set();
+  return matches
+    .map((match) => {
+      let href = decodeHtmlEntities(match[1]);
+      try {
+        const parsed = new URL(href, 'https://duckduckgo.com');
+        const uddg = parsed.searchParams.get('uddg');
+        if (uddg) href = decodeURIComponent(uddg);
+      } catch { /* keep raw href */ }
+      const safeUrl = normalizeUrl(href);
+      const title = extractReadableText(match[2]).slice(0, 140) || safeUrl;
+      return { title, url: safeUrl, snippet: '' };
+    })
+    .filter((result) => {
+      if (!result.url || seen.has(result.url)) return false;
+      seen.add(result.url);
+      return true;
+    })
+    .slice(0, 8);
+}
+
+async function researchTopic(topic) {
+  if (process.env.ENABLE_WEB_RESEARCH === 'false') {
+    return { materialsContext: '', sources: [], status: 'disabled' };
+  }
+
+  let candidates = [];
+  try {
+    candidates = await searchWithTavily(topic);
+  } catch (err) {
+    console.warn('[research:tavily]', err.message);
+  }
+  if (candidates.length === 0) {
+    try {
+      candidates = await searchWithDuckDuckGo(topic);
+    } catch (err) {
+      console.warn('[research:ddg]', err.message);
+    }
+  }
+
+  const picked = [];
+  const seenHosts = new Set();
+  for (const candidate of candidates) {
+    if (picked.length >= 6) break;
+    try {
+      const host = new URL(candidate.url).hostname.replace(/^www\./, '');
+      if (seenHosts.has(host)) continue;
+      seenHosts.add(host);
+    } catch { /* ignore host dedupe */ }
+    picked.push(candidate);
+  }
+
+  const sources = [];
+  for (const candidate of picked) {
+    const pageText = await fetchReadableUrl(candidate.url);
+    const combined = [candidate.snippet, pageText].filter(Boolean).join('\n').trim();
+    if (combined.length < 250) continue;
+    sources.push({
+      title: candidate.title,
+      url: candidate.url,
+      text: combined.slice(0, 5000),
+    });
+  }
+
+  if (sources.length === 0) {
+    return { materialsContext: '', sources: [], status: 'empty' };
+  }
+
+  let synthesis = '';
+  try {
+    const msg = await getClient().messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2600,
+      system: 'You are a research librarian for an educational product. Extract only useful, source-grounded teaching material. No markdown table. No invented facts.',
+      messages: [{
+        role: 'user',
+        content: `Topic: ${topic}
+
+Create a compact teaching research pack from these sources. Include:
+- core concepts that must be taught
+- prerequisite concepts
+- common beginner mistakes
+- practical examples or exercises if present in the sources
+- vocabulary/definitions
+
+Only use the provided sources. If sources disagree or are thin, say so.
+
+SOURCES:
+${sources.map((source, index) => `[${index + 1}] ${source.title}
+${source.url}
+${source.text}`).join('\n\n---\n\n')}`,
+      }],
+    });
+    synthesis = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
+  } catch (err) {
+    console.warn('[research:synthesis]', err.message);
+  }
+
+  const sourcePack = sources.map((source, index) => (
+    `[${index + 1}] ${source.title}\nURL: ${source.url}\nEXCERPT: ${trimWords(source.text, 260)}`
+  )).join('\n\n');
+
+  return {
+    status: 'ok',
+    sources: sources.map(({ title, url }) => ({ title, url })),
+    materialsContext: [
+      `WEB RESEARCH PACK FOR: ${topic}`,
+      `Generated at: ${new Date().toISOString()}`,
+      synthesis ? `SYNTHESIZED NOTES:\n${synthesis}` : '',
+      `SOURCE EXCERPTS:\n${sourcePack}`,
+    ].filter(Boolean).join('\n\n---\n\n').slice(0, 18000),
+  };
+}
+
 // ── Generate curriculum ──────────────────────────────────────────────────────
 app.post('/api/curriculum', async (req, res) => {
   const { topic, days } = req.body;
   try {
+    const research = await researchTopic(topic);
+    const materialsContext = research.materialsContext || '';
     const msg = await getClient().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
       system: 'You are a curriculum designer. Respond ONLY with valid JSON, no markdown fences.',
       messages: [{
         role: 'user',
-        content: `Create a learning curriculum for: "${topic}". The student has ${days} days.
+        content: materialsContext ? `Create a learning curriculum for: "${topic}". The student has ${days} days.
+
+Build this curriculum STRICTLY from the researched source pack below. Do not include lessons that are not supported by the pack.
+===
+${materialsContext.slice(0, 12000)}
+===
+
+Return ONLY valid JSON:
+{
+  "title": "...",
+  "level": "beginner|intermediate|advanced",
+  "estimatedHours": <number>,
+  "modules": [
+    {
+      "title": "...",
+      "lessons": [
+        {
+          "title": "...",
+          "objective": "...",
+          "description": "Two sentences max — what this concept is and why it matters.",
+          "facts": ["specific source-grounded fact 1", "specific source-grounded fact 2", "specific source-grounded fact 3"],
+          "minutes": <number>
+        }
+      ]
+    }
+  ]
+}
+Rules:
+- 5–7 modules, 2–4 lessons each. Total hours fits in ${days} days at ~1h/day.
+- Each lesson objective: one sentence describing what the student should understand by the end.
+- Each lesson description: exactly 2 sentences — what the concept is + why it matters.
+- Each lesson facts array: 3–5 specific facts from the research pack only. Never invent facts.` : `Create a learning curriculum for: "${topic}". The student has ${days} days.
 Return ONLY valid JSON:
 {
   "title": "...",
@@ -372,9 +614,25 @@ Rules:
       }],
     });
     const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    res.json(normalizeCurriculum(JSON.parse(text.trim().replace(/^```json\n?|```$/g, ''))));
+    res.json({
+      ...normalizeCurriculum(JSON.parse(text.trim().replace(/^```json\n?|```$/g, ''))),
+      materialsContext,
+      researchSources: research.sources || [],
+      researchStatus: research.status,
+    });
   } catch (err) {
     console.error('[curriculum]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/research-topic', async (req, res) => {
+  const { topic } = req.body;
+  if (!topic || typeof topic !== 'string') return res.status(400).json({ error: 'topic required' });
+  try {
+    res.json(await researchTopic(topic));
+  } catch (err) {
+    console.error('[research-topic]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -464,7 +722,7 @@ app.post('/api/chat', async (req, res) => {
 
     const scopeSection = lessonScope ? `\n\nCourse scope — do not teach these future topics: ${(lessonScope.futureLessonTitles || []).slice(0, 8).join(', ') || 'none'}.` : '';
     const materialsSection = materialsContext
-      ? `\n\n━━━ INSTRUCTOR MATERIALS (teach ONLY from this) ━━━\n${materialsContext.slice(0, 8000)}\n━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      ? `\n\n━━━ LOCKED COURSE KNOWLEDGE BASE (teach ONLY from this) ━━━\n${materialsContext.slice(0, 10000)}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nThe knowledge base above is the only source of truth for this course. Do not add outside facts, extra concepts, or examples that are not supported by it. If the student asks for something outside it, say it is outside this course pack and offer to stay with the current lesson.`
       : '';
     const planSection = lessonPlan
       ? `\n\n━━━ YOUR PERSONALIZED TEACHING PLAN ━━━\n${String(lessonPlan).slice(0, 2000)}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nFollow this plan. Adapt if the student goes a different direction, but use the approach it describes.`
