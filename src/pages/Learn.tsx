@@ -349,6 +349,66 @@ function shouldAskTutorQuestion(latestUserMessage: string, isOpening: boolean, t
   return true;
 }
 
+function isCanvasExampleRequest(text: string) {
+  const value = String(text || '').toLowerCase();
+  return (
+    /\bshow\s+(?:me\s+)?(?:an?\s+)?example\b/.test(value) ||
+    /\bconcrete\s+example\b/.test(value) ||
+    /\bcanvas\b|\banvas\b/.test(value) ||
+    /\bvisual\b/.test(value)
+  );
+}
+
+function buildCanvasExampleVisual(lessonTitle: string, userText: string, tutorText: string) {
+  const context = `${lessonTitle} ${userText} ${tutorText}`.toLowerCase();
+
+  if (/\bprimary\s+key\b|\border_id\b|\borders?\b/.test(context)) {
+    return [
+      '| order_id | customer_id | order_date | total_amount |',
+      '|---|---|---|---|',
+      '| 1001 | 42 | 2024-01-15 | $59.99 |',
+      '| 1002 | 87 | 2024-01-16 | $120.00 |',
+      '| 1003 | 42 | 2024-01-18 | $34.50 |',
+    ].join('\n');
+  }
+
+  if (/\bselect\b|\bsql\b|\bquery\b/.test(context)) {
+    return [
+      '```sql',
+      'SELECT order_id, customer_id, total_amount',
+      'FROM orders',
+      'WHERE customer_id = 42;',
+      '```',
+    ].join('\n');
+  }
+
+  if (/\bpython\b|\bprint\b|\bvariable\b|\bcode\b|\bfunction\b/.test(context)) {
+    return [
+      '```python',
+      'message = "Hello, world!"',
+      'print(message)',
+      '```',
+    ].join('\n');
+  }
+
+  if (/\btable\b|\bdatabase\b|\brow\b|\bcolumn\b|\brecord\b|\bdata\b/.test(context)) {
+    return [
+      '| id | name | example_detail |',
+      '|---|---|---|',
+      '| 1 | First row | One record |',
+      '| 2 | Second row | Another record |',
+      '| 3 | Third row | Another record |',
+    ].join('\n');
+  }
+
+  return [
+    '```txt',
+    `${lessonTitle}`,
+    'Concept -> concrete example -> why it matters',
+    '```',
+  ].join('\n');
+}
+
 function trimParagraphs(text: string, maxWords: number) {
   const paragraphs = String(text || '')
     .split(/\n{2,}/)
@@ -1001,6 +1061,7 @@ function LearnContent({ course }: { course: Course }) {
       const tutorTurnCount = currentChat.filter((m) => m.who === 'tutor').length;
       const latestUserMessage = [...safeMessages].reverse().find((m) => m.who === 'user')?.text ?? '';
       const allowQuestion = shouldAskTutorQuestion(latestUserMessage, openingTurn, tutorTurnCount);
+      const wantsCanvasVisual = !!options?.wantsVisualExample || isCanvasExampleRequest(latestUserMessage);
       const futureLessonTitles = course.curriculum.modules
         .flatMap((module, moduleIndex) => module.lessons.map((l, lessonIndex) => ({
           title: l.title,
@@ -1024,12 +1085,16 @@ function LearnContent({ course }: { course: Course }) {
           conceptFacts: lesson?.facts ?? [],
           materialsContext: (course as EnrolledCourse).materialsContext ?? undefined,
           lessonPlan: options?.lessonPlan ?? lessonPlanRef.current ?? undefined,
-          wantsVisualExample: !!options?.wantsVisualExample,
+          wantsVisualExample: wantsCanvasVisual,
         }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       const normalizedText = compactTutorDump(String(data.text ?? ''), lessonTitle, openingTurn, allowQuestion);
+      const responseVisual = typeof data.visual === 'string' && data.visual.trim() ? data.visual.trim() : undefined;
+      const clientVisual = wantsCanvasVisual
+        ? buildCanvasExampleVisual(lessonTitle, latestUserMessage, `${normalizedText}\n${responseVisual ?? ''}`)
+        : undefined;
 
       if (data.askedQuestion) {
         setPhase('CHECK');
@@ -1054,7 +1119,7 @@ function LearnContent({ course }: { course: Course }) {
           }),
           ts: Date.now(),
           readyToMoveOn: !!data.readyToMoveOn,
-          visual: typeof data.visual === 'string' && data.visual.trim() ? data.visual.trim() : undefined,
+          visual: clientVisual || responseVisual,
         },
       });
     } catch (e) {
@@ -1062,6 +1127,7 @@ function LearnContent({ course }: { course: Course }) {
       const tutorTurnCount = currentChat.filter((m) => m.who === 'tutor').length;
       const latestUserMessage = [...messages].reverse().find((m) => m.who === 'user')?.text ?? '';
       const allowQuestion = shouldAskTutorQuestion(latestUserMessage, openingTurn, tutorTurnCount);
+      const wantsCanvasVisual = !!options?.wantsVisualExample || isCanvasExampleRequest(latestUserMessage);
       const fallbackText = buildClientFallbackTutorMessage({
         lessonTitle,
         objective: normalizeLessonObjective(lesson?.objective, lessonTitle),
@@ -1080,7 +1146,13 @@ function LearnContent({ course }: { course: Course }) {
         type: 'ADD_CHAT',
         id: course.id,
         lessonKey,
-        msg: { who: 'tutor', text: fallbackText, ts: Date.now(), readyToMoveOn: false },
+        msg: {
+          who: 'tutor',
+          text: fallbackText,
+          ts: Date.now(),
+          readyToMoveOn: false,
+          visual: wantsCanvasVisual ? buildCanvasExampleVisual(lessonTitle, latestUserMessage, fallbackText) : undefined,
+        },
       });
     } finally {
       setAiLoading(false);
