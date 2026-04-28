@@ -3,7 +3,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 import multer from 'multer';
 import cors from 'cors';
-import { PDFParse } from 'pdf-parse';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -601,6 +600,7 @@ app.post('/api/upload-materials', upload.array('files', 10), async (req, res) =>
     const texts = [];
     for (const file of req.files ?? []) {
       if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
+        const { PDFParse } = await import('pdf-parse');
         const parser = new PDFParse({ data: new Uint8Array(file.buffer) });
         try {
           const result = await parser.getText();
