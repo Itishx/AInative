@@ -74,8 +74,35 @@ function expandInlineChoiceOptions(line: string) {
   return expanded.length ? expanded : [line];
 }
 
+function normalizePythonCodeForDisplay(code: string) {
+  return code
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (
+        trimmed &&
+        !trimmed.startsWith('#') &&
+        !/^(import|from|class|def|for|while|if|elif|else|try|except|finally|with|return|print|[A-Za-z_]\w*\s*=|[A-Za-z_][\w.]*\(|\)|\]|\})\b/.test(trimmed) &&
+        /^[A-Za-z][A-Za-z0-9 ,.'-]*$/.test(trimmed)
+      ) {
+        return `${line.match(/^\s*/)?.[0] ?? ''}# ${trimmed}`;
+      }
+      return line;
+    })
+    .join('\n')
+    .trim();
+}
+
+function normalizeChatCodeFences(text: string) {
+  return String(text || '')
+    .replace(/`(python|py|javascript|js|typescript|ts|sql|bash|sh|html|css)\s*\n([\s\S]*?)`/gi, (_, lang, code) => {
+      const normalizedCode = /^python|py$/i.test(lang) ? normalizePythonCodeForDisplay(code) : String(code).trim();
+      return `\`\`\`${lang.toLowerCase()}\n${normalizedCode}\n\`\`\``;
+    });
+}
+
 function renderChatMessage(text: string) {
-  const blocks = text.split(/```/);
+  const blocks = normalizeChatCodeFences(text).split(/```/);
 
   return blocks.map((block, blockIndex) => {
     if (blockIndex % 2 === 1) {
