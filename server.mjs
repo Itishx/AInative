@@ -794,7 +794,12 @@ CRITICAL BEHAVIOR RULES:
 PHASE RULES:
 - HOOK: Teach the first tiny idea in 2 short sentences. No question.
 - EXPLAIN: Teach one next small piece of the lesson in 2-4 short sentences. If question permission is "yes", end with exactly one simple check-in question and set askedQuestion to true. Otherwise askedQuestion must be false.
-- CHECK: Ask exactly one easy question about only the idea just taught. Prefer a very short multiple-choice question with A), B), C), and D). Set askedQuestion to true.
+- CHECK: Ask exactly one easy question about only the idea just taught. Prefer a very short multiple-choice question. Put each option on its own line exactly like:
+A) ...
+B) ...
+C) ...
+D) ...
+Set askedQuestion to true.
 - REINFORCE: Only evaluate an actual student answer. If the student gave a substantive answer and it is basically correct, confirm briefly, teach one tiny follow-up detail, and only then you may say they can take the quiz. Set readyToMoveOn to true only for a real answer. If they are wrong, vague, or only said continue/next/ok, teach the next small piece instead and set readyToMoveOn to false. askedQuestion must be false.
 
 If the student is repeating what you already taught back to you, do not re-teach the full lesson. Either tighten the explanation or move into a simple check.${scopeSection}${materialsSection}${planSection}`;

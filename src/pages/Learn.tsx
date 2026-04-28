@@ -53,6 +53,27 @@ function parseMarkdownTableRow(line: string) {
     .map((cell) => cell.trim());
 }
 
+function expandInlineChoiceOptions(line: string) {
+  if (isMarkdownTableLine(line)) return [line];
+  const matches = [...line.matchAll(/\b([A-D])[\).:]\s+/g)];
+  if (matches.length < 2) return [line];
+
+  const expanded: string[] = [];
+  const firstIndex = matches[0].index ?? 0;
+  const intro = line.slice(0, firstIndex).trim();
+  if (intro) expanded.push(intro);
+
+  matches.forEach((match, index) => {
+    const start = match.index ?? 0;
+    const end = matches[index + 1]?.index ?? line.length;
+    const label = match[1];
+    const optionText = line.slice(start + match[0].length, end).trim();
+    if (optionText) expanded.push(`${label}) ${optionText}`);
+  });
+
+  return expanded.length ? expanded : [line];
+}
+
 function renderChatMessage(text: string) {
   const blocks = text.split(/```/);
 
@@ -83,7 +104,7 @@ function renderChatMessage(text: string) {
       );
     }
 
-    const lines = block.split('\n');
+    const lines = block.split('\n').flatMap(expandInlineChoiceOptions);
     const rendered: React.ReactNode[] = [];
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
@@ -184,6 +205,47 @@ function renderChatMessage(text: string) {
           <div key={key} style={{ display: 'flex', gap: 8, margin: '4px 0' }}>
             <span style={{ color: '#ff8c73', fontFamily: HC.mono, fontSize: 10, flexShrink: 0, marginTop: 4 }}>•</span>
             <span>{renderInlineFormatting(trimmed.slice(2))}</span>
+          </div>
+        );
+        continue;
+      }
+
+      const optionMatch = trimmed.match(/^([A-D])[\).:]\s+(.+)$/);
+      if (optionMatch) {
+        rendered.push(
+          <div
+            key={key}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '28px minmax(0, 1fr)',
+              gap: 10,
+              alignItems: 'start',
+              margin: '7px 0',
+              padding: '9px 10px',
+              borderRadius: 12,
+              background: 'rgba(250,247,240,0.055)',
+              border: '1px solid rgba(250,247,240,0.08)',
+            }}
+          >
+            <span
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 999,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(255,140,115,0.14)',
+                color: '#ff8c73',
+                fontFamily: HC.mono,
+                fontSize: 10,
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {optionMatch[1]}
+            </span>
+            <span style={{ minWidth: 0, lineHeight: 1.5 }}>{renderInlineFormatting(optionMatch[2])}</span>
           </div>
         );
         continue;
