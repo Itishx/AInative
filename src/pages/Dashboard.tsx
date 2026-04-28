@@ -293,7 +293,9 @@ export default function Dashboard() {
     ['Settings', '/settings'],
   ] as const;
   const handle = makeHandle(state.username);
-  const displayName = state.username === 'you' ? 'Learner' : state.username;
+  const displayName = state.profile?.displayName?.trim() || (state.username === 'you' ? 'Learner' : state.username);
+  const bio = state.profile?.bio?.trim() || 'Learning in public, racing deadlines, and turning unfinished curiosity into finished courses.';
+  const avatarUrl = state.profile?.avatarUrl?.trim();
   const joined = state.courses.length
     ? new Date(Math.min(...state.courses.map((course) => new Date(course.createdAt).getTime()).filter(Number.isFinite))).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     : new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -343,7 +345,11 @@ export default function Dashboard() {
                 boxShadow: '0 22px 80px rgba(255,81,72,0.12)',
               }}
             >
-              {displayName[0]?.toUpperCase() ?? 'L'}
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                displayName[0]?.toUpperCase() ?? 'L'
+              )}
             </div>
 
             <div style={{ minWidth: 0 }}>
@@ -357,7 +363,7 @@ export default function Dashboard() {
                 @{handle}
               </div>
               <p style={{ maxWidth: 600, margin: '16px 0 0', color: D.ink, fontFamily: D.sans, fontSize: 16, lineHeight: 1.55 }}>
-                Learning in public, racing deadlines, and turning unfinished curiosity into finished courses.
+                {bio}
               </p>
               <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 15, fontFamily: D.mono, fontSize: 9.5, color: D.mute, letterSpacing: '0.10em', textTransform: 'uppercase' }}>
                 <span>{state.courses.length} courses</span>

@@ -9,6 +9,9 @@ export default function Settings() {
   const { user, signOut } = useAuth();
 
   const [username, setUsername] = useState(state.username ?? '');
+  const [displayName, setDisplayName] = useState(state.profile?.displayName ?? '');
+  const [bio, setBio] = useState(state.profile?.bio ?? '');
+  const [avatarUrl, setAvatarUrl] = useState(state.profile?.avatarUrl ?? '');
   const [saved, setSaved] = useState(false);
 
   function handleSave(e: React.FormEvent) {
@@ -16,6 +19,14 @@ export default function Settings() {
     const trimmed = username.trim();
     if (!trimmed) return;
     dispatch({ type: 'SET_USERNAME', username: trimmed });
+    dispatch({
+      type: 'SET_PROFILE',
+      profile: {
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        avatarUrl: avatarUrl.trim(),
+      },
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -52,11 +63,11 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Editable username */}
+        {/* Editable profile */}
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 48 }}>
           <div>
             <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: HC.mute, marginBottom: 8 }}>
-              Username
+              Username / handle
             </div>
             <input
               type="text"
@@ -69,6 +80,56 @@ export default function Settings() {
             <div style={{ fontFamily: HC.mono, fontSize: 9, color: HC.mute, marginTop: 6, letterSpacing: '0.08em' }}>
               Shows on leaderboard and certificates.
             </div>
+          </div>
+
+          <div>
+            <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: HC.mute, marginBottom: 8 }}>
+              Display name
+            </div>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => { setDisplayName(e.target.value); setSaved(false); }}
+              placeholder="Your public name"
+              maxLength={48}
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: HC.mute, marginBottom: 8 }}>
+              Bio
+            </div>
+            <textarea
+              value={bio}
+              onChange={(e) => { setBio(e.target.value); setSaved(false); }}
+              placeholder="What are you learning, building, or racing against?"
+              maxLength={160}
+              rows={4}
+              style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ fontFamily: HC.mono, fontSize: 9, color: HC.mute, marginTop: 6, letterSpacing: '0.08em' }}>
+              {bio.length}/160 characters.
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: HC.mute, marginBottom: 8 }}>
+              Display picture URL
+            </div>
+            <input
+              type="url"
+              value={avatarUrl}
+              onChange={(e) => { setAvatarUrl(e.target.value); setSaved(false); }}
+              placeholder="https://..."
+              style={inputStyle}
+            />
+            {avatarUrl && (
+              <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
+                <img src={avatarUrl} alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: `1px solid ${HC.ruleFaint}` }} />
+                <div style={{ fontFamily: HC.mono, fontSize: 9, color: HC.mute, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Preview</div>
+              </div>
+            )}
           </div>
 
           <button

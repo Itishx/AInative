@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
-import type { AppState, Course, LeaderboardEntry, EnrolledCourse } from './types';
+import type { AppState, Course, LeaderboardEntry, EnrolledCourse, UserProfile } from './types';
 import { supabase } from './lib/supabase';
 
 const BASE_KEY = 'ainative_v3';
@@ -10,6 +10,14 @@ function storageKey(userId?: string) {
 }
 
 const SEED_LEADERBOARD: LeaderboardEntry[] = [];
+
+function defaultProfile(username = 'you'): UserProfile {
+  return {
+    displayName: username && username !== 'you' ? username : '',
+    bio: '',
+    avatarUrl: '',
+  };
+}
 
 function calcProgress(course: Course): number {
   const allLessons = course.curriculum.modules.flatMap((m) => m.lessons);
@@ -62,13 +70,22 @@ function mergeCourses(primary: Course[], secondary: Course[]): Course[] {
   return merged;
 }
 
+function normalizeState(state: Partial<AppState> | null | undefined): AppState {
+  const username = state?.username ?? 'you';
+  return {
+    courses: migrateCourses(state?.courses ?? []),
+    leaderboard: state?.leaderboard ?? SEED_LEADERBOARD,
+    username,
+    profile: { ...defaultProfile(username), ...(state?.profile ?? {}) },
+  };
+}
+
 function loadState(userId?: string): AppState {
   try {
     const userRaw = localStorage.getItem(storageKey(userId));
     let userState: AppState | null = null;
     if (userRaw) {
-      const parsed = JSON.parse(userRaw) as AppState;
-      parsed.courses = migrateCourses(parsed.courses);
+      const parsed = normalizeState(JSON.parse(userRaw) as Partial<AppState>);
       userState = checkDeadlines(parsed);
       // If already has courses, use it
       if (userState.courses.length > 0) return userState;
@@ -77,8 +94,7 @@ function loadState(userId?: string): AppState {
     // Migration: check legacy non-namespaced key (even if user key exists but was empty)
     const legacyRaw = localStorage.getItem(BASE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacyRaw && userId) {
-      const parsed = JSON.parse(legacyRaw) as AppState;
-      parsed.courses = migrateCourses(parsed.courses);
+      const parsed = normalizeState(JSON.parse(legacyRaw) as Partial<AppState>);
       const migrated = checkDeadlines(parsed);
       if (migrated.courses.length > 0) {
         localStorage.setItem(storageKey(userId), JSON.stringify(migrated));
@@ -88,7 +104,7 @@ function loadState(userId?: string): AppState {
 
     if (userState) return userState;
   } catch {}
-  return { courses: [], leaderboard: SEED_LEADERBOARD, username: 'you' };
+  return normalizeState(null);
 }
 
 function saveLocal(state: AppState, userId?: string) {
@@ -97,6 +113,7 @@ function saveLocal(state: AppState, userId?: string) {
 
 type Action =
   | { type: 'SET_USERNAME'; username: string }
+  | { type: 'SET_PROFILE'; profile: UserProfile }
   | { type: 'ADD_COURSE'; course: Course }
   | { type: 'DELETE_COURSE'; id: string }
   | { type: 'UPDATE_COURSE'; id: string; patch: Partial<Course> }
@@ -109,12 +126,22 @@ type Action =
   | { type: 'CHECK_DEADLINES' }
   | { type: 'ADD_LEADERBOARD'; entry: LeaderboardEntry }
   | { type: 'ENROLL_COURSE'; course: EnrolledCourse }
-  | { type: '_LOAD_FROM_DB'; courses: Course[]; username?: string };
+  | { type: '_LOAD_FROM_DB'; courses: Course[]; username?: string; profile?: UserProfile };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_USERNAME':
-      return { ...state, username: action.username };
+      return {
+        ...state,
+        username: action.username,
+        profile: {
+          ...state.profile,
+          displayName: state.profile.displayName || action.username,
+        },
+      };
+
+    case 'SET_PROFILE':
+      return { ...state, profile: { ...state.profile, ...action.profile } };
 
     case '_LOAD_FROM_DB': {
       const courses = migrateCourses(action.courses ?? []);
@@ -122,6 +149,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         courses: mergeCourses(courses, state.courses),
         username: action.username && action.username !== 'you' ? action.username : state.username,
+        profile: { ...state.profile, ...(action.profile ?? {}) },
       });
     }
 
@@ -271,6 +299,7 @@ export function StoreProvider({
     const s = loadState(userId);
     if (userEmail && (!s.username || s.username === 'you')) {
       s.username = userEmail.split('@')[0];
+      if (!s.profile.displayName) s.profile.displayName = s.username;
     }
     return s;
   });
@@ -283,15 +312,26 @@ export function StoreProvider({
     if (!userId) return;
     supabase
       .from('user_courses')
-      .select('courses, username')
+      .select('courses, username, profile')
       .eq('user_id', userId)
       .maybeSingle()
       .then(({ data, error }) => {
         dbLoadedRef.current = true;
-        if (error || !data) return;
-        if (Array.isArray(data.courses) && data.courses.length > 0) {
-          dispatch({ type: '_LOAD_FROM_DB', courses: data.courses, username: data.username ?? undefined });
+        if (error) {
+          supabase
+            .from('user_courses')
+            .select('courses, username')
+            .eq('user_id', userId)
+            .maybeSingle()
+            .then(({ data: fallback }) => {
+              if (fallback) {
+                dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(fallback.courses) ? fallback.courses : [], username: fallback.username ?? undefined });
+              }
+            });
+          return;
         }
+        if (!data) return;
+        dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(data.courses) ? data.courses : [], username: data.username ?? undefined, profile: (data as { profile?: UserProfile }).profile });
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -313,7 +353,13 @@ export function StoreProvider({
           username: state.username,
           updated_at: new Date().toISOString(),
         })
-        .then();
+        .then(() => {
+          supabase
+            .from('user_courses')
+            .update({ profile: state.profile, updated_at: new Date().toISOString() })
+            .eq('user_id', userId)
+            .then();
+        });
     }, 2000);
   }, [state, userId]);
 

@@ -79,10 +79,17 @@ export interface LeaderboardEntry {
   certId: string;
 }
 
+export interface UserProfile {
+  displayName?: string;
+  bio?: string;
+  avatarUrl?: string;
+}
+
 export interface AppState {
   courses: Course[];
   leaderboard: LeaderboardEntry[];
   username: string;
+  profile: UserProfile;
 }
 
 // ── Instructor / Marketplace types ──────────────────────────────────────────
