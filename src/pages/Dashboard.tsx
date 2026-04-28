@@ -1,194 +1,226 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HC, btn } from '../theme';
 import { Chrome } from '../components/Chrome';
-import { Countdown } from '../components/Countdown';
 import { useStore } from '../store';
 import type { Course } from '../types';
 
+type Filter = 'all' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
+
+function courseHasStarted(course: Course) {
+  return course.progress > 0 || Object.values(course.lessonChats ?? {}).some((msgs) => msgs.length > 0);
+}
+
+function getCourseFilter(course: Course): Exclude<Filter, 'all' | 'urgent'> {
+  if (course.status === 'tombstone') return 'archived';
+  if (course.status === 'completed') return 'done';
+  if (!courseHasStarted(course)) return 'not-started';
+  return 'in-progress';
+}
+
+function daysUntil(deadline: string) {
+  return Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
+}
+
+function formatDeadline(deadline: string) {
+  return new Date(deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 function ProgressBar({ progress, urgent, tombstone }: { progress: number; urgent?: boolean; tombstone?: boolean }) {
   return (
-    <div style={{ height: 2, background: tombstone ? HC.ruleFaint : HC.ink, position: 'relative' }}>
+    <div style={{ height: 7, borderRadius: 999, background: 'rgba(26,21,16,0.08)', overflow: 'hidden' }}>
       <div style={{
-        position: 'absolute', left: 0, top: 0, height: '100%',
-        width: `${Math.min(1, progress) * 100}%`,
-        background: tombstone ? HC.mute : urgent ? HC.red : HC.ink,
+        height: '100%',
+        width: `${Math.round(Math.min(1, progress) * 100)}%`,
+        background: tombstone ? HC.mute : urgent ? HC.red : HC.green,
+        transition: 'width 0.2s ease',
       }} />
-      <div style={{ position: 'absolute', right: 0, top: -4, width: 1.5, height: 10, background: HC.red }} />
     </div>
   );
 }
 
-function CourseRow({ course, onClick, onDelete }: { course: Course; onClick: () => void; onDelete: () => void }) {
+function StatCard({ label, value, tone }: { label: string; value: string | number; tone?: 'red' | 'green' }) {
+  return (
+    <div style={{ background: HC.paper, border: `1px solid ${HC.ruleFaint}`, padding: '18px 20px', minHeight: 88 }}>
+      <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.mute }}>
+        {label}
+      </div>
+      <div style={{ fontFamily: HC.serif, fontSize: 42, lineHeight: 1, letterSpacing: '-0.03em', color: tone === 'red' ? HC.red : tone === 'green' ? HC.green : HC.ink, marginTop: 10 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function CourseCard({ course, onOpen, onDelete }: { course: Course; onOpen: () => void; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const isTomb = course.status === 'tombstone';
   const urgent = course.status === 'active-urgent';
   const completed = course.status === 'completed';
-  const doneMods = course.curriculum.modules.filter((m) => m.quizPassed).length;
-  const hasStarted = Object.values(course.lessonChats ?? {}).some((msgs) => msgs.length > 0);
+  const started = courseHasStarted(course);
+  const doneLessons = course.curriculum.modules.flatMap((m) => m.lessons).filter((l) => l.completed).length;
+  const totalLessons = course.curriculum.modules.flatMap((m) => m.lessons).length;
+  const currentModule = course.curriculum.modules[course.currentModule];
+  const currentLesson = currentModule?.lessons[course.currentLesson];
+  const daysLeft = daysUntil(course.deadline);
+  const statusLabel = isTomb
+    ? 'Archived'
+    : completed
+      ? 'Done'
+      : urgent
+        ? 'Urgent'
+        : started
+          ? 'In progress'
+          : 'Not started';
 
   return (
-    <div style={{ borderBottom: `1px solid ${HC.ruleFaint}` }}>
-      <div onClick={onClick} style={{
-        padding: '26px 0',
-        display: 'grid', gridTemplateColumns: '1.3fr 1fr 200px 140px',
-        gap: 32, alignItems: 'center', cursor: isTomb ? 'default' : 'pointer',
-        opacity: isTomb ? 0.55 : 1, position: 'relative',
-      }}
-        onMouseEnter={(e) => { if (!isTomb) e.currentTarget.style.background = HC.paper; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-      >
-        {isTomb && (
-          <div style={{
-            position: 'absolute', left: -22, top: '50%', transform: 'translateY(-50%)',
-            fontFamily: HC.mono, fontSize: 9, color: HC.red, letterSpacing: '0.16em',
-            writingMode: 'vertical-rl',
-          }}>† DELETED</div>
-        )}
-
-        <div>
-          <div style={{ fontFamily: HC.mono, fontSize: 10, color: isTomb ? HC.red : urgent ? HC.red : HC.mute, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-            {isTomb ? 'TOMBSTONE · locked forever' : completed ? 'COMPLETED' : urgent ? 'URGENT' : 'IN PROGRESS'}
-          </div>
-          <div style={{
-            fontFamily: HC.serif, fontSize: 30, letterSpacing: '-0.01em', marginTop: 4,
-            textDecoration: isTomb ? 'line-through' : 'none', color: HC.ink,
-          }}>
-            {course.subject}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
-            <div style={{ fontFamily: HC.mono, fontSize: 11, color: HC.mute }}>
-              {isTomb
-                ? `Missed · ${Math.abs(Math.floor((Date.now() - new Date(course.deadline).getTime()) / 86400000))}d overdue · ${Math.round(course.progress * 100)}% complete at death`
-                : `${doneMods}/${course.curriculum.modules.length} modules · ${Math.round(course.progress * 100)}%`}
+    <article style={{
+      background: HC.paper,
+      border: `1.5px solid ${urgent ? HC.red : completed ? HC.green : isTomb ? HC.ruleFaint : HC.ink}`,
+      boxShadow: urgent ? `10px 10px 0 ${HC.red}` : completed ? `10px 10px 0 ${HC.green}` : 'none',
+      opacity: isTomb ? 0.58 : 1,
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      <div style={{ padding: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'start' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+              <span style={{
+                fontFamily: HC.mono,
+                fontSize: 10,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: urgent || isTomb ? HC.red : completed ? HC.green : HC.mute,
+              }}>
+                {statusLabel}
+              </span>
+              <span style={{ fontFamily: HC.mono, fontSize: 10, color: HC.ruleDash }}>·</span>
+              <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: HC.mute }}>
+                {course.curriculum.modules.length} modules
+              </span>
             </div>
-            {!isTomb && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px',
-                  fontFamily: HC.mono, fontSize: 11, color: HC.mute, letterSpacing: '0.08em',
-                  display: 'flex', alignItems: 'center', gap: 4,
-                }}
-              >
-                {expanded ? '▴ hide' : '▾ modules'}
-              </button>
+            <h3 style={{
+              fontFamily: HC.serif,
+              fontSize: 34,
+              lineHeight: 1,
+              letterSpacing: '-0.025em',
+              margin: 0,
+              color: HC.ink,
+              textDecoration: isTomb ? 'line-through' : 'none',
+            }}>
+              {course.subject}
+            </h3>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', color: HC.mute, textTransform: 'uppercase', marginBottom: 5 }}>
+              Deadline
+            </div>
+            <div style={{ fontFamily: HC.serif, fontSize: 26, color: urgent ? HC.red : HC.ink, lineHeight: 1 }}>
+              {formatDeadline(course.deadline)}
+            </div>
+            {!completed && !isTomb && (
+              <div style={{ fontFamily: HC.mono, fontSize: 10, color: urgent ? HC.red : HC.mute, marginTop: 5 }}>
+                {daysLeft <= 0 ? 'due today' : `${daysLeft}d left`}
+              </div>
             )}
           </div>
         </div>
 
-        <div>
+        <div style={{ marginTop: 22 }}>
           <ProgressBar progress={course.progress} urgent={urgent} tombstone={isTomb} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontFamily: HC.mono, fontSize: 10, color: HC.mute }}>
-            <span>NOW</span>
-            <span style={{ color: HC.red }}>DEADLINE</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontFamily: HC.mono, fontSize: 10, color: HC.mute, letterSpacing: '0.08em' }}>
+            <span>{Math.round(course.progress * 100)}%</span>
+            <span>{doneLessons}/{totalLessons} lessons</span>
           </div>
         </div>
 
-        <div>
-          {isTomb ? (
-            <div style={{ fontFamily: HC.serif, fontStyle: 'italic', fontSize: 18, color: HC.red }}>Expired. Gone.</div>
-          ) : completed ? (
-            <div style={{ fontFamily: HC.serif, fontStyle: 'italic', fontSize: 18, color: HC.green }}>Done ✓</div>
-          ) : (
-            <Countdown deadline={course.deadline} paused={course.paused} size={40} />
-          )}
+        <div style={{
+          marginTop: 22,
+          padding: '14px 16px',
+          background: 'rgba(26,21,16,0.035)',
+          border: `1px solid ${HC.ruleFaint}`,
+          minHeight: 66,
+        }}>
+          <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.mute, marginBottom: 6 }}>
+            {completed ? 'Completed course' : isTomb ? 'Last known lesson' : started ? 'Current lesson' : 'First lesson'}
+          </div>
+          <div style={{ fontFamily: HC.serif, fontSize: 18, lineHeight: 1.25, color: HC.ink }}>
+            {currentLesson?.title ?? 'No lesson available'}
+          </div>
         </div>
 
-        <div style={{ textAlign: 'right' }}>
-          {isTomb ? (
-            <button style={{ ...btn.outline, padding: '8px 14px', color: HC.mute, borderColor: HC.ruleFaint, cursor: 'not-allowed' }}>
-              Archived
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 22 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+            disabled={isTomb}
+            style={{ ...btn.ghost, padding: '10px 0', fontSize: 10, color: isTomb ? HC.mute : HC.ink, opacity: isTomb ? 0.45 : 1 }}
+          >
+            {expanded ? 'Hide modules' : 'View modules'}
+          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!isTomb && (
+              <button onClick={onOpen} style={{ ...btn.primary, padding: '11px 16px', fontSize: 10 }}>
+                {completed ? 'Certificate →' : started ? 'Resume →' : 'Start →'}
+              </button>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              style={{ ...btn.ghost, padding: '11px 8px', fontSize: 10, color: HC.red }}
+            >
+              Delete
             </button>
-          ) : completed ? (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
-              <button style={{ ...btn.outline, padding: '10px 16px', fontSize: 10 }}>Certificate →</button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                style={{ ...btn.ghost, padding: '10px 8px', fontSize: 10, color: HC.red }}
-              >
-                Delete
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
-              <button style={{ ...btn.primary, padding: '10px 18px', fontSize: 10 }}>{hasStarted ? 'Resume →' : 'Start →'}</button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                style={{ ...btn.ghost, padding: '10px 8px', fontSize: 10, color: HC.red }}
-              >
-                Delete
-              </button>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* Expandable module tree */}
-      {expanded && (
-        <div style={{ padding: '0 0 20px 4px', background: HC.paper, borderTop: `1px solid ${HC.ruleFaint}` }}>
+      {expanded && !isTomb && (
+        <div style={{ borderTop: `1px solid ${HC.ruleFaint}`, background: HC.bg, padding: '16px 22px 20px' }}>
           {course.curriculum.modules.map((m, mi) => {
-            const isCurrentMod = mi === course.currentModule;
-            const modDone = m.quizPassed;
-            const modLocked = mi > course.currentModule && !m.unlocked;
-            const doneCount = m.lessons.filter((l) => l.completed).length;
+            const active = mi === course.currentModule;
+            const done = m.quizPassed;
             return (
-              <div key={mi} style={{ paddingTop: 14, paddingLeft: 20 }}>
-                <div style={{
-                  display: 'flex', alignItems: 'baseline', gap: 10,
-                  fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase',
-                  color: modDone ? HC.green : isCurrentMod ? HC.ink : modLocked ? HC.ruleFaint : HC.mute,
-                }}>
-                  <span style={{ color: modDone ? HC.green : isCurrentMod ? HC.red : HC.mute, fontSize: 12 }}>
-                    {modDone ? '✓' : isCurrentMod ? '▸' : modLocked ? '🔒' : '○'}
+              <div key={m.title} style={{ padding: '9px 0', borderBottom: mi < course.curriculum.modules.length - 1 ? `1px dashed ${HC.ruleFaint}` : 'none' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+                  <span style={{ fontFamily: HC.mono, fontSize: 11, color: done ? HC.green : active ? HC.red : HC.mute }}>
+                    {done ? '✓' : active ? '▸' : '○'}
                   </span>
-                  <span style={{ textDecoration: modDone ? 'line-through' : 'none' }}>
+                  <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: done ? HC.green : active ? HC.ink : HC.mute }}>
                     {String(mi + 1).padStart(2, '0')} · {m.title}
                   </span>
-                  <span style={{ color: HC.mute, fontSize: 9, marginLeft: 4 }}>
-                    {doneCount}/{m.lessons.length}
+                  <span style={{ marginLeft: 'auto', fontFamily: HC.mono, fontSize: 9, color: HC.mute }}>
+                    {m.lessons.filter((l) => l.completed).length}/{m.lessons.length}
                   </span>
-                </div>
-                <div style={{ paddingLeft: 22, marginTop: 4 }}>
-                  {m.lessons.map((l, li) => {
-                    const isActive = isCurrentMod && li === course.currentLesson;
-                    const isDone = l.completed;
-                    return (
-                      <div key={li} style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0',
-                        fontFamily: isDone ? HC.mono : HC.serif, fontSize: isDone ? 11 : 13,
-                        color: isDone ? HC.mute : isActive ? HC.ink : modLocked ? HC.ruleFaint : HC.mute,
-                        textDecoration: isDone ? 'line-through' : 'none',
-                        opacity: modLocked ? 0.4 : 1,
-                      }}>
-                        <span style={{
-                          fontFamily: HC.mono, fontSize: 10, flexShrink: 0,
-                          color: isDone ? HC.green : isActive ? HC.red : HC.mute,
-                        }}>
-                          {isDone ? '✓' : isActive ? '▸' : '·'}
-                        </span>
-                        {l.title}
-                        <span style={{ fontFamily: HC.mono, fontSize: 9, color: HC.ruleFaint, marginLeft: 'auto', paddingRight: 20 }}>
-                          {l.minutes}m
-                        </span>
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             );
           })}
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
 export default function Dashboard() {
   const { state, dispatch } = useStore();
   const navigate = useNavigate();
-  const openCount = state.courses.filter((c) => c.status === 'active' || c.status === 'active-urgent').length;
-  const numeral = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'][openCount] ?? openCount;
+  const [filter, setFilter] = useState<Filter>('all');
+
+  const stats = useMemo(() => {
+    const notStarted = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'completed' && !courseHasStarted(c)).length;
+    const inProgress = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'completed' && courseHasStarted(c)).length;
+    const done = state.courses.filter((c) => c.status === 'completed').length;
+    const urgent = state.courses.filter((c) => c.status === 'active-urgent').length;
+    return { notStarted, inProgress, done, urgent, archived: state.courses.filter((c) => c.status === 'tombstone').length };
+  }, [state.courses]);
+
+  const filteredCourses = useMemo(() => {
+    return state.courses.filter((course) => {
+      if (filter === 'all') return true;
+      if (filter === 'urgent') return course.status === 'active-urgent';
+      return getCourseFilter(course) === filter;
+    });
+  }, [filter, state.courses]);
 
   function handleDeleteCourse(course: Course) {
     const confirmed = window.confirm(`Delete "${course.subject}" from your dashboard? This will remove your progress for this course.`);
@@ -196,42 +228,109 @@ export default function Dashboard() {
     dispatch({ type: 'DELETE_COURSE', id: course.id });
   }
 
+  const filters: { key: Filter; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: state.courses.length },
+    { key: 'not-started', label: 'Not started', count: stats.notStarted },
+    { key: 'in-progress', label: 'In progress', count: stats.inProgress },
+    { key: 'urgent', label: 'Urgent', count: stats.urgent },
+    { key: 'done', label: 'Done', count: stats.done },
+    { key: 'archived', label: 'Archived', count: stats.archived },
+  ];
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: HC.bg }}>
       <Chrome label="dashboard" right={state.username} />
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '40px 60px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 36 }}>
-          <h2 style={{ fontFamily: HC.serif, fontSize: 'clamp(32px, 5vw, 56px)', margin: 0, fontWeight: 400, letterSpacing: '-0.025em' }}>
-            <span style={{ fontStyle: 'italic' }}>{numeral}</span> open contract{openCount !== 1 ? 's' : ''}.
-          </h2>
-          <button onClick={() => navigate('/')} style={{ ...btn.primary, padding: '12px 22px' }}>
+      <main style={{ flex: 1, overflow: 'auto', padding: '34px clamp(20px, 4vw, 64px) 56px' }}>
+        <section style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1.35fr) minmax(280px, 0.65fr)',
+          gap: 28,
+          alignItems: 'stretch',
+          marginBottom: 28,
+        }}>
+          <div style={{ background: HC.paper, border: `1.5px solid ${HC.ink}`, padding: '30px 34px', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', right: -50, top: -70, width: 220, height: 220, borderRadius: '50%', background: 'rgba(196,34,27,0.08)' }} />
+            <div style={{ fontFamily: HC.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: HC.red, marginBottom: 16 }}>
+              Today
+            </div>
+            <h1 style={{ fontFamily: HC.serif, fontSize: 'clamp(44px, 6vw, 84px)', lineHeight: 0.9, letterSpacing: '-0.045em', margin: 0, color: HC.ink }}>
+              Hey {state.username}.
+            </h1>
+            <p style={{ fontFamily: HC.serif, fontSize: 22, lineHeight: 1.35, color: HC.mute, margin: '20px 0 0', maxWidth: 560 }}>
+              {state.courses.length === 0
+                ? 'No courses yet. Pick something and start the clock.'
+                : stats.urgent > 0
+                  ? `${stats.urgent} course${stats.urgent === 1 ? ' needs' : 's need'} attention before the deadline bites.`
+                  : `${stats.inProgress} in progress. ${stats.notStarted} waiting to be started.`}
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <StatCard label="In progress" value={stats.inProgress} />
+            <StatCard label="Not started" value={stats.notStarted} />
+            <StatCard label="Urgent" value={stats.urgent} tone="red" />
+            <StatCard label="Done" value={stats.done} tone="green" />
+          </div>
+        </section>
+
+        <section style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {filters.map((item) => {
+              const active = filter === item.key;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => setFilter(item.key)}
+                  style={{
+                    border: `1px solid ${active ? HC.ink : HC.ruleFaint}`,
+                    background: active ? HC.ink : HC.paper,
+                    color: active ? HC.bg : HC.ink,
+                    padding: '10px 13px',
+                    borderRadius: 999,
+                    fontFamily: HC.mono,
+                    fontSize: 10,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {item.label} {item.count}
+                </button>
+              );
+            })}
+          </div>
+          <button onClick={() => navigate('/')} style={{ ...btn.primary, padding: '12px 20px' }}>
             + New course
           </button>
-        </div>
+        </section>
 
         {state.courses.length === 0 ? (
-          <div style={{ borderTop: `1px solid ${HC.ink}`, paddingTop: 48, textAlign: 'center' }}>
-            <div style={{ fontFamily: HC.serif, fontStyle: 'italic', fontSize: 22, color: HC.mute }}>No contracts yet.</div>
-            <button onClick={() => navigate('/')} style={{ ...btn.primary, marginTop: 20 }}>Start your first →</button>
-          </div>
+          <section style={{ border: `1px solid ${HC.ruleFaint}`, background: HC.paper, padding: 44, textAlign: 'center' }}>
+            <div style={{ fontFamily: HC.serif, fontSize: 40, letterSpacing: '-0.025em', color: HC.ink }}>No courses yet.</div>
+            <div style={{ fontFamily: HC.serif, fontStyle: 'italic', fontSize: 20, color: HC.mute, marginTop: 8 }}>Start small. Seven days. One topic.</div>
+            <button onClick={() => navigate('/')} style={{ ...btn.primary, marginTop: 24 }}>Start your first →</button>
+          </section>
+        ) : filteredCourses.length === 0 ? (
+          <section style={{ border: `1px dashed ${HC.ruleFaint}`, background: HC.paper, padding: 38, textAlign: 'center', color: HC.mute, fontFamily: HC.serif, fontSize: 22 }}>
+            Nothing in this bucket.
+          </section>
         ) : (
-          <div style={{ borderTop: `1px solid ${HC.ink}` }}>
-            {state.courses.map((c) => (
-              <CourseRow
-                key={c.id}
-                course={c}
-                onDelete={() => handleDeleteCourse(c)}
-                onClick={() => {
-                  if (c.status === 'tombstone') return;
-                  if (c.status === 'completed') navigate(`/certificate/${c.id}`);
-                  else navigate(`/learn/${c.id}`);
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 22 }}>
+            {filteredCourses.map((course) => (
+              <CourseCard
+                key={course.id}
+                course={course}
+                onDelete={() => handleDeleteCourse(course)}
+                onOpen={() => {
+                  if (course.status === 'completed') navigate(`/certificate/${course.id}`);
+                  else navigate(`/learn/${course.id}`);
                 }}
               />
             ))}
-          </div>
+          </section>
         )}
-      </div>
+      </main>
     </div>
   );
 }
