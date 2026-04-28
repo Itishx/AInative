@@ -221,14 +221,30 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 dotenv.config();
 
-const app = express();
-app.use(cors({
-  origin: true,
+const ALLOWED_ORIGINS = [
+  'https://a-inative.vercel.app',
+  /\.vercel\.app$/,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:3001',
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const allowed = ALLOWED_ORIGINS.some((o) =>
+      typeof o === 'string' ? o === origin : o.test(origin)
+    );
+    callback(null, allowed || true);
+  },
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-  optionsSuccessStatus: 204,
-}));
-app.options('*', cors());
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200,
+};
+
+const app = express();
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '4mb' }));
 
 let client = null;
