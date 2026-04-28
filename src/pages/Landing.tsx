@@ -668,6 +668,59 @@ function LeaderboardViz() {
   );
 }
 
+function NotesViz() {
+  const { t } = useTheme();
+  return (
+    <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
+      <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>LESSON NOTES</div>
+      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {['Primary keys identify one row.', 'SQL filters rows before grouping.', 'Arrays keep values in order.'].map((note, i) => (
+          <div key={note} style={{ display: 'flex', gap: 9, alignItems: 'start', fontFamily: SERIF, fontSize: 15, lineHeight: 1.35, color: t.ink }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: t.red, marginTop: 2 }}>{String(i + 1).padStart(2, '0')}</span>
+            <span>{note}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QuizViz() {
+  const { t } = useTheme();
+  return (
+    <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
+      <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>QUIZ GATE</div>
+      <div style={{ fontFamily: SERIF, fontSize: 17, color: t.ink, marginTop: 10, lineHeight: 1.25 }}>
+        What does WHERE do?
+      </div>
+      {['Sorts columns', 'Filters rows', 'Renames a table'].map((option, i) => (
+        <div key={option} style={{ marginTop: 8, padding: '7px 9px', border: `1px solid ${i === 1 ? t.green : t.ruleFaint}`, color: i === 1 ? t.green : t.inkSoft, fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em' }}>
+          {String.fromCharCode(65 + i)}) {option}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NotionViz() {
+  const { t } = useTheme();
+  return (
+    <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
+      <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>NOTION SYNC</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
+        <div style={{ width: 38, height: 38, border: `1.5px solid ${t.ink}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SERIF, fontSize: 22, color: t.ink }}>N</div>
+        <div>
+          <div style={{ fontFamily: SERIF, fontSize: 18, color: t.ink, letterSpacing: '-0.01em' }}>SQL notes</div>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: t.green, letterSpacing: '0.1em', marginTop: 3 }}>SYNCED JUST NOW</div>
+        </div>
+      </div>
+      <div style={{ marginTop: 14, height: 7, background: t.ruleFaint }}>
+        <div style={{ width: '78%', height: '100%', background: t.green }} />
+      </div>
+    </div>
+  );
+}
+
 function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
   const { t } = useTheme();
   const navigate = useNavigate();
@@ -675,6 +728,9 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
     { n: '02', title: 'Tombstones.', body: 'Miss it and the course locks as a reminder.', art: <TombstoneViz /> },
     { n: '03', title: 'One pause.', body: 'A single 72-hour save. Spend it carefully.', art: <PauseViz /> },
     { n: '04', title: 'Finishers.', body: 'Beat the clock and show up on the wall.', art: <LeaderboardViz /> },
+    { n: '05', title: 'Notes.', body: 'Each lesson leaves clean notes behind.', art: <NotesViz /> },
+    { n: '06', title: 'Quizzes.', body: 'MCQs check recall before you move on.', art: <QuizViz /> },
+    { n: '07', title: 'Notion sync.', body: 'Send your notes to Notion when you want a second brain copy.', art: <NotionViz /> },
   ];
   return (
     <Wrap id="features" pad="120px 32px">
@@ -695,7 +751,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
             Chat left.<br />Canvas right.
           </h3>
           <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.inkSoft, margin: 0 }}>
-            Tiny explanations. Quick checks. Examples appear when the lesson needs them.
+            Tiny explanations. Quick checks. Canvas examples. Notes and quizzes when the lesson is done.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
             <button onClick={() => navigate('/dashboard')} style={{
@@ -709,7 +765,11 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
       {/* Trio */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, borderTop: `2px solid ${t.ink}`, borderBottom: `1px solid ${t.ink}` }}>
         {trio.map((f, i) => (
-          <div key={f.n} style={{ padding: '40px 32px', borderRight: i < 2 ? `1px solid ${t.ruleFaint}` : 'none' }}>
+          <div key={f.n} style={{
+            padding: '40px 32px',
+            borderRight: i % 3 !== 2 ? `1px solid ${t.ruleFaint}` : 'none',
+            borderBottom: i < trio.length - 3 ? `1px solid ${t.ruleFaint}` : 'none',
+          }}>
             <div style={{ fontFamily: MONO, fontSize: 11, color: t.red, letterSpacing: '0.16em' }}>FEATURE {f.n}</div>
             <h4 style={{ fontFamily: SERIF, fontSize: 32, margin: '10px 0 10px', fontWeight: 400, letterSpacing: '-0.015em', color: t.ink }}>{f.title}</h4>
             <p style={{ fontFamily: SERIF, fontSize: 17, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>{f.body}</p>
