@@ -264,7 +264,7 @@ app.post('/api/curriculum', async (req, res) => {
   try {
     const msg = await getClient().messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: 'You are a curriculum designer. Respond ONLY with valid JSON, no markdown fences.',
       messages: [{
         role: 'user',
@@ -625,7 +625,7 @@ app.post('/api/curriculum-from-materials', async (req, res) => {
   try {
     const msg = await getClient().messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: 'You are a curriculum designer. Respond ONLY with valid JSON, no markdown fences.',
       messages: [{
         role: 'user',
