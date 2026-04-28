@@ -72,75 +72,89 @@ function SiteNav({ active, dark, onToggleDark, onNav, onToggleSaas }: {
       <div style={{
         maxWidth: 1280,
         margin: '0 auto',
-        padding: '14px 18px',
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(130px, 0.55fr) minmax(0, auto) minmax(130px, 0.55fr)',
         alignItems: 'center',
-        gap: 18,
-        border: `1px solid ${t.ruleFaint}`,
-        borderRadius: 999,
-        background: dark ? 'rgba(28,26,22,0.84)' : 'rgba(250,247,240,0.82)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        boxShadow: dark
-          ? '0 18px 48px rgba(0,0,0,0.30)'
-          : '0 18px 48px rgba(26,21,16,0.10)',
+        gap: 12,
       }}>
-        {/* Wordmark */}
-        <a href="#home" onClick={(e) => { e.preventDefault(); onNav('home'); }} style={{
-          textDecoration: 'none',
+        <div />
+
+        <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
-          padding: '10px 14px',
+          justifyContent: 'center',
+          gap: 14,
+          minWidth: 0,
+          padding: '14px 18px',
+          border: `1px solid ${t.ruleFaint}`,
           borderRadius: 999,
-          background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.04)',
-          flexShrink: 0,
+          background: dark ? 'rgba(28,26,22,0.84)' : 'rgba(250,247,240,0.82)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          boxShadow: dark
+            ? '0 18px 48px rgba(0,0,0,0.30)'
+            : '0 18px 48px rgba(26,21,16,0.10)',
         }}>
-          <span style={{ width: 10, height: 10, background: t.red, display: 'inline-block', borderRadius: '50%', transform: 'translateY(-3px)' }} />
-          <b style={{ fontFamily: SERIF, fontSize: 25, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
-        </a>
-        {/* Links */}
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          gap: 6,
-          marginLeft: 2,
-          padding: 5,
-          borderRadius: 999,
-          background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.04)',
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-        }}>
-          {items.map(([k, l]) => (
-            <a key={k} href={`#${k}`} onClick={(e) => { e.preventDefault(); onNav(k); }} style={{
-              padding: '10px 14px', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em',
-              textTransform: 'uppercase', textDecoration: 'none',
-              color: active === k ? (dark ? '#141210' : t.paper) : t.mute, cursor: 'pointer',
-              background: active === k ? t.red : 'transparent',
-              borderRadius: 999,
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}>{l}</a>
-          ))}
+          {/* Wordmark */}
+          <a href="#home" onClick={(e) => { e.preventDefault(); onNav('home'); }} style={{
+            textDecoration: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '8px 10px',
+            borderRadius: 999,
+            flexShrink: 0,
+          }}>
+            <b style={{ fontFamily: SERIF, fontSize: 25, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
+          </a>
+          {/* Links */}
+          <div style={{
+            display: 'flex',
+            gap: 6,
+            padding: 5,
+            borderRadius: 999,
+            background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.04)',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+          }}>
+            {items.map(([k, l]) => (
+              <a key={k} href={`#${k}`} onClick={(e) => { e.preventDefault(); onNav(k); }} style={{
+                padding: '10px 14px', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em',
+                textTransform: 'uppercase', textDecoration: 'none',
+                color: active === k ? (dark ? '#141210' : t.paper) : t.mute, cursor: 'pointer',
+                background: active === k ? t.red : 'transparent',
+                borderRadius: 999,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}>{l}</a>
+            ))}
+          </div>
         </div>
-        {/* Dark toggle */}
-        <button onClick={onToggleDark} title={dark ? 'Light mode' : 'Dark mode'} style={{
-          width: 42, height: 42, border: `1px solid ${t.ruleFaint}`,
+
+        <div style={{
+          justifySelf: 'end',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px',
           borderRadius: 999,
-          background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.04)',
-          color: t.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: MONO, fontSize: 14,
-        }}>{dark ? '☀' : '☾'}</button>
-        <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{
-          fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
-          color: t.ink, textDecoration: 'none', padding: '10px 12px', whiteSpace: 'nowrap',
-        }}>Log in</a>
-        <button onClick={() => onNav('new')} style={{
-          background: t.ink, color: t.bg, border: 'none', padding: '12px 18px',
-          borderRadius: 999,
-          fontFamily: MONO, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase',
-          cursor: 'pointer', whiteSpace: 'nowrap',
-        }}>Start a course →</button>
+          border: `1px solid ${t.ruleFaint}`,
+          background: dark ? 'rgba(28,26,22,0.72)' : 'rgba(250,247,240,0.76)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+        }}>
+          {/* Dark toggle */}
+          <button onClick={onToggleDark} title={dark ? 'Light mode' : 'Dark mode'} style={{
+            width: 42, height: 42, border: `1px solid ${t.ruleFaint}`,
+            borderRadius: 999,
+            background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.04)',
+            color: t.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: MONO, fontSize: 14,
+          }}>{dark ? '☀' : '☾'}</button>
+          <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{
+            fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
+            color: t.ink, textDecoration: 'none', padding: '10px 12px', whiteSpace: 'nowrap',
+          }}>Log in</a>
+        </div>
       </div>
     </nav>
   );
