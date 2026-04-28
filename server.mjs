@@ -267,17 +267,27 @@ Did the student demonstrate genuine understanding — answered a question correc
 
 function normalizeCurriculum(curriculum) {
   if (!curriculum || !Array.isArray(curriculum.modules)) return curriculum;
-  return {
-    ...curriculum,
-    modules: curriculum.modules.map((module) => ({
-      ...module,
-      lessons: Array.isArray(module.lessons)
-        ? module.lessons.map((lesson) => ({
+  let totalMinutes = 0;
+  const modules = curriculum.modules.map((module) => ({
+    ...module,
+    lessons: Array.isArray(module.lessons)
+      ? module.lessons.map((lesson) => {
+          const rawMinutes = Number(lesson.minutes);
+          const minutes = Math.min(5, Math.max(2, Number.isFinite(rawMinutes) ? Math.round(rawMinutes) : 3));
+          totalMinutes += minutes;
+          return {
             ...lesson,
             objective: lesson.objective || fallbackObjective(lesson.title),
-          }))
-        : [],
-    })),
+            minutes,
+          };
+        })
+      : [],
+  }));
+
+  return {
+    ...curriculum,
+    estimatedHours: Number(Math.max(0.1, totalMinutes / 60).toFixed(1)),
+    modules,
   };
 }
 
@@ -604,7 +614,7 @@ Return ONLY valid JSON:
   ]
 }
 Rules:
-- 5–7 modules, 2–4 lessons each. Total hours fits in ${days} days at ~1h/day.
+- 5–7 modules, 2–4 lessons each. Every lesson must be 2–5 minutes max; choose 2 for simple concepts, 3–4 for normal concepts, 5 only for dense technical concepts.
 - Each lesson objective: one sentence describing what the student should understand by the end.
 - Each lesson description: exactly 2 sentences — what the concept is + why it matters.
 - Each lesson facts array: 3–5 specific facts from the research pack only. Never invent facts.` : `Create a learning curriculum for: "${topic}". The student has ${days} days.
@@ -629,7 +639,7 @@ Return ONLY valid JSON:
   ]
 }
 Rules:
-- 5–7 modules, 2–4 lessons each. Total hours fits in ${days} days at ~1h/day.
+- 5–7 modules, 2–4 lessons each. Every lesson must be 2–5 minutes max; choose 2 for simple concepts, 3–4 for normal concepts, 5 only for dense technical concepts.
 - Each lesson objective: one sentence describing what the student should understand by the end.
 - Each lesson description: exactly 2 sentences — what the concept is + why it matters.
 - Each lesson facts array: 3–5 specific, verifiable facts only. If topic is niche or obscure, include only facts you are highly confident about. Never invent facts.`,
@@ -1166,7 +1176,7 @@ Return ONLY valid JSON:
     }
   ]
 }
-Rules: 5–7 modules, 2–4 lessons each. Total hours fits in ${days} days at ~1h/day. Only cover topics that appear in the provided materials.
+Rules: 5–7 modules, 2–4 lessons each. Every lesson must be 2–5 minutes max; choose 2 for simple concepts, 3–4 for normal concepts, 5 only for dense technical concepts. Only cover topics that appear in the provided materials.
 Each lesson objective must describe what the student should understand by the end of that lesson, in one sentence.`,
       }],
     });
