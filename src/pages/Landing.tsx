@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
-import LandingSaaS from './LandingSaaS';
-
 // ── Theme ─────────────────────────────────────────────────────────────────────
 type T = {
   bg: string; paper: string; paperAlt: string;
@@ -57,7 +55,7 @@ function Wrap({ id, children, bg, pad = '96px 32px', borderTop, borderBottom }: 
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
 function SiteNav({ active, dark, onToggleDark, onNav, onToggleSaas }: {
-  active: string; dark: boolean; onToggleDark: () => void; onNav: (id: string) => void; onToggleSaas: () => void;
+  active: string; dark: boolean; onToggleDark: () => void; onNav: (id: string) => void;
 }) {
   const { t } = useTheme();
   const items: [string, string][] = [
@@ -133,15 +131,6 @@ function SiteNav({ active, dark, onToggleDark, onNav, onToggleSaas }: {
           color: t.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: MONO, fontSize: 14,
         }}>{dark ? '☀' : '☾'}</button>
-        {/* SaaS theme toggle */}
-        <button onClick={onToggleSaas} title="Switch to modern theme" style={{
-          padding: '10px 16px', border: `1px solid ${t.ruleFaint}`,
-          borderRadius: 999,
-          background: 'rgba(26,21,16,0.04)',
-          color: t.ink, cursor: 'pointer',
-          fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase',
-          whiteSpace: 'nowrap',
-        }}>✦ Modern</button>
         <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{
           fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
           color: t.ink, textDecoration: 'none', padding: '10px 12px', whiteSpace: 'nowrap',
@@ -1056,17 +1045,11 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function Landing() {
   const navigate = useNavigate();
-  const [saas, setSaas] = useState<boolean>(() => {
-    try { return localStorage.getItem('ain_saas') === 'true'; } catch { return false; }
-  });
   const [dark, setDark] = useState<boolean>(() => {
     try { return localStorage.getItem('ain_dark') === 'true'; } catch { return false; }
   });
   const [active, setActive] = useState('home');
 
-  if (saas) {
-    return <LandingSaaS onSwitchTheme={() => { setSaas(false); try { localStorage.setItem('ain_saas', 'false'); } catch {} }} />;
-  }
   const sectionRefs = useRef<string[]>(['home', 'how', 'features', 'leaderboard', 'instructors', 'pricing', 'faq']);
 
   useEffect(() => {
@@ -1107,7 +1090,7 @@ export default function Landing() {
   return (
     <ThemeCtx.Provider value={{ t, dark }}>
       <div style={{ minHeight: '100vh', background: t.bg, transition: 'background 0.3s' }}>
-        <SiteNav active={active} dark={dark} onToggleDark={() => setDark((d) => !d)} onNav={onNav} onToggleSaas={() => { setSaas(true); try { localStorage.setItem('ain_saas', 'true'); } catch {} }} />
+        <SiteNav active={active} dark={dark} onToggleDark={() => setDark((d) => !d)} onNav={onNav} />
         <HeroSection onNav={onNav} />
         <TickerStrip />
         <HowSection />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { HC } from '../theme';
 import { useAuth } from '../lib/auth';
 
@@ -15,7 +15,12 @@ const NAV = [
 
 export function Chrome({ label, right }: ChromeProps) {
   const loc = useLocation();
-  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const initials = user?.email
+    ? user.email.slice(0, 2).toUpperCase()
+    : '?';
 
   return (
     <div style={{
@@ -54,13 +59,10 @@ export function Chrome({ label, right }: ChromeProps) {
             display: 'flex',
             alignItems: 'center',
             gap: 10,
-            padding: '10px 14px',
-            borderRadius: 999,
-            background: 'rgba(26,21,16,0.045)',
             flexShrink: 0,
           }}>
             <span style={{ width: 9, height: 9, background: HC.red, display: 'inline-block', borderRadius: 999, flexShrink: 0, transform: 'translateY(-3px)' }} />
-            <b style={{ fontFamily: HC.serif, fontSize: 25, fontWeight: 400, letterSpacing: '-0.055em', textTransform: 'none' }}>Learnor</b>
+            <b style={{ fontFamily: HC.serif, fontSize: 25, fontWeight: 400, letterSpacing: '-0.055em', textTransform: 'none' }}>AInative</b>
           </Link>
 
           {label && (
@@ -76,8 +78,7 @@ export function Chrome({ label, right }: ChromeProps) {
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-            }}
-            >
+            }}>
               {label}
             </div>
           )}
@@ -117,10 +118,27 @@ export function Chrome({ label, right }: ChromeProps) {
           )}
           {user && (
             <button
-              onClick={signOut}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.mute, padding: '10px 12px', borderRadius: 999 }}
+              onClick={() => navigate('/settings')}
+              title="Settings"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 999,
+                background: HC.ink,
+                color: HC.paper,
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: HC.mono,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
             >
-              Sign out
+              {initials}
             </button>
           )}
         </div>

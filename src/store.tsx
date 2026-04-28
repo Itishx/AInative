@@ -9,13 +9,7 @@ function storageKey(userId?: string) {
   return userId ? `${BASE_KEY}_${userId}` : BASE_KEY;
 }
 
-const SEED_LEADERBOARD: LeaderboardEntry[] = [
-  { rank: 1, user: 'mira.k', course: 'Docker in anger', marginMs: (14 * 24 + 2) * 3600000, days: 21, streak: 21, certId: 'AIN-MK01' },
-  { rank: 2, user: 'ojo_22', course: 'Intro to probability', marginMs: (11 * 24 + 19) * 3600000, days: 28, streak: 26, certId: 'AIN-OJ02' },
-  { rank: 3, user: 'hansu', course: 'Conversational Japanese', marginMs: (8 * 24 + 11) * 3600000, days: 45, streak: 38, certId: 'AIN-HA03' },
-  { rank: 5, user: 'yael', course: 'Linear algebra, honestly', marginMs: (4 * 24 + 22) * 3600000, days: 60, streak: 44, certId: 'AIN-YA05' },
-  { rank: 6, user: 'priya.s', course: 'Rust ownership', marginMs: (3 * 24 + 9) * 3600000, days: 30, streak: 22, certId: 'AIN-PR06' },
-];
+const SEED_LEADERBOARD: LeaderboardEntry[] = [];
 
 function calcProgress(course: Course): number {
   const allLessons = course.curriculum.modules.flatMap((m) => m.lessons);
@@ -315,7 +309,7 @@ export function StoreProvider({
   // Leaderboard sync to Supabase
   useEffect(() => {
     if (!userId) return;
-    const myEntries = state.leaderboard.filter((e) => !['AIN-MK01','AIN-OJ02','AIN-HA03','AIN-YA05','AIN-PR06'].includes(e.certId));
+    const myEntries = state.leaderboard;
     myEntries.forEach((e) => {
       supabase.from('leaderboard').upsert({
         cert_id: e.certId,
