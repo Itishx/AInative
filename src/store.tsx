@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import type { AppState, Course, LeaderboardEntry, EnrolledCourse } from './types';
 
-const STORAGE_KEY = 'ainative_v3';
+const BASE_KEY = 'ainative_v3';
 const LEGACY_STORAGE_KEY = 'ainative_v2';
+
+function storageKey(userId?: string) {
+  return userId ? `${BASE_KEY}_${userId}` : BASE_KEY;
+}
 
 const SEED_LEADERBOARD: LeaderboardEntry[] = [
   { rank: 1, user: 'mira.k', course: 'Docker in anger', marginMs: (14 * 24 + 2) * 3600000, days: 21, streak: 21, certId: 'AIN-MK01' },
@@ -33,9 +37,9 @@ function checkDeadlines(state: AppState): AppState {
   return { ...state, courses };
 }
 
-function loadState(): AppState {
+function loadState(userId?: string): AppState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userId)) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as AppState;
       // Migrate: add lessonChats/moduleNotes to existing courses
@@ -61,8 +65,8 @@ function loadState(): AppState {
   return { courses: [], leaderboard: SEED_LEADERBOARD, username: 'you' };
 }
 
-function saveState(state: AppState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function saveState(state: AppState, userId?: string) {
+  localStorage.setItem(storageKey(userId), JSON.stringify(state));
 }
 
 type Action =
@@ -223,10 +227,17 @@ interface StoreCtx {
 
 const Ctx = createContext<StoreCtx | null>(null);
 
-export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, loadState);
+export function StoreProvider({ children, userId, userEmail }: { children: React.ReactNode; userId?: string; userEmail?: string }) {
+  const [state, dispatch] = useReducer(reducer, undefined, () => {
+    const s = loadState(userId);
+    // Seed username from email if not set
+    if (userEmail && (!s.username || s.username === 'you')) {
+      s.username = userEmail.split('@')[0];
+    }
+    return s;
+  });
 
-  useEffect(() => { saveState(state); }, [state]);
+  useEffect(() => { saveState(state, userId); }, [state, userId]);
 
   useEffect(() => {
     const interval = setInterval(() => dispatch({ type: 'CHECK_DEADLINES' }), 60000);

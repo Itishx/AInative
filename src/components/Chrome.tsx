@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { HC } from '../theme';
+import { useAuth } from '../lib/auth';
 
 interface ChromeProps {
   label?: string;
@@ -14,6 +15,7 @@ const NAV = [
 
 export function Chrome({ label, right }: ChromeProps) {
   const loc = useLocation();
+  const { user, signOut } = useAuth();
 
   return (
     <div style={{
@@ -107,18 +109,21 @@ export function Chrome({ label, right }: ChromeProps) {
           ))}
         </div>
 
-        {right && (
-          <div style={{
-            color: HC.mute,
-            whiteSpace: 'nowrap',
-            padding: '10px 14px',
-            borderRadius: 999,
-            background: 'rgba(26,21,16,0.04)',
-          }}
-          >
-            {right}
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {right && (
+            <div style={{ color: HC.mute, whiteSpace: 'nowrap', padding: '10px 14px', borderRadius: 999, background: 'rgba(26,21,16,0.04)' }}>
+              {right}
+            </div>
+          )}
+          {user && (
+            <button
+              onClick={signOut}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.mute, padding: '10px 12px', borderRadius: 999 }}
+            >
+              Sign out
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

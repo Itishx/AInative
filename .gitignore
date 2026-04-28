@@ -4,3 +4,5 @@ dist/
 server-data/
 .DS_Store
 npm-debug.log*
+src/pages/Keys.tsx
+keys.html

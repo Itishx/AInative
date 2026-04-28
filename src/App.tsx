@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { StoreProvider } from './store';
+import { AuthProvider, useAuth } from './lib/auth';
+import Auth from './pages/Auth';
 import Landing from './pages/Landing';
 import NewCourse from './pages/NewCourse';
 import Dashboard from './pages/Dashboard';
@@ -11,10 +13,27 @@ import CreateCourse from './pages/CreateCourse';
 import Browse from './pages/Browse';
 import Anything from './pages/Anything';
 import Logos from './pages/Logos';
+import { HC } from './theme';
 
-export default function App() {
+function AppRoutes() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#171410', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.35)' }}>
+          Loading…
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
+
   return (
-    <StoreProvider>
+    <StoreProvider userId={user.id} userEmail={user.email}>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -32,5 +51,13 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </StoreProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }
