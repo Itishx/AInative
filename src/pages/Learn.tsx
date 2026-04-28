@@ -454,9 +454,10 @@ function isCanvasExampleRequest(text: string) {
 }
 
 function buildCanvasExampleVisual(lessonTitle: string, userText: string, tutorText: string) {
-  const context = `${lessonTitle} ${userText} ${tutorText}`.toLowerCase();
+  const lesson = String(lessonTitle || '').toLowerCase();
+  const context = `${lesson} ${userText} ${tutorText}`.toLowerCase();
 
-  if (/\bprimary\s+key\b|\border_id\b|\borders?\b/.test(context)) {
+  if (/\bprimary\s+key\b|\bunique\s+(?:id|identifier)\b|\border_id\b/.test(lesson)) {
     return [
       '| order_id | customer_id | order_date | total_amount |',
       '|---|---|---|---|',
@@ -466,17 +467,37 @@ function buildCanvasExampleVisual(lessonTitle: string, userText: string, tutorTe
     ].join('\n');
   }
 
-  if (/\bselect\b|\bsql\b|\bquery\b/.test(context)) {
+  if (/\bwhere\b|\bfilter(?:ing)?\b/.test(lesson)) {
     return [
       '```sql',
-      'SELECT order_id, customer_id, total_amount',
-      'FROM orders',
-      'WHERE customer_id = 42;',
+      'SELECT customer_name, state',
+      'FROM customers',
+      "WHERE state = 'Texas';",
       '```',
     ].join('\n');
   }
 
-  if (/\bpython\b|\bprint\b|\bvariable\b|\bcode\b|\bfunction\b/.test(context)) {
+  if (/\bselect\b|\bquery\b|\bstatement\b/.test(lesson)) {
+    return [
+      '```sql',
+      'SELECT customer_id, total_amount',
+      'FROM orders',
+      'LIMIT 3;',
+      '```',
+    ].join('\n');
+  }
+
+  if (/\btable\b|\bdatabase\b|\brow\b|\bcolumn\b|\brecord\b|\bsql\b/.test(lesson)) {
+    return [
+      '| customer_id | customer_name | state |',
+      '|---|---|---|',
+      '| 42 | Sarah Chen | Texas |',
+      '| 87 | Marcus Webb | New York |',
+      '| 91 | Aisha Khan | Texas |',
+    ].join('\n');
+  }
+
+  if (/\bpython\b|\bprint\b|\bvariable\b|\bcode\b|\bfunction\b/.test(lesson)) {
     return [
       '```python',
       'message = "Hello, world!"',
@@ -485,13 +506,13 @@ function buildCanvasExampleVisual(lessonTitle: string, userText: string, tutorTe
     ].join('\n');
   }
 
-  if (/\btable\b|\bdatabase\b|\brow\b|\bcolumn\b|\brecord\b|\bdata\b/.test(context)) {
+  if (/\bdata\b|\barray\b|\bnumpy\b|\blist\b/.test(lesson)) {
     return [
-      '| id | name | example_detail |',
+      '| index | value | meaning |',
       '|---|---|---|',
-      '| 1 | First row | One record |',
-      '| 2 | Second row | Another record |',
-      '| 3 | Third row | Another record |',
+      '| 0 | 45 | first score |',
+      '| 1 | 50 | second score |',
+      '| 2 | 55 | third score |',
     ].join('\n');
   }
 

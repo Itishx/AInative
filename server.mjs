@@ -872,8 +872,12 @@ If the student is repeating what you already taught back to you, do not re-teach
     let visual = typeof parsed.visual === 'string' && parsed.visual.trim() ? parsed.visual.trim() : null;
     if (visualExampleTurn && !visual) {
       const lowerLesson = String(lessonTitle || '').toLowerCase();
-      if (/\b(table|database|row|column|record|primary key|orders?|customers?|sql)\b/.test(lowerLesson + ' ' + cleaned)) {
-        visual = `| id | example_value | note |\n|---|---|---|\n| 1001 | First record | Unique id |\n| 1002 | Second record | Unique id |\n| 1003 | Third record | Unique id |`;
+      if (/\bwhere\b|\bfilter(?:ing)?\b/.test(lowerLesson)) {
+        visual = `\`\`\`sql\nSELECT customer_name, state\nFROM customers\nWHERE state = 'Texas';\n\`\`\``;
+      } else if (/\bselect\b|\bquery\b|\bstatement\b/.test(lowerLesson)) {
+        visual = `\`\`\`sql\nSELECT customer_id, total_amount\nFROM orders\nLIMIT 3;\n\`\`\``;
+      } else if (/\b(table|database|row|column|record|primary key|sql)\b/.test(lowerLesson)) {
+        visual = `| customer_id | customer_name | state |\n|---|---|---|\n| 42 | Sarah Chen | Texas |\n| 87 | Marcus Webb | New York |\n| 91 | Aisha Khan | Texas |`;
       } else {
         visual = `\`\`\`txt\n${lessonTitle}\nStep 1 -> concrete example\nStep 2 -> what changes\nStep 3 -> why it matters\n\`\`\``;
       }
