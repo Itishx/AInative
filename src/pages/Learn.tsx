@@ -345,8 +345,13 @@ function shouldAskTutorQuestion(latestUserMessage: string, isOpening: boolean, t
   const text = String(latestUserMessage || '').trim();
   if (!text) return true;
   if (/ask me (?:one )?(?:a )?(?:quick )?question|check me|quiz me|test me/i.test(text)) return true;
+  if (/^(continue|next|go on|keep going|proceed|move on|ok|okay|k|got it|cool|nice)$/i.test(text)) return false;
   if (/\b(?:idk|i don't know|dont know|not sure|no idea|tf would i know|huh|what\?)\b/i.test(text)) return false;
   return true;
+}
+
+function isContinueOnly(text: string) {
+  return /^(continue|next|go on|keep going|proceed|move on|ok|okay|k|got it|cool|nice)$/i.test(String(text || '').trim());
 }
 
 function isCanvasExampleRequest(text: string) {
@@ -1009,7 +1014,7 @@ function LearnContent({ course }: { course: Course }) {
   const lesson = mod?.lessons[course.currentLesson];
   const lastTutorMsg = [...currentChat].reverse().find((msg) => msg.who === 'tutor');
   const tutorTurnCount = currentChat.filter((m) => m.who === 'tutor').length;
-  const readyToMoveOn = tutorTurnCount >= 3 && currentChat.some((msg) => msg.who === 'tutor' && !!msg.readyToMoveOn);
+  const readyToMoveOn = tutorTurnCount >= 5 && currentChat.some((msg) => msg.who === 'tutor' && !!msg.readyToMoveOn);
   const latestTutorText = lastTutorMsg?.text ?? '';
   const latestVisual = [...currentChat].reverse().find((m) => m.who === 'tutor' && !!m.visual)?.visual ?? '';
   const lessonHasNotes = !!lesson?.notes;
@@ -1194,8 +1199,8 @@ function LearnContent({ course }: { course: Course }) {
       return;
     }
 
-    const nextPhase: Phase = phase === 'CHECK' ? 'REINFORCE' : phase;
-    if (phase === 'CHECK') setPhase('REINFORCE');
+    const nextPhase: Phase = phase === 'CHECK' ? (isContinueOnly(text) ? 'EXPLAIN' : 'REINFORCE') : phase;
+    if (phase === 'CHECK') setPhase(nextPhase);
     await sendToAI([...currentChat, userMsg], course.subject, mod.title, lesson.title, nextPhase);
   }
 
@@ -1321,7 +1326,7 @@ function LearnContent({ course }: { course: Course }) {
                     {renderChatMessage(m.text)}
                   </div>
                 )}
-                {m.who === 'tutor' && m.readyToMoveOn && tutorTurnCount >= 3 && (
+                {m.who === 'tutor' && m.readyToMoveOn && tutorTurnCount >= 5 && (
                   <div style={{ marginTop: 10, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#7ad08b' }}>
                     lesson objective covered
                   </div>

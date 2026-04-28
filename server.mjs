@@ -48,6 +48,28 @@ function trimWords(text, maxWords) {
   return `${words.slice(0, maxWords).join(' ')}...`.trim();
 }
 
+function isContinueOnly(text) {
+  return /^(continue|next|go on|keep going|proceed|move on|ok|okay|k|got it|cool|nice)$/i.test(String(text || '').trim());
+}
+
+function hasSubstantiveLearningAnswer(text) {
+  const value = String(text || '').trim();
+  if (!value || isContinueOnly(value)) return false;
+  if (/^(yes|no|maybe|idk|i don't know|dont know|not sure|no idea)$/i.test(value)) return false;
+  const words = value.split(/\s+/).filter(Boolean);
+  return words.length >= 4 || /[=(){};]|\b(select|from|where|because|means|represents|example|table|row|column|function|variable)\b/i.test(value);
+}
+
+function stripPrematureQuizLanguage(text) {
+  return String(text || '')
+    .replace(/(?:You're|You are)\s+in\s+good\s+shape\s+with[^.!?]*[.!?]\s*/gi, '')
+    .replace(/You\s+can\s+(?:jump into|take|start)\s+the\s+quiz[^.!?]*[.!?]?/gi, '')
+    .replace(/(?:take|start)\s+the\s+quiz\s+whenever\s+you're\s+ready[^.!?]*[.!?]?/gi, '')
+    .replace(/if\s+you(?:'d| would)\s+like\s+one\s+more\s+concrete\s+example[^.!?]*[.!?]?/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function lessonHasHandsOnMaterial(text) {
   const value = String(text || '').toLowerCase();
   return (
@@ -698,13 +720,18 @@ app.post('/api/chat', async (req, res) => {
   } = req.body;
 
   try {
-    const currentPhase = phase || 'HOOK';
+    let currentPhase = phase || 'HOOK';
     const objective = lessonObjective || fallbackObjective(lessonTitle);
     const description = conceptDescription || objective;
     const facts = Array.isArray(conceptFacts) && conceptFacts.length > 0
       ? conceptFacts.join(', ')
       : 'No specific facts provided — teach from high-confidence knowledge only and hedge uncertain claims with "approximately" or "around".';
     const openingTurn = !!isOpening;
+    const latestUserText = [...(Array.isArray(messages) ? messages : [])].reverse().find((m) => m?.who === 'user')?.text || '';
+    const studentAnswered = hasSubstantiveLearningAnswer(latestUserText);
+    if (currentPhase === 'REINFORCE' && !studentAnswered) {
+      currentPhase = 'EXPLAIN';
+    }
     const visualExampleTurn = !!wantsVisualExample;
     const allowQuestionThisTurn = !openingTurn && !!allowQuestion && currentPhase !== 'HOOK' && currentPhase !== 'REINFORCE';
     const starterText = openingTurn
@@ -761,12 +788,14 @@ CRITICAL BEHAVIOR RULES:
 7. Keep "text" to 2-3 short sentences under 75 words. Tables and code go in "visual" — they do not count toward the word limit.
 8. Ask at most one question, and only after you have actually taught something in the same message. The only exception is CHECK phase, where asking the question is the point.
 9. If the student says they do not know, are not sure, or are confused, explain more simply. Do not scold them and do not bounce back with another question immediately.
+10. If the student only says "continue", "next", "ok", "got it", or similar, teach the next small piece. Do NOT say they are ready for the quiz.
+11. Check-in questions must test understanding of the concept just taught. Never ask opinion/feeling questions like "does that surprise you?", "does that make sense?", or "did you know that?"
 
 PHASE RULES:
 - HOOK: Teach the first tiny idea in 2 short sentences. No question.
 - EXPLAIN: Teach one next small piece of the lesson in 2-4 short sentences. If question permission is "yes", end with exactly one simple check-in question and set askedQuestion to true. Otherwise askedQuestion must be false.
 - CHECK: Ask exactly one easy question about only the idea just taught. Prefer a very short multiple-choice question with A), B), C), and D). Set askedQuestion to true.
-- REINFORCE: If the student is basically correct, confirm briefly and say they can take the quiz or ask for one more example. Set readyToMoveOn to true. If they are wrong or confused, correct the specific mistake in 1-2 short sentences and optionally invite one more example. Set readyToMoveOn to false. askedQuestion must be false.
+- REINFORCE: Only evaluate an actual student answer. If the student gave a substantive answer and it is basically correct, confirm briefly, teach one tiny follow-up detail, and only then you may say they can take the quiz. Set readyToMoveOn to true only for a real answer. If they are wrong, vague, or only said continue/next/ok, teach the next small piece instead and set readyToMoveOn to false. askedQuestion must be false.
 
 If the student is repeating what you already taught back to you, do not re-teach the full lesson. Either tighten the explanation or move into a simple check.${scopeSection}${materialsSection}${planSection}`;
 
@@ -808,12 +837,12 @@ If the student is repeating what you already taught back to you, do not re-teach
       allowQuestion: allowQuestionThisTurn,
     });
 
-    const MIN_TUTOR_TURNS = 3;
+    const MIN_TUTOR_TURNS = 5;
     const tutorTurnCount = (Array.isArray(messages) ? messages : []).filter((m) => m.who === 'tutor').length;
     let readyToMoveOn = !!parsed.readyToMoveOn;
 
     if (readyToMoveOn) {
-      if (currentPhase !== 'REINFORCE' || tutorTurnCount < MIN_TUTOR_TURNS) {
+      if (currentPhase !== 'REINFORCE' || tutorTurnCount < MIN_TUTOR_TURNS || !studentAnswered) {
         readyToMoveOn = false;
       } else {
         readyToMoveOn = await runCheckerAgent({
@@ -834,8 +863,9 @@ If the student is repeating what you already taught back to you, do not re-teach
       }
     }
 
+    const finalText = readyToMoveOn ? cleaned : stripPrematureQuizLanguage(cleaned);
     res.json({
-      text: cleaned || buildTutorFallbackReply({
+      text: finalText || buildTutorFallbackReply({
         lessonTitle,
         lessonObjective: objective,
         conceptDescription: description,
