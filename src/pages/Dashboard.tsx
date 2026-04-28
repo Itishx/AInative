@@ -47,6 +47,91 @@ function statusFor(course: Course) {
   return { label: 'Not started', color: D.amber };
 }
 
+function makeHandle(username: string) {
+  return username.toLowerCase().replace(/[^a-z0-9_]+/g, '').slice(0, 18) || 'learner';
+}
+
+function getActivityKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function buildConsistency(courses: Course[]) {
+  const counts = new Map<string, number>();
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(now.getDate() - 83);
+
+  courses.forEach((course) => {
+    [course.createdAt, course.lastStudiedDate].filter(Boolean).forEach((raw) => {
+      const date = new Date(raw as string);
+      if (!Number.isNaN(date.getTime())) {
+        const key = getActivityKey(date);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    });
+
+    Object.values(course.lessonChats ?? {}).flat().forEach((msg) => {
+      const date = new Date(msg.ts);
+      if (!Number.isNaN(date.getTime())) {
+        const key = getActivityKey(date);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    });
+  });
+
+  return Array.from({ length: 84 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const key = getActivityKey(date);
+    return { key, count: counts.get(key) ?? 0 };
+  });
+}
+
+function ConsistencyGrid({ courses }: { courses: Course[] }) {
+  const days = useMemo(() => buildConsistency(courses), [courses]);
+  const total = days.reduce((sum, day) => sum + day.count, 0);
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'baseline', marginBottom: 10 }}>
+        <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: D.mute }}>
+          consistency
+        </div>
+        <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.10em', textTransform: 'uppercase', color: D.mute }}>
+          {total} study signals · last 12 weeks
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 5 }}>
+        {days.map((day) => {
+          const level = Math.min(4, day.count);
+          const color = level === 0
+            ? D.softer
+            : level === 1
+              ? 'rgba(114,192,137,0.32)'
+              : level === 2
+                ? 'rgba(114,192,137,0.52)'
+                : level === 3
+                  ? 'rgba(114,192,137,0.74)'
+                  : D.green;
+          return (
+            <div
+              key={day.key}
+              title={`${day.key}: ${day.count} activity`}
+              style={{
+                aspectRatio: '1 / 1',
+                minWidth: 8,
+                borderRadius: 3,
+                background: color,
+                boxShadow: level > 0 ? `0 0 18px ${color}` : 'none',
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function CourseRow({
   course,
   onOpen,
@@ -207,6 +292,11 @@ export default function Dashboard() {
     ['Leaderboard', '/leaderboard'],
     ['Settings', '/settings'],
   ] as const;
+  const handle = makeHandle(state.username);
+  const displayName = state.username === 'you' ? 'Learner' : state.username;
+  const joined = state.courses.length
+    ? new Date(Math.min(...state.courses.map((course) => new Date(course.createdAt).getTime()).filter(Number.isFinite))).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
     <div style={{ minHeight: '100vh', background: D.bg, color: D.ink, fontFamily: D.sans }}>
@@ -235,36 +325,69 @@ export default function Dashboard() {
           </div>
         </nav>
 
-        <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 52, alignItems: 'end', borderBottom: `1px solid ${D.faint}`, paddingBottom: 34 }}>
-          <div>
-            <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
-              Dashboard
+        <section style={{ borderBottom: `1px solid ${D.faint}`, paddingBottom: 34 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '128px minmax(0, 1fr) 360px', gap: 30, alignItems: 'end' }}>
+            <div
+              style={{
+                width: 112,
+                height: 112,
+                borderRadius: '50%',
+                display: 'grid',
+                placeItems: 'center',
+                background: 'linear-gradient(135deg, rgba(246,240,231,0.18), rgba(255,81,72,0.35))',
+                border: `1px solid ${D.faint}`,
+                color: D.ink,
+                fontFamily: D.serif,
+                fontSize: 54,
+                letterSpacing: '-0.06em',
+                boxShadow: '0 22px 80px rgba(255,81,72,0.12)',
+              }}
+            >
+              {displayName[0]?.toUpperCase() ?? 'L'}
             </div>
-            <h1 style={{ margin: '14px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(74px, 10vw, 148px)', lineHeight: 0.78, letterSpacing: '-0.075em', color: D.ink }}>
-              Hey<br />{state.username}.
-            </h1>
+
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
+                Dashboard
+              </div>
+              <h1 style={{ margin: '10px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(54px, 7vw, 104px)', lineHeight: 0.82, letterSpacing: '-0.075em', color: D.ink }}>
+                {displayName}
+              </h1>
+              <div style={{ marginTop: 12, fontFamily: D.sans, fontSize: 17, color: D.mute }}>
+                @{handle}
+              </div>
+              <p style={{ maxWidth: 600, margin: '16px 0 0', color: D.ink, fontFamily: D.sans, fontSize: 16, lineHeight: 1.55 }}>
+                Learning in public, racing deadlines, and turning unfinished curiosity into finished courses.
+              </p>
+              <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 15, fontFamily: D.mono, fontSize: 9.5, color: D.mute, letterSpacing: '0.10em', textTransform: 'uppercase' }}>
+                <span>{state.courses.length} courses</span>
+                <span>{stats.done} finished</span>
+                <span>joined {joined}</span>
+              </div>
+            </div>
+
+            <ConsistencyGrid courses={state.courses} />
           </div>
 
-          <div style={{ display: 'grid', gap: 22 }}>
-            <p style={{ margin: 0, color: D.mute, fontFamily: D.sans, fontSize: 16, lineHeight: 1.55 }}>
-              {stats.urgent > 0
-                ? `${stats.urgent} course${stats.urgent === 1 ? ' needs' : 's need'} attention before the deadline bites.`
-                : `${stats.inProgress} active. ${stats.notStarted} waiting. ${stats.done} finished.`}
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-              {[
-                ['Active', stats.inProgress],
-                ['Waiting', stats.notStarted],
-                ['Urgent', stats.urgent],
-                ['Done', stats.done],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <div style={{ fontFamily: D.serif, fontSize: 42, lineHeight: 0.85, color: label === 'Urgent' ? D.red : D.ink }}>{value}</div>
-                  <div style={{ marginTop: 8, fontFamily: D.mono, fontSize: 8.5, color: D.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}</div>
-                </div>
-              ))}
-            </div>
+          <div style={{ marginTop: 34, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 18 }}>
+            {[
+              ['Active', stats.inProgress],
+              ['Waiting', stats.notStarted],
+              ['Urgent', stats.urgent],
+              ['Done', stats.done],
+            ].map(([label, value]) => (
+              <div key={label} style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 14 }}>
+                <div style={{ fontFamily: D.serif, fontSize: 52, lineHeight: 0.85, color: label === 'Urgent' ? D.red : D.ink }}>{value}</div>
+                <div style={{ marginTop: 10, fontFamily: D.mono, fontSize: 9, color: D.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}</div>
+              </div>
+            ))}
           </div>
+
+          <p style={{ maxWidth: 560, margin: '22px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 15, lineHeight: 1.55 }}>
+            {stats.urgent > 0
+              ? `${stats.urgent} course${stats.urgent === 1 ? ' needs' : 's need'} attention before the deadline bites.`
+              : `${stats.inProgress} active. ${stats.notStarted} waiting. ${stats.done} finished.`}
+          </p>
         </section>
 
         <section style={{ display: 'flex', justifyContent: 'space-between', gap: 22, alignItems: 'center', padding: '26px 0 8px', flexWrap: 'wrap' }}>
