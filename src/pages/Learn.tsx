@@ -847,16 +847,40 @@ function LessonCanvas({
           50% { opacity: 0.5; transform: translateX(4%); }
         }
       `}</style>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.mute }}>
-          Visual canvas
-        </span>
-        {readyToMoveOn && (
-          <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: HC.green }}>
-            objective complete
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.mute }}>
+            Visual canvas
           </span>
-        )}
+          {readyToMoveOn && (
+            <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: HC.green }}>
+              objective complete
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => { setGeneratedImage(null); handleGenerateImage(); }}
+          disabled={imageLoading || chatMessages.filter(m => m.who === 'tutor').length === 0}
+          style={{
+            padding: '6px 12px',
+            background: imageLoading ? 'transparent' : 'rgba(26,21,16,0.06)',
+            border: `1px solid ${HC.ruleFaint}`,
+            borderRadius: 999,
+            color: imageLoading ? HC.mute : HC.mute,
+            fontFamily: HC.mono,
+            fontSize: 9,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            cursor: imageLoading ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {imageLoading ? '⟳ generating…' : '✦ generate visual'}
+        </button>
       </div>
+      {imageError && (
+        <div style={{ fontFamily: HC.mono, fontSize: 9, color: HC.red, letterSpacing: '0.08em', marginBottom: 8 }}>{imageError}</div>
+      )}
 
       <div
         style={{
@@ -1010,42 +1034,15 @@ function LessonCanvas({
                       {objective}
                     </div>
                   )}
-                  <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid rgba(250,247,240,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      {[
-                        mod.title,
-                        readyToMoveOn ? '✓ objective covered' : `Lesson ${String(course.currentLesson + 1).padStart(2, '0')}`,
-                      ].map((item) => (
-                        <div key={item} style={{ padding: '7px 12px', borderRadius: 999, background: 'rgba(250,247,240,0.08)', color: 'rgba(250,247,240,0.70)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', border: '1px solid rgba(250,247,240,0.08)' }}>
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                      <button
-                        onClick={handleGenerateImage}
-                        disabled={imageLoading || chatMessages.filter(m => m.who === 'tutor').length === 0}
-                        style={{
-                          padding: '9px 16px',
-                          background: imageLoading ? 'rgba(250,247,240,0.06)' : 'rgba(250,247,240,0.12)',
-                          border: '1px solid rgba(250,247,240,0.22)',
-                          borderRadius: 999,
-                          color: imageLoading ? 'rgba(250,247,240,0.4)' : 'rgba(250,247,240,0.85)',
-                          fontFamily: HC.mono,
-                          fontSize: 10,
-                          letterSpacing: '0.14em',
-                          textTransform: 'uppercase',
-                          cursor: imageLoading ? 'not-allowed' : 'pointer',
-                          backdropFilter: 'blur(8px)',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {imageLoading ? '⟳ Generating…' : '✦ Show visual'}
-                      </button>
-                      {imageError && (
-                        <span style={{ fontFamily: HC.mono, fontSize: 9, color: 'rgba(220,100,80,0.85)', letterSpacing: '0.08em' }}>{imageError}</span>
-                      )}
-                    </div>
+                  <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid rgba(250,247,240,0.10)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {[
+                      mod.title,
+                      readyToMoveOn ? '✓ objective covered' : `Lesson ${String(course.currentLesson + 1).padStart(2, '0')}`,
+                    ].map((item) => (
+                      <div key={item} style={{ padding: '7px 12px', borderRadius: 999, background: 'rgba(250,247,240,0.08)', color: 'rgba(250,247,240,0.70)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', border: '1px solid rgba(250,247,240,0.08)' }}>
+                        {item}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
