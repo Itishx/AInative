@@ -786,36 +786,40 @@ function LessonCanvas({
   latestVisual: string;
   readyToMoveOn: boolean;
   narrow: boolean;
-  chatMessages: import('./types').ChatMsg[];
+  chatMessages: ChatMsg[];
 }) {
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [imageLoading, setImageLoading] = useState(false);
-  const [imageError, setImageError] = useState('');
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncedVisual, setSyncedVisual] = useState<string | null>(null);
 
-  async function handleGenerateImage() {
-    setImageLoading(true);
-    setImageError('');
+  async function handleSyncCanvas() {
+    if (syncLoading) return;
+    setSyncLoading(true);
     try {
-      const res = await fetch('/api/generate-image', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: chatMessages.slice(-5),
-          lessonTitle: lesson.title,
           courseTitle: course.subject,
+          moduleTitle: mod.title,
+          lessonTitle: lesson.title,
+          lessonObjective: lesson.objective,
+          phase: 'EXPLAIN',
+          wantsVisualExample: true,
+          isOpening: false,
+          allowQuestion: false,
         }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed');
-      setGeneratedImage(data.image);
-    } catch (err: any) {
-      setImageError(err?.message || 'Could not generate image. Try again.');
+      if (data.visual) setSyncedVisual(data.visual);
+    } catch {
+      // silent fail
     } finally {
-      setImageLoading(false);
+      setSyncLoading(false);
     }
   }
 
-  const visualSource = latestVisual || latestTutorText;
+  const visualSource = syncedVisual || latestVisual || latestTutorText;
   const code = extractFirstCodeBlock(visualSource);
   const table = extractFirstMarkdownTable(visualSource);
   const chartMode = !code && !table && /(trend|chart|graph|growth|volume|increase|decrease|over time)/i.test(latestTutorText);
@@ -859,28 +863,25 @@ function LessonCanvas({
           )}
         </div>
         <button
-          onClick={() => { setGeneratedImage(null); handleGenerateImage(); }}
-          disabled={imageLoading || chatMessages.filter(m => m.who === 'tutor').length === 0}
+          onClick={handleSyncCanvas}
+          disabled={syncLoading || chatMessages.filter(m => m.who === 'tutor').length === 0}
           style={{
             padding: '6px 12px',
-            background: imageLoading ? 'transparent' : 'rgba(26,21,16,0.06)',
+            background: syncLoading ? 'transparent' : 'rgba(26,21,16,0.06)',
             border: `1px solid ${HC.ruleFaint}`,
             borderRadius: 999,
-            color: imageLoading ? HC.mute : HC.mute,
+            color: HC.mute,
             fontFamily: HC.mono,
             fontSize: 9,
             letterSpacing: '0.14em',
             textTransform: 'uppercase',
-            cursor: imageLoading ? 'not-allowed' : 'pointer',
+            cursor: syncLoading ? 'not-allowed' : 'pointer',
             whiteSpace: 'nowrap',
           }}
         >
-          {imageLoading ? '⟳ generating…' : '✦ generate visual'}
+          {syncLoading ? '⟳ syncing…' : '⟳ sync canvas'}
         </button>
       </div>
-      {imageError && (
-        <div style={{ fontFamily: HC.mono, fontSize: 9, color: HC.red, letterSpacing: '0.08em', marginBottom: 8 }}>{imageError}</div>
-      )}
 
       <div
         style={{
@@ -996,17 +997,6 @@ function LessonCanvas({
                   />
                 </svg>
               </div>
-            ) : generatedImage ? (
-              /* Generated AI image */
-              <div style={{ width: '100%', maxWidth: 820, position: 'relative', borderRadius: 28, overflow: 'hidden', border: '1px solid rgba(250,247,240,0.12)', boxShadow: '0 20px 60px rgba(0,0,0,0.28)' }}>
-                <img src={generatedImage} alt={lesson.title} style={{ width: '100%', display: 'block' }} />
-                <button
-                  onClick={() => { setGeneratedImage(null); handleGenerateImage(); }}
-                  style={{ position: 'absolute', bottom: 14, right: 14, padding: '8px 14px', background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(250,247,240,0.18)', borderRadius: 999, color: 'rgba(250,247,240,0.8)', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', backdropFilter: 'blur(8px)' }}
-                >
-                  ↻ Regenerate
-                </button>
-              </div>
             ) : (
               /* Ambient fallback: key facts + generate button */
               <div style={{ width: '100%', maxWidth: 820, position: 'relative', borderRadius: 28, overflow: 'hidden', border: '1px solid rgba(250,247,240,0.10)', background: `linear-gradient(145deg, ${ambientPalette.base}, ${ambientPalette.mid} 60%, rgba(245,238,225,0.04) 100%)`, boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
@@ -1058,12 +1048,14 @@ function CurriculumDrawer({
   course,
   open,
   onClose,
+  onSelectLesson,
   notesOpen,
   setNotesOpen,
 }: {
   course: Course;
   open: boolean;
   onClose: () => void;
+  onSelectLesson: (moduleIndex: number, lessonIndex: number) => void;
   notesOpen: number | null;
   setNotesOpen: React.Dispatch<React.SetStateAction<number | null>>;
 }) {
@@ -1117,11 +1109,24 @@ function CurriculumDrawer({
                 const isOpen = notesOpen === mi * 100 + li;
                 return (
                   <div key={l.title} style={{ marginBottom: 8 }}>
-                    <div style={{
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSelectLesson(mi, li)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') onSelectLesson(mi, li);
+                      }}
+                      style={{
                       display: 'flex', alignItems: 'start', gap: 8,
+                      width: '100%',
+                      textAlign: 'left',
+                      border: 'none',
+                      background: isActive ? 'rgba(202,38,31,0.08)' : 'transparent',
+                      borderRadius: 10,
+                      padding: '7px 8px',
                       fontSize: 14, color: isActive ? HC.red : isDone ? HC.mute : HC.ink,
                       fontFamily: HC.serif, fontStyle: isActive ? 'italic' : 'normal',
-                      opacity: mi > course.currentModule ? 0.35 : 1,
+                      cursor: 'pointer',
                     }}>
                       <span style={{ fontFamily: HC.mono, fontSize: 10, flexShrink: 0, marginTop: 4 }}>
                         {isDone ? '✓' : isActive ? '▸' : '○'}
@@ -1132,7 +1137,10 @@ function CurriculumDrawer({
                       </div>
                       {hasNotes && isDone && (
                         <button
-                          onClick={() => setNotesOpen(isOpen ? null : mi * 100 + li)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNotesOpen(isOpen ? null : mi * 100 + li);
+                          }}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: HC.mono, fontSize: 9, color: HC.mute, padding: 0, flexShrink: 0 }}
                         >
                           {isOpen ? 'hide' : 'notes'}
@@ -1681,6 +1689,13 @@ function LearnContent({ course }: { course: Course }) {
     }
   }
 
+  function handleSelectLesson(moduleIndex: number, lessonIndex: number) {
+    dispatch({ type: 'SELECT_LESSON', id: course.id, moduleIndex, lessonIndex });
+    setNotesOpen(null);
+    setCurriculumOpen(false);
+    setPhase('HOOK');
+  }
+
   async function generateNotesForLesson() {
     if (!mod || !lesson) return;
     const isLastLessonOfModule = course.currentLesson === mod.lessons.length - 1;
@@ -1739,6 +1754,7 @@ function LearnContent({ course }: { course: Course }) {
         course={course}
         open={curriculumOpen}
         onClose={() => setCurriculumOpen(false)}
+        onSelectLesson={handleSelectLesson}
         notesOpen={notesOpen}
         setNotesOpen={setNotesOpen}
       />

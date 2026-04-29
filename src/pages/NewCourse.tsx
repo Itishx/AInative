@@ -134,7 +134,7 @@ export default function NewCourse() {
     const modules: Module[] = curriculum.modules.map((m, i) => ({
       title: m.title,
       lessons: m.lessons.map((l) => ({ ...l, completed: false, quizPassed: false })),
-      unlocked: i === 0,
+      unlocked: true,
       quizPassed: false,
     }));
     const course: Course = {

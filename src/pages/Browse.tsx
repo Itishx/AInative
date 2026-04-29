@@ -33,7 +33,7 @@ export default function Browse() {
       const deadline = new Date(Date.now() + (full.curriculum.estimatedHours / 1) * 3600000 * 1.5).toISOString();
       const modules: Module[] = full.curriculum.modules.map((m: { title: string; lessons: { title: string; objective: string; minutes: number }[] }, mi: number) => ({
         title: m.title,
-        unlocked: mi === 0,
+        unlocked: true,
         quizPassed: false,
         lessons: m.lessons.map((l) => ({ title: l.title, objective: l.objective, minutes: l.minutes, completed: false, quizPassed: false })),
       }));

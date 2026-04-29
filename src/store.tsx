@@ -47,6 +47,7 @@ function migrateCourses(courses: Course[]): Course[] {
       ...c.curriculum,
       modules: c.curriculum.modules.map((m) => ({
         ...m,
+        unlocked: true,
         lessons: m.lessons.map((l) => ({
           ...l,
           objective: l.objective ?? `Understand ${l.title.toLowerCase()}.`,
@@ -119,6 +120,7 @@ type Action =
   | { type: 'UPDATE_COURSE'; id: string; patch: Partial<Course> }
   | { type: 'PAUSE_COURSE'; id: string }
   | { type: 'RESUME_COURSE'; id: string }
+  | { type: 'SELECT_LESSON'; id: string; moduleIndex: number; lessonIndex: number }
   | { type: 'ADD_CHAT'; id: string; lessonKey: string; msg: import('./types').ChatMsg }
   | { type: 'SAVE_LESSON_NOTES'; id: string; moduleIndex: number; lessonIndex: number; notes: string }
   | { type: 'SAVE_MODULE_NOTES'; id: string; moduleIndex: number; notes: string }
@@ -183,6 +185,24 @@ function reducer(state: AppState, action: Action): AppState {
         return { ...c, paused: false, pauseUsed: true, pausedAt: undefined, deadline: newDeadline };
       });
       return checkDeadlines({ ...state, courses });
+    }
+
+    case 'SELECT_LESSON': {
+      const courses = state.courses.map((c) => {
+        if (c.id !== action.id) return c;
+        const module = c.curriculum.modules[action.moduleIndex];
+        if (!module?.lessons[action.lessonIndex]) return c;
+        return {
+          ...c,
+          currentModule: action.moduleIndex,
+          currentLesson: action.lessonIndex,
+          curriculum: {
+            ...c.curriculum,
+            modules: c.curriculum.modules.map((m) => ({ ...m, unlocked: true })),
+          },
+        };
+      });
+      return { ...state, courses };
     }
 
     case 'ADD_CHAT': {
