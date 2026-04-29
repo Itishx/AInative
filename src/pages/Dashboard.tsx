@@ -238,6 +238,154 @@ function CourseRow({
   );
 }
 
+function ProfilePanel({
+  displayName,
+  handle,
+  bio,
+  avatarUrl,
+  joined,
+  stats,
+  courseCount,
+  onEdit,
+}: {
+  displayName: string;
+  handle: string;
+  bio: string;
+  avatarUrl: string | undefined;
+  joined: string;
+  stats: { notStarted: number; inProgress: number; done: number; urgent: number; archived: number };
+  courseCount: number;
+  onEdit: () => void;
+}) {
+  const profileScore = Math.max(1, Math.round((stats.inProgress * 7 + stats.done * 18 + courseCount * 3) * 10) / 10);
+
+  return (
+    <aside style={{
+      position: 'sticky',
+      top: 28,
+      minHeight: 'calc(100vh - 56px)',
+      borderRight: `1px solid ${D.faint}`,
+      padding: '34px 34px 34px 0',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'space-between',
+      gap: 34,
+    }}>
+      <div>
+        <div
+          style={{
+            width: 132,
+            height: 132,
+            borderRadius: '50%',
+            display: 'grid',
+            placeItems: 'center',
+            background: 'linear-gradient(135deg, rgba(246,240,231,0.12), rgba(255,81,72,0.28))',
+            border: `1px solid ${D.faint}`,
+            overflow: 'hidden',
+            color: D.ink,
+            fontFamily: D.serif,
+            fontSize: 64,
+            letterSpacing: '-0.06em',
+          }}
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            displayName[0]?.toUpperCase() ?? 'L'
+          )}
+        </div>
+
+        <h1 style={{ margin: '34px 0 0', fontFamily: D.sans, fontSize: 28, lineHeight: 1, letterSpacing: '-0.055em', color: D.ink }}>
+          {displayName}
+          <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: 999, marginLeft: 8, background: D.red, color: D.bg, fontFamily: D.mono, fontSize: 11, verticalAlign: 2 }}>
+            ✓
+          </span>
+        </h1>
+        <div style={{ marginTop: 10, fontFamily: D.sans, fontSize: 20, color: D.mute }}>
+          Learnor student · @{handle}
+        </div>
+
+        <p style={{ margin: '32px 0 0', maxWidth: 330, fontFamily: D.sans, fontSize: 22, lineHeight: 1.38, color: D.ink, letterSpacing: '-0.025em' }}>
+          {bio}
+        </p>
+
+        <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'center', marginTop: 30, color: D.mute, fontFamily: D.sans, fontSize: 18 }}>
+          <span><b style={{ color: D.ink }}>{courseCount}</b> Courses</span>
+          <span><b style={{ color: D.ink }}>{stats.done}</b> Finished</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: `1px solid ${D.faint}`, borderRadius: 999, padding: '8px 14px', color: D.ink }}>
+            ✦ {profileScore}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 28 }}>
+          <button
+            onClick={onEdit}
+            style={{
+              border: `1px solid ${D.faint}`,
+              borderRadius: 999,
+              background: 'transparent',
+              color: D.ink,
+              padding: '14px 24px',
+              fontFamily: D.sans,
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Edit profile
+          </button>
+          <button
+            onClick={() => navigator.clipboard?.writeText(window.location.href)}
+            style={{
+              border: `1px solid ${D.faint}`,
+              borderRadius: 999,
+              background: 'transparent',
+              color: D.ink,
+              padding: '14px 24px',
+              fontFamily: D.sans,
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Share
+          </button>
+        </div>
+
+        <div style={{ borderTop: `1px solid ${D.faint}`, marginTop: 36, paddingTop: 28 }}>
+          <div style={{ fontFamily: D.sans, fontSize: 19, fontWeight: 800, color: D.ink }}>Communities</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+            {['Build3r', 'Cod3r'].map((item) => (
+              <span key={item} style={{ border: `1px solid ${D.faint}`, borderRadius: 999, padding: '8px 14px', color: D.mute, fontFamily: D.sans, fontSize: 14 }}>
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ borderTop: `1px solid ${D.faint}`, marginTop: 28, paddingTop: 26, display: 'grid', gap: 14, fontFamily: D.sans, fontSize: 17, color: D.mute }}>
+          <span>⌖ Hyderabad</span>
+          <span>↗ learnor.app</span>
+          <span>▣ Joined {joined}</span>
+        </div>
+      </div>
+
+      <div style={{ border: `1px solid ${D.faint}`, borderRadius: 28, padding: 24 }}>
+        <div style={{ fontFamily: D.sans, fontSize: 19, fontWeight: 800, color: D.ink }}>Invite friends</div>
+        <p style={{ margin: '12px 0 18px', fontFamily: D.sans, fontSize: 16, lineHeight: 1.45, color: D.mute }}>
+          Share Learnor and earn profile score when friends finish courses.
+        </p>
+        <button
+          onClick={() => navigator.clipboard?.writeText(window.location.origin)}
+          style={{ width: '100%', border: `1px solid ${D.faint}`, borderRadius: 999, background: 'transparent', color: D.ink, padding: '13px 18px', fontFamily: D.sans, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}
+        >
+          Invite friends
+        </button>
+      </div>
+    </aside>
+  );
+}
+
 export default function Dashboard() {
   const { state, dispatch } = useStore();
   const { dark } = useTheme();
@@ -326,7 +474,7 @@ export default function Dashboard() {
           : 'radial-gradient(circle at 72% 8%, rgba(196,34,27,0.08), transparent 30%), radial-gradient(circle at 15% 85%, rgba(26,21,16,0.045), transparent 28%)',
       }} />
 
-      <main style={{ position: 'relative', maxWidth: 1280, margin: '0 auto', padding: '28px clamp(20px, 4vw, 58px) 64px' }}>
+      <main style={{ position: 'relative', maxWidth: 1520, margin: '0 auto', padding: '28px clamp(20px, 4vw, 58px) 64px' }}>
         <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, paddingBottom: 42 }}>
           <button onClick={() => navigate('/')} style={{ border: 'none', background: 'transparent', color: D.ink, cursor: 'pointer', padding: 0, fontFamily: D.serif, fontSize: 30, letterSpacing: '-0.055em' }}>
             Learnor
@@ -344,51 +492,31 @@ export default function Dashboard() {
           </div>
         </nav>
 
-        <section style={{ borderBottom: `1px solid ${D.faint}`, paddingBottom: 34 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '128px minmax(0, 1fr) 360px', gap: 30, alignItems: 'end' }}>
-            <div
-              style={{
-                width: 112,
-                height: 112,
-                borderRadius: '50%',
-                display: 'grid',
-                placeItems: 'center',
-                background: dark
-                  ? 'linear-gradient(135deg, rgba(246,240,231,0.18), rgba(255,81,72,0.35))'
-                  : 'linear-gradient(135deg, rgba(26,21,16,0.08), rgba(196,34,27,0.18))',
-                border: `1px solid ${D.faint}`,
-                color: D.ink,
-                fontFamily: D.serif,
-                fontSize: 54,
-                letterSpacing: '-0.06em',
-                boxShadow: '0 22px 80px rgba(255,81,72,0.12)',
-              }}
-            >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                displayName[0]?.toUpperCase() ?? 'L'
-              )}
-            </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)', gap: 'clamp(34px, 5vw, 72px)', alignItems: 'start' }}>
+          <ProfilePanel
+            displayName={displayName}
+            handle={handle}
+            bio={bio}
+            avatarUrl={avatarUrl}
+            joined={joined}
+            stats={stats}
+            courseCount={state.courses.length}
+            onEdit={() => navigate('/settings')}
+          />
 
+          <div style={{ minWidth: 0 }}>
+        <section style={{ borderBottom: `1px solid ${D.faint}`, paddingBottom: 34 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 420px)', gap: 34, alignItems: 'end' }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
                 Dashboard
               </div>
-              <h1 style={{ margin: '10px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(54px, 7vw, 104px)', lineHeight: 0.82, letterSpacing: '-0.075em', color: D.ink }}>
-                {displayName}
+              <h1 style={{ margin: '10px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(54px, 7vw, 108px)', lineHeight: 0.82, letterSpacing: '-0.075em', color: D.ink }}>
+                Your courses.
               </h1>
-              <div style={{ marginTop: 12, fontFamily: D.sans, fontSize: 17, color: D.mute }}>
-                @{handle}
-              </div>
-              <p style={{ maxWidth: 600, margin: '16px 0 0', color: D.ink, fontFamily: D.sans, fontSize: 16, lineHeight: 1.55 }}>
-                {bio}
+              <p style={{ maxWidth: 620, margin: '20px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 18, lineHeight: 1.55 }}>
+                Pick up anything, jump to any lesson, and keep the clock visible without the page feeling like a spreadsheet.
               </p>
-              <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 15, fontFamily: D.mono, fontSize: 9.5, color: D.mute, letterSpacing: '0.10em', textTransform: 'uppercase' }}>
-                <span>{state.courses.length} courses</span>
-                <span>{stats.done} finished</span>
-                <span>joined {joined}</span>
-              </div>
             </div>
 
             <ConsistencyGrid courses={state.courses} />
@@ -530,6 +658,8 @@ export default function Dashboard() {
             </div>
           </section>
         )}
+          </div>
+        </div>
       </main>
     </div>
   );
