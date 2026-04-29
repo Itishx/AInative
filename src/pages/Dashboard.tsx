@@ -164,7 +164,7 @@ function CourseRow({
     >
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-          <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 34, lineHeight: 0.95, letterSpacing: '-0.045em', fontWeight: 400, color: D.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 26, lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 400, color: D.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {course.subject}
           </h2>
           <span style={{ flexShrink: 0, fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase', color: status.color }}>
@@ -265,7 +265,7 @@ function ProfilePanel({
       top: 28,
       minHeight: 'calc(100vh - 56px)',
       borderRight: `1px solid ${D.faint}`,
-      padding: '34px 34px 34px 0',
+      padding: '24px 28px 28px 0',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
@@ -274,8 +274,8 @@ function ProfilePanel({
       <div>
         <div
           style={{
-            width: 132,
-            height: 132,
+            width: 96,
+            height: 96,
             borderRadius: '50%',
             display: 'grid',
             placeItems: 'center',
@@ -284,7 +284,7 @@ function ProfilePanel({
             overflow: 'hidden',
             color: D.ink,
             fontFamily: D.serif,
-            fontSize: 64,
+            fontSize: 44,
             letterSpacing: '-0.06em',
           }}
         >
@@ -295,29 +295,29 @@ function ProfilePanel({
           )}
         </div>
 
-        <h1 style={{ margin: '34px 0 0', fontFamily: D.sans, fontSize: 28, lineHeight: 1, letterSpacing: '-0.055em', color: D.ink }}>
+        <h1 style={{ margin: '24px 0 0', fontFamily: D.sans, fontSize: 21, lineHeight: 1, letterSpacing: '-0.045em', color: D.ink }}>
           {displayName}
-          <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: 999, marginLeft: 8, background: D.red, color: D.bg, fontFamily: D.mono, fontSize: 11, verticalAlign: 2 }}>
+          <span style={{ display: 'inline-grid', placeItems: 'center', width: 16, height: 16, borderRadius: 999, marginLeft: 7, background: D.red, color: D.bg, fontFamily: D.mono, fontSize: 9, verticalAlign: 2 }}>
             ✓
           </span>
         </h1>
-        <div style={{ marginTop: 10, fontFamily: D.sans, fontSize: 20, color: D.mute }}>
+        <div style={{ marginTop: 8, fontFamily: D.sans, fontSize: 14, color: D.mute }}>
           Learnor student · @{handle}
         </div>
 
-        <p style={{ margin: '32px 0 0', maxWidth: 330, fontFamily: D.sans, fontSize: 22, lineHeight: 1.38, color: D.ink, letterSpacing: '-0.025em' }}>
+        <p style={{ margin: '24px 0 0', maxWidth: 290, fontFamily: D.sans, fontSize: 15, lineHeight: 1.5, color: D.ink, letterSpacing: '-0.01em' }}>
           {bio}
         </p>
 
-        <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'center', marginTop: 30, color: D.mute, fontFamily: D.sans, fontSize: 18 }}>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginTop: 22, color: D.mute, fontFamily: D.sans, fontSize: 13 }}>
           <span><b style={{ color: D.ink }}>{courseCount}</b> Courses</span>
           <span><b style={{ color: D.ink }}>{stats.done}</b> Finished</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: `1px solid ${D.faint}`, borderRadius: 999, padding: '8px 14px', color: D.ink }}>
-            ✦ {profileScore}
+            {profileScore}
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 28 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 22 }}>
           <button
             onClick={onEdit}
             style={{
@@ -325,9 +325,9 @@ function ProfilePanel({
               borderRadius: 999,
               background: 'transparent',
               color: D.ink,
-              padding: '14px 24px',
+              padding: '10px 18px',
               fontFamily: D.sans,
-              fontSize: 15,
+              fontSize: 13,
               fontWeight: 700,
               cursor: 'pointer',
             }}
@@ -341,9 +341,9 @@ function ProfilePanel({
               borderRadius: 999,
               background: 'transparent',
               color: D.ink,
-              padding: '14px 24px',
+              padding: '10px 18px',
               fontFamily: D.sans,
-              fontSize: 15,
+              fontSize: 13,
               fontWeight: 700,
               cursor: 'pointer',
             }}
@@ -352,32 +352,32 @@ function ProfilePanel({
           </button>
         </div>
 
-        <div style={{ borderTop: `1px solid ${D.faint}`, marginTop: 36, paddingTop: 28 }}>
-          <div style={{ fontFamily: D.sans, fontSize: 19, fontWeight: 800, color: D.ink }}>Communities</div>
+        <div style={{ borderTop: `1px solid ${D.faint}`, marginTop: 28, paddingTop: 22 }}>
+          <div style={{ fontFamily: D.sans, fontSize: 15, fontWeight: 800, color: D.ink }}>Communities</div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
             {['Build3r', 'Cod3r'].map((item) => (
-              <span key={item} style={{ border: `1px solid ${D.faint}`, borderRadius: 999, padding: '8px 14px', color: D.mute, fontFamily: D.sans, fontSize: 14 }}>
+              <span key={item} style={{ border: `1px solid ${D.faint}`, borderRadius: 999, padding: '7px 12px', color: D.mute, fontFamily: D.sans, fontSize: 12 }}>
                 {item}
               </span>
             ))}
           </div>
         </div>
 
-        <div style={{ borderTop: `1px solid ${D.faint}`, marginTop: 28, paddingTop: 26, display: 'grid', gap: 14, fontFamily: D.sans, fontSize: 17, color: D.mute }}>
+        <div style={{ borderTop: `1px solid ${D.faint}`, marginTop: 22, paddingTop: 20, display: 'grid', gap: 10, fontFamily: D.sans, fontSize: 13, color: D.mute }}>
           <span>⌖ Hyderabad</span>
           <span>↗ learnor.app</span>
           <span>▣ Joined {joined}</span>
         </div>
       </div>
 
-      <div style={{ border: `1px solid ${D.faint}`, borderRadius: 28, padding: 24 }}>
-        <div style={{ fontFamily: D.sans, fontSize: 19, fontWeight: 800, color: D.ink }}>Invite friends</div>
-        <p style={{ margin: '12px 0 18px', fontFamily: D.sans, fontSize: 16, lineHeight: 1.45, color: D.mute }}>
+      <div style={{ border: `1px solid ${D.faint}`, borderRadius: 22, padding: 18 }}>
+        <div style={{ fontFamily: D.sans, fontSize: 15, fontWeight: 800, color: D.ink }}>Invite friends</div>
+        <p style={{ margin: '10px 0 14px', fontFamily: D.sans, fontSize: 13, lineHeight: 1.45, color: D.mute }}>
           Share Learnor and earn profile score when friends finish courses.
         </p>
         <button
           onClick={() => navigator.clipboard?.writeText(window.location.origin)}
-          style={{ width: '100%', border: `1px solid ${D.faint}`, borderRadius: 999, background: 'transparent', color: D.ink, padding: '13px 18px', fontFamily: D.sans, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}
+          style={{ width: '100%', border: `1px solid ${D.faint}`, borderRadius: 999, background: 'transparent', color: D.ink, padding: '10px 14px', fontFamily: D.sans, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
         >
           Invite friends
         </button>
@@ -492,7 +492,7 @@ export default function Dashboard() {
           </div>
         </nav>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)', gap: 'clamp(34px, 5vw, 72px)', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 300px) minmax(0, 1fr)', gap: 'clamp(28px, 4vw, 56px)', alignItems: 'start' }}>
           <ProfilePanel
             displayName={displayName}
             handle={handle}
@@ -511,10 +511,10 @@ export default function Dashboard() {
               <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
                 Dashboard
               </div>
-              <h1 style={{ margin: '10px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(54px, 7vw, 108px)', lineHeight: 0.82, letterSpacing: '-0.075em', color: D.ink }}>
+              <h1 style={{ margin: '10px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(42px, 5.4vw, 78px)', lineHeight: 0.88, letterSpacing: '-0.07em', color: D.ink }}>
                 Your courses.
               </h1>
-              <p style={{ maxWidth: 620, margin: '20px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 18, lineHeight: 1.55 }}>
+              <p style={{ maxWidth: 560, margin: '16px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 14, lineHeight: 1.55 }}>
                 Pick up anything, jump to any lesson, and keep the clock visible without the page feeling like a spreadsheet.
               </p>
             </div>
@@ -522,7 +522,7 @@ export default function Dashboard() {
             <ConsistencyGrid courses={state.courses} />
           </div>
 
-          <div style={{ marginTop: 34, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 18 }}>
+          <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 18 }}>
             {[
               ['Active', stats.inProgress],
               ['Waiting', stats.notStarted],
@@ -530,7 +530,7 @@ export default function Dashboard() {
               ['Done', stats.done],
             ].map(([label, value]) => (
               <div key={label} style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 14 }}>
-                <div style={{ fontFamily: D.serif, fontSize: 52, lineHeight: 0.85, color: label === 'Urgent' ? D.red : D.ink }}>{value}</div>
+                <div style={{ fontFamily: D.serif, fontSize: 38, lineHeight: 0.9, color: label === 'Urgent' ? D.red : D.ink }}>{value}</div>
                 <div style={{ marginTop: 10, fontFamily: D.mono, fontSize: 9, color: D.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}</div>
               </div>
             ))}
@@ -599,7 +599,7 @@ export default function Dashboard() {
         <section>
           {state.courses.length === 0 ? (
             <div style={{ borderTop: `1px solid ${D.faint}`, padding: '44px 0' }}>
-              <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 58, fontWeight: 400, letterSpacing: '-0.06em' }}>No courses yet.</h2>
+              <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 42, fontWeight: 400, letterSpacing: '-0.06em' }}>No courses yet.</h2>
               <p style={{ margin: '12px 0 0', color: D.mute }}>Start one topic and Learnor will build the path.</p>
             </div>
           ) : filteredCourses.length === 0 ? (
@@ -622,7 +622,7 @@ export default function Dashboard() {
         {upcoming.length > 0 && (
           <section style={{ marginTop: 56, borderTop: `1px solid ${D.faint}`, paddingTop: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'baseline', marginBottom: 18 }}>
-              <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 44, fontWeight: 400, letterSpacing: '-0.055em' }}>Deadline line</h2>
+              <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 34, fontWeight: 400, letterSpacing: '-0.055em' }}>Deadline line</h2>
               <span style={{ fontFamily: D.mono, color: D.mute, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Next on the clock</span>
             </div>
             <div style={{ display: 'grid', gap: 14 }}>

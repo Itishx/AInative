@@ -149,9 +149,11 @@ function reducer(state: AppState, action: Action): AppState {
       const courses = migrateCourses(action.courses ?? []);
       return checkDeadlines({
         ...state,
-        courses: mergeCourses(courses, state.courses),
+        // Local state may contain newer chat/progress than a stale DB row.
+        // Keep local versions first, then backfill anything only found in DB.
+        courses: mergeCourses(state.courses, courses),
         username: action.username && action.username !== 'you' ? action.username : state.username,
-        profile: { ...state.profile, ...(action.profile ?? {}) },
+        profile: { ...(action.profile ?? {}), ...state.profile },
       });
     }
 
@@ -371,13 +373,21 @@ export function StoreProvider({
           user_id: userId,
           courses: state.courses,
           username: state.username,
+          profile: state.profile,
           updated_at: new Date().toISOString(),
         })
-        .then(() => {
+        .then(({ error }) => {
+          if (!error) return;
+          // Older Supabase tables may not have the profile column yet.
+          // Still save courses/username instead of dropping all progress.
           supabase
             .from('user_courses')
-            .update({ profile: state.profile, updated_at: new Date().toISOString() })
-            .eq('user_id', userId)
+            .upsert({
+              user_id: userId,
+              courses: state.courses,
+              username: state.username,
+              updated_at: new Date().toISOString(),
+            })
             .then();
         });
     }, 2000);
