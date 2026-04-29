@@ -1,5 +1,4 @@
 import express from 'express';
-import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 import multer from 'multer';
 import cors from 'cors';
@@ -107,6 +106,8 @@ function buildOpeningTutorReply({ lessonTitle, lessonObjective, conceptDescripti
     text: trimWords(`${first} ${second}`, 90),
     readyToMoveOn: false,
     askedQuestion: false,
+    confidenceSignal: 'medium',
+    anchorSentence: null,
   };
 }
 
@@ -164,11 +165,24 @@ function safeParseTutorPayload(raw) {
     } catch {}
   }
 
-  // Truncated JSON — extract "text" field value before the cutoff
+  // Truncated JSON — text field present with closing quote
   const textMatch = cleaned.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
   if (textMatch) {
     return {
       text: textMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'),
+      readyToMoveOn: false,
+      askedQuestion: false,
+    };
+  }
+
+  // Truncated JSON — text field cut off mid-string (no closing quote)
+  const unclosedMatch = cleaned.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)/);
+  if (unclosedMatch && unclosedMatch[1]) {
+    const partial = unclosedMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').trim();
+    // Keep only complete sentences so it doesn't end mid-word
+    const lastComplete = partial.match(/^([\s\S]*[.!?])\s*/);
+    return {
+      text: lastComplete ? lastComplete[1].trim() : partial,
       readyToMoveOn: false,
       askedQuestion: false,
     };
@@ -203,6 +217,8 @@ function buildTutorFallbackReply({
       text: `Quick check: in one short sentence, what is the main job of ${lessonTitle}?`,
       readyToMoveOn: false,
       askedQuestion: true,
+      confidenceSignal: 'medium',
+      anchorSentence: null,
     };
   }
 
@@ -211,6 +227,8 @@ function buildTutorFallbackReply({
       text: trimWords(`${descriptionSentence} ${factSentence}`.trim() || `The key point is ${lessonTitle}.`, 55),
       readyToMoveOn: false,
       askedQuestion: false,
+      confidenceSignal: 'low',
+      anchorSentence: null,
     };
   }
 
@@ -226,6 +244,8 @@ function buildTutorFallbackReply({
     text: normalizeTutorReply(parts.join(' '), { currentPhase, isOpening, allowQuestion }),
     readyToMoveOn: false,
     askedQuestion: !isOpening && allowQuestion,
+    confidenceSignal: allowQuestion ? 'medium' : 'low',
+    anchorSentence: null,
   };
 }
 
@@ -239,13 +259,11 @@ async function runCheckerAgent({ lessonTitle, lessonObjective, chatMessages }) {
       .map((m) => `${m.who === 'user' ? 'STUDENT' : 'TUTOR'}: ${String(m.text || '').trim()}`)
       .join('\n');
 
-    const res = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 80,
-      system: 'You are a learning quality checker. Respond ONLY with valid JSON, no markdown.',
-      messages: [{
+    const text = await callGemini(
+      'You are a learning quality checker. Respond ONLY with valid JSON, no markdown.',
+      [{
         role: 'user',
-        content: `Lesson: "${lessonTitle}"
+        content: [{ type: 'text', text: `Lesson: "${lessonTitle}"
 Objective: "${lessonObjective}"
 
 Chat:
@@ -253,16 +271,56 @@ ${historyText}
 
 Did the student demonstrate genuine understanding — answered a question correctly, explained something in their own words, or showed applied knowledge? Saying "got it", "okay", "next", "continue", "i get it", or "you may continue" does NOT count.
 
-{"approved":true/false}`,
+{"approved":true/false}` }],
       }],
-    });
+      80,
+    );
 
-    const text = res.content[0].type === 'text' ? res.content[0].text : '';
     const result = JSON.parse(text.trim().replace(/^```json\n?|```$/g, ''));
     return !!result.approved;
   } catch {
     return false;
   }
+}
+
+function repairCurriculumJson(raw) {
+  const cleaned = String(raw || '')
+    .trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/```$/g, '')
+    .trim();
+
+  try { return JSON.parse(cleaned); } catch {}
+
+  // Walk char-by-char tracking depth so we can truncate at the last complete lesson
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let lastLessonClosePos = -1;
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (escape) { escape = false; continue; }
+    if (inString) {
+      if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '{' || ch === '[') depth++;
+    if (ch === '}' || ch === ']') {
+      depth--;
+      // depth 4 after a '}' means we just closed a lesson object (was depth 5)
+      if (depth === 4 && ch === '}') lastLessonClosePos = i;
+    }
+  }
+
+  if (lastLessonClosePos >= 0) {
+    // Stack at this point: root{ modules[ module{ lessons[ — close them all
+    try { return JSON.parse(cleaned.slice(0, lastLessonClosePos + 1) + ']}]}'); } catch {}
+  }
+
+  return null;
 }
 
 function normalizeCurriculum(curriculum) {
@@ -289,6 +347,67 @@ function normalizeCurriculum(curriculum) {
     estimatedHours: Number(Math.max(0.1, totalMinutes / 60).toFixed(1)),
     modules,
   };
+}
+
+const GEMINI_MODEL = 'gemini-3-flash-preview';
+
+async function callGemini(systemPrompt, messages, maxTokens = 900, disableThinking = false) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY not set');
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+
+  // Gemini requires alternating user/model turns, starting with user
+  const contents = messages
+    .filter((m) => m?.content?.[0]?.text?.trim())
+    .map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content[0].text }],
+    }));
+
+  // Ensure starts with user
+  if (!contents.length || contents[0].role !== 'user') {
+    contents.unshift({ role: 'user', parts: [{ text: 'Begin.' }] });
+  }
+
+  const generationConfig = {
+    maxOutputTokens: maxTokens,
+    temperature: 0.7,
+  };
+  if (disableThinking) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
+
+  const body = {
+    system_instruction: { parts: [{ text: systemPrompt }] },
+    contents,
+    generationConfig,
+  };
+
+  const fetchOnce = () => fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  let res = await fetchOnce();
+  let data = await res.json();
+
+  // Auto-retry once on 429 using the delay Gemini provides
+  if (res.status === 429) {
+    const retryDetail = data?.error?.details?.find((d) => d?.retryDelay);
+    const delaySec = retryDetail?.retryDelay
+      ? parseFloat(String(retryDetail.retryDelay)) || 20
+      : 20;
+    await new Promise((r) => setTimeout(r, (delaySec + 1) * 1000));
+    res = await fetchOnce();
+    data = await res.json();
+  }
+
+  if (!res.ok) throw new Error(data.error?.message || `Gemini error ${res.status}`);
+  // Filter out thought parts (internal reasoning) — only keep actual output parts
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  return parts.filter((p) => !p.thought).map((p) => p.text ?? '').join('');
 }
 
 function buildTutorApiMessages(messages, starterText) {
@@ -361,19 +480,9 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '4mb' }));
 
-let client = null;
-function getClient() {
-  if (!client) {
-    const key = process.env.ANTHROPIC_API_KEY;
-    if (!key) throw new Error('ANTHROPIC_API_KEY not set in .env');
-    client = new Anthropic({ apiKey: key });
-  }
-  return client;
-}
-
 app.get('/api/health', (_, res) => res.json({
   ok: true,
-  hasKey: !!process.env.ANTHROPIC_API_KEY,
+  hasGeminiKey: !!process.env.GEMINI_API_KEY,
   hasElevenLabsKey: !!process.env.ELEVENLABS_API_KEY,
   hasElevenLabsVoice: !!process.env.ELEVENLABS_VOICE_ID,
 }));
@@ -606,13 +715,11 @@ async function researchTopic(topic) {
 
   let synthesis = '';
   try {
-    const msg = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2600,
-      system: 'You are a research librarian for an educational product. Extract only useful, source-grounded teaching material. No markdown table. No invented facts.',
-      messages: [{
+    synthesis = await callGemini(
+      'You are a research librarian for an educational product. Extract only useful, source-grounded teaching material. No markdown table. No invented facts.',
+      [{
         role: 'user',
-        content: `Topic: ${topic}
+        content: [{ type: 'text', text: `Topic: ${topic}
 
 Create a compact teaching research pack from these sources. Include:
 - core concepts that must be taught
@@ -626,10 +733,11 @@ Only use the provided sources. If sources disagree or are thin, say so.
 SOURCES:
 ${sources.map((source, index) => `[${index + 1}] ${source.title}
 ${source.url}
-${source.text}`).join('\n\n---\n\n')}`,
+${source.text}`).join('\n\n---\n\n')}` }],
       }],
-    });
-    synthesis = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
+      2600,
+    );
+    synthesis = synthesis.trim();
   } catch (err) {
     console.warn('[research:synthesis]', err.message);
   }
@@ -656,13 +764,8 @@ app.post('/api/curriculum', async (req, res) => {
   try {
     const research = await researchTopic(topic);
     const materialsContext = research.materialsContext || '';
-    const msg = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
-      system: 'You are a curriculum designer. Respond ONLY with valid JSON, no markdown fences.',
-      messages: [{
-        role: 'user',
-        content: materialsContext ? `Create a learning curriculum for: "${topic}". The student has ${days} days.
+    const curriculumPrompt = materialsContext
+      ? `Create a learning curriculum for: "${topic}". The student has ${days} days.
 
 Build this curriculum STRICTLY from the researched source pack below. Do not include lessons that are not supported by the pack.
 ===
@@ -693,7 +796,8 @@ Rules:
 - 5–7 modules, 2–4 lessons each. Every lesson must be 2–5 minutes max; choose 2 for simple concepts, 3–4 for normal concepts, 5 only for dense technical concepts.
 - Each lesson objective: one sentence describing what the student should understand by the end.
 - Each lesson description: exactly 2 sentences — what the concept is + why it matters.
-- Each lesson facts array: 3–5 specific facts from the research pack only. Never invent facts.` : `Create a learning curriculum for: "${topic}". The student has ${days} days.
+- Each lesson facts array: 3–5 specific facts from the research pack only. Never invent facts.`
+      : `Create a learning curriculum for: "${topic}". The student has ${days} days.
 Return ONLY valid JSON:
 {
   "title": "...",
@@ -718,12 +822,16 @@ Rules:
 - 5–7 modules, 2–4 lessons each. Every lesson must be 2–5 minutes max; choose 2 for simple concepts, 3–4 for normal concepts, 5 only for dense technical concepts.
 - Each lesson objective: one sentence describing what the student should understand by the end.
 - Each lesson description: exactly 2 sentences — what the concept is + why it matters.
-- Each lesson facts array: 3–5 specific, verifiable facts only. If topic is niche or obscure, include only facts you are highly confident about. Never invent facts.`,
-      }],
-    });
-    const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
+- Each lesson facts array: 3–5 specific, verifiable facts only. If topic is niche or obscure, include only facts you are highly confident about. Never invent facts.`;
+    const text = await callGemini(
+      'You are a curriculum designer. Respond ONLY with valid JSON, no markdown fences.',
+      [{ role: 'user', content: [{ type: 'text', text: curriculumPrompt }] }],
+      8192,
+    );
+    const parsedCurriculum = repairCurriculumJson(text);
+    if (!parsedCurriculum) throw new Error('Could not parse curriculum JSON');
     res.json({
-      ...normalizeCurriculum(JSON.parse(text.trim().replace(/^```json\n?|```$/g, ''))),
+      ...normalizeCurriculum(parsedCurriculum),
       materialsContext,
       researchSources: research.sources || [],
       researchStatus: research.status,
@@ -749,13 +857,9 @@ app.post('/api/research-topic', async (req, res) => {
 app.post('/api/lesson-plan', async (req, res) => {
   const { courseTitle, moduleTitle, lessonTitle, lessonObjective, description, facts, priorKnowledge } = req.body;
   try {
-    const msg = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
-      system: 'You are a teaching strategist. Write a direct, practical lesson plan. No headings, no JSON, just plain guidance.',
-      messages: [{
-        role: 'user',
-        content: `You are about to teach a 1-on-1 lesson.
+    const planMessages = [{
+      role: 'user',
+      content: [{ type: 'text', text: `You are about to teach a 1-on-1 lesson.
 
 Course: "${courseTitle}"
 Module: "${moduleTitle}"
@@ -775,10 +879,13 @@ Write a 150-200 word teaching plan for this specific student. Cover:
 - What check question to ask them
 - One common misconception to watch for
 
-Write as direct instructions to yourself as the tutor, not to the student.`,
-      }],
-    });
-    const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
+Write as direct instructions to yourself as the tutor, not to the student.` }],
+    }];
+    const text = await callGemini(
+      'You are a teaching strategist. Write a direct, practical lesson plan. No headings, no JSON, just plain guidance.',
+      planMessages,
+      600,
+    );
     res.json({ plan: text.trim() });
   } catch (err) {
     console.error('[lesson-plan]', err.message);
@@ -898,78 +1005,120 @@ app.post('/api/chat', async (req, res) => {
       ? `\n\n━━━ YOUR PERSONALIZED TEACHING PLAN ━━━\n${String(lessonPlan).slice(0, 2000)}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nFollow this plan. Adapt if the student goes a different direction, but use the approach it describes.`
       : '';
 
-    const systemPrompt = `You are an AI tutor teaching a course called: "${courseTitle}"
+    const prevTutorTexts = (Array.isArray(messages) ? messages : [])
+      .filter((m) => m?.who === 'tutor' && m?.text?.trim())
+      .map((m) => String(m.text).trim())
+      .filter(Boolean);
+    const alreadyCoveredSection = prevTutorTexts.length
+      ? `\n\n━━━ WHAT YOU HAVE ALREADY SAID (DO NOT REPEAT) ━━━\n${prevTutorTexts.map((t, i) => `[${i + 1}] ${t.slice(0, 300)}`).join('\n')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nThe above sentences are already in the student's chat. If you write any of these sentences again word-for-word or near-verbatim, you are hallucinating. Move forward to genuinely new content.`
+      : '';
 
-You are inside module "${moduleTitle}" and teaching exactly one lesson:
-LESSON: ${lessonTitle}
-OBJECTIVE: ${objective}
-DESCRIPTION: ${description}
-KEY FACTS: ${facts}
+    const systemPrompt = `IDENTITY
+You are an elite AI tutor: part Socrates, part engineer, part coach.
+You are teaching: "${courseTitle}"
+Current module: "${moduleTitle}"
+Current lesson: "${lessonTitle}"
 
-Current phase: ${currentPhase}
-Opening turn: ${openingTurn ? 'yes' : 'no'}
-You may end with one short check-in question this turn: ${allowQuestionThisTurn ? 'yes' : 'no'}
-Student requested a canvas example this turn: ${visualExampleTurn ? 'yes' : 'no'}
+LESSON METADATA
+- OBJECTIVE: ${objective}
+- DESCRIPTION: ${description}
+- KEY FACTS: ${facts}
+- RESEARCH/MATERIALS: Provided below when available.
+- PREVIOUS TUTOR MESSAGES: Provided below when available.
 
-You MUST reply ONLY as valid JSON:
-{"text":"...","readyToMoveOn":false,"askedQuestion":false,"visual":null}
+RUNTIME STATE
+- Current phase: ${currentPhase}
+- Opening turn: ${openingTurn ? 'yes' : 'no'}
+- Check-in allowed this turn: ${allowQuestionThisTurn ? 'yes' : 'no'}
+- Student requested canvas example: ${visualExampleTurn ? 'yes' : 'no'}
 
-CANVAS RULES (the "visual" field renders on the canvas panel beside the chat):
-- Code of any kind → ALWAYS goes in "visual" as a fenced code block (three backticks + language). NEVER put code in "text". Not even a one-liner.
-- Table, schema, key-value pairs, data structure → ALWAYS put a full markdown table (header + --- row + 3-5 data rows) in "visual".
-- When you put something in "visual", your "text" MUST reference it naturally: "as you can see in the canvas", "look at the table on the right", "the canvas shows…". Never pretend the visual doesn't exist.
-- When the concept you are explaining CHANGES (a new idea, a new step), set "visual" to null so the canvas clears. Do not keep emitting the same visual across multiple messages.
-- If this turn introduces no new code or structured data, set "visual" to null.
-- Never repeat content in both "text" and "visual". Text is for words; canvas is for code and structure.
-- If the student requested a canvas example, "visual" is REQUIRED this turn.
-- CRITICAL: If the student says the canvas is wrong, different, confusing, or doesn't match — you MUST immediately emit a corrected "visual" in THIS response. Do not just say "let me fix it" and set visual to null. Actually fix it: write the corrected code/table in "visual" right now. Your previous canvas content is shown as [Canvas showed: ...] in the conversation history — use that to understand what was wrong.
+TEACHING PHILOSOPHY: D-SUAVE
+- Define: start each lesson with one clean plain-English definition the student can hold.
+- Surprise: show why the definition matters now, with real stakes.
+- Unpack: teach one idea at a time. Never more.
+- Anchor: connect new ideas to something the student already knows.
+- Verify: make the student construct understanding, not just confirm it.
+- Extend: show where the idea leads next, without jumping out of scope.
 
-CRITICAL BEHAVIOR RULES:
-1. Never dump the full lesson. Teach one tiny idea only.
-2. Never use headings, numbered sections, labels like "WHAT IT IS", "WHY IT MATTERS", "THE ANALOGY", or "CHECK-IN QUESTION".
-3. Never say "let me deliver the full lesson", "from the beginning", or anything similar.
-4. Never use an analogy unless the student explicitly asked for one.
-5. Stay inside ${lessonTitle}. If the student asks about a future topic, defer it in one short sentence and return to this lesson.
-6. Use only high-confidence facts. If even slightly unsure, hedge with "approximately" or "around".
-7. Keep "text" to 3-5 short sentences under 130 words. ALL code and ALL tables go in "visual" — never in "text". They do not count toward the word limit.
-7a. If you wrote any code or backtick formatting inside "text", you violated rule 7. Move it to "visual" and reference the canvas in "text" instead.
-8. Ask at most one question, and only after you have actually taught something in the same message. The only exception is CHECK phase, where asking the question is the point.
-9. If the student says they do not know, are not sure, or are confused, explain more simply. Do not scold them and do not bounce back with another question immediately.
-10. If the student only says "continue", "next", "ok", "got it", or similar, teach the next small piece. Do NOT say they are ready for the quiz.
-11. Check-in questions must test understanding of the concept just taught. Never ask opinion/feeling questions like "does that surprise you?", "does that make sense?", or "did you know that?"
+You are not a textbook. You are a thinking partner.
 
-PHASE RULES:
-- HOOK: Teach the first tiny idea in 2-3 short sentences. No question.
-- EXPLAIN: Teach one next small piece of the lesson in 3-5 short sentences. If question permission is "yes", end with exactly one simple check-in question and set askedQuestion to true. Otherwise askedQuestion must be false.
-- CHECK: Ask exactly one easy question about only the idea just taught. Prefer a very short multiple-choice question. Put each option on its own line exactly like:
-A) ...
-B) ...
-C) ...
-D) ...
-Set askedQuestion to true.
-- REINFORCE: Only evaluate an actual student answer. If the student gave a substantive answer and it is basically correct, confirm briefly, teach one tiny follow-up detail, and only then you may say they can take the quiz. Set readyToMoveOn to true only for a real answer. If they are wrong, vague, or only said continue/next/ok, teach the next small piece instead and set readyToMoveOn to false. askedQuestion must be false.
+JSON OUTPUT FORMAT
+You MUST reply ONLY as valid JSON, with no markdown fence and nothing outside JSON:
+{"text":"string under 130 words, no headings, no bullet dumps","visual":null,"readyToMoveOn":false,"askedQuestion":false,"confidenceSignal":"low","anchorSentence":null}
 
-If the student is repeating what you already taught back to you, do not re-teach the full lesson. Either tighten the explanation or move into a simple check.${scopeSection}${materialsSection}${planSection}`;
+confidenceSignal rules:
+- "low": student is guessing, confused, vague, or wrong.
+- "medium": student understands the surface but has not yet applied it.
+- "high": student can explain it back or apply it correctly; readyToMoveOn may be true only after real demonstrated understanding.
+
+anchorSentence rules:
+- Fill it unless this is the very first idea of the lesson and there is no prior concept to connect to.
+- Format: "This builds on [prior concept] — [how it connects]."
+- Put it in the JSON field only, not inside text.
+
+PHASE RULES
+- DEFINE: Give one plain-English definition. Format: "[Term] is [what it does], used when [situation]." No jargon, no caveats.
+- HOOK: On opening HOOK turns, combine DEFINE and HOOK: one clean definition, then 1-2 sentences of stakes. No question. Never repeat the definition.
+- EXPLAIN: Teach exactly one small piece. If syntax, code, tables, schemas, or structured examples are needed, put them in visual and explain the idea in text. Ask one check-in question only if check-in is allowed and you taught something concrete.
+- CHECK: Ask exactly one question that makes the student construct understanding. Prefer short MCQ or "what happens if..." questions. Never ask "does that make sense?"
+- REINFORCE: Evaluate the student's actual answer. If correct, affirm specifically in one sentence, add one small deeper insight, set confidenceSignal to "high", and consider readyToMoveOn true. If partially correct, fix only the gap. If wrong, identify the confusion type and teach only that. If vague or "I don't know", give a hint and ask a simpler version.
+
+CONFUSION DETECTION PROTOCOL
+When the student expresses confusion, diagnose exactly one type:
+- Vocabulary confusion: redefine the term.
+- Concept confusion: use a different angle, not an analogy unless asked.
+- Application confusion: show a concrete worked example in visual.
+- Prerequisite gap: briefly bridge it and stay in scope.
+Then set confidenceSignal to "low" and do not ask another question in that same turn.
+
+CANVAS / VISUAL RULES
+- Code always goes in visual as a fenced code block. Never put code in text, not even one line.
+- Tables, schemas, key-value structures, and data examples go in visual as markdown tables.
+- Diagrams or flows go in visual as structured markdown or ASCII.
+- If text references a visual, visual must not be null.
+- If the concept changes significantly, set visual to null so the canvas clears.
+- If canvasRequested is true, visual is required.
+- If a previous visual was wrong or incomplete, emit the corrected visual immediately and briefly say it is corrected.
+- Never repeat the same content in both text and visual.
+
+CRITICAL BEHAVIOR RULES
+1. Never dump the full lesson. One idea per turn.
+2. Never use section headers or labels in text.
+3. Never start with hollow praise like "Great!", "Excellent!", or "Perfect!" Specific acknowledgment is fine.
+4. Never use an analogy unless the student asks for one.
+5. Stay inside "${lessonTitle}". If the student asks for a future concept, say "That's exactly where we're headed — let's build to it." Then return to this lesson.
+6. Use only high-confidence facts. If uncertain, say so briefly and stay with what is solid.
+7. Keep text under 130 words. Everything else goes in visual.
+8. Never ask more than one question per turn.
+9. After a correct answer, always teach one new tiny thing; do not only confirm.
+10. The lesson ends when the student can apply the concept, not when they can recite it.
+11. Never say "ready for the quiz" or "shall we move on?" The system decides from confidenceSignal and readyToMoveOn.
+12. Write as if speaking, not as if writing documentation.
+13. If the student only says "continue", "next", "ok", or "got it", teach the next small piece. Do not summarize old content and do not mark readyToMoveOn.
+
+SCOPE RULES
+Use the course scope below to decide what belongs now versus later. If out of scope, acknowledge briefly, say it is coming later, and return to this lesson.
+
+QUALITY EXAMPLE
+For SQL GROUP BY, a strong HOOK is: "GROUP BY is a SQL tool that collapses many rows into groups so you can calculate each group separately. If you have 10 million sales records, it can turn them into one revenue number per country in a single query. What do you think happens to the rows inside each country group?"
+
+Follow D-SUAVE, but always obey the runtime phase and JSON format.${scopeSection}${materialsSection}${planSection}${alreadyCoveredSection}`;
 
     const apiMessages = buildTutorApiMessages(messages, starterText);
 
-    let response;
+    let rawText;
     try {
-      response = await getClient().messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 760,
-        system: systemPrompt,
-        messages: apiMessages,
-      });
+      rawText = await callGemini(systemPrompt, apiMessages, 1600, true);
     } catch (err) {
-      if (String(err?.message || '').includes('messages: at least one message is required')) {
-        response = null;
+      const msg = String(err?.message || '');
+      if (msg.includes('at least one message') || msg.includes('contents') || msg.includes('INVALID_ARGUMENT')) {
+        rawText = null;
       } else {
         throw err;
       }
     }
 
-    if (!response) {
+    if (!rawText) {
       return res.json(buildTutorFallbackReply({
         lessonTitle,
         lessonObjective: objective,
@@ -981,7 +1130,7 @@ If the student is repeating what you already taught back to you, do not re-teach
       }));
     }
 
-    const raw = response.content[0].type === 'text' ? response.content[0].text : '';
+    const raw = rawText;
     const parsed = safeParseTutorPayload(raw);
     const cleaned = normalizeTutorReply(parsed.text || raw, {
       currentPhase,
@@ -1019,7 +1168,19 @@ If the student is repeating what you already taught back to you, do not re-teach
       }
     }
 
-    const finalText = readyToMoveOn ? cleaned : stripPrematureQuizLanguage(cleaned);
+    // If AI has no visual, strip any text that claims to reference the canvas —
+    // otherwise the chat says "look at the canvas" while canvas shows something unrelated.
+    let finalText = readyToMoveOn ? cleaned : stripPrematureQuizLanguage(cleaned);
+    if (!visual) {
+      finalText = finalText
+        .replace(/[Tt]ake a look at the canvas[^.!?]*[.!?]?\s*/g, '')
+        .replace(/[Ll]ook at the (?:table|canvas|diagram|visual)[^.!?]*[.!?]?\s*/g, '')
+        .replace(/[Tt]he canvas (?:now )?shows[^.!?]*[.!?]?\s*/g, '')
+        .replace(/[Aa]s you can see (?:in|on) the canvas[^.!?]*[.!?]?\s*/g, '')
+        .replace(/[Ss]ee the (?:table|canvas|diagram|visual)[^.!?]*[.!?]?\s*/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    }
     res.json({
       text: finalText || buildTutorFallbackReply({
         lessonTitle,
@@ -1033,6 +1194,8 @@ If the student is repeating what you already taught back to you, do not re-teach
       readyToMoveOn,
       askedQuestion: !!parsed.askedQuestion || (allowQuestionThisTurn && /\?\s*$/.test(cleaned)),
       visual,
+      confidenceSignal: ['low', 'medium', 'high'].includes(parsed.confidenceSignal) ? parsed.confidenceSignal : (readyToMoveOn ? 'high' : 'medium'),
+      anchorSentence: typeof parsed.anchorSentence === 'string' && parsed.anchorSentence.trim() ? parsed.anchorSentence.trim() : null,
     });
   } catch (err) {
     console.error('[chat]', err.message);
@@ -1056,23 +1219,21 @@ app.post('/api/notes', async (req, res) => {
       .map((m) => `${m.who === 'user' ? 'Student' : 'Tutor'}: ${m.text}`)
       .join('\n');
 
-    const msg = await getClient().messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      system: 'You are an expert at creating clear, concise study notes.',
-      messages: [{
+    const text = await callGemini(
+      'You are an expert at creating clear, concise study notes.',
+      [{
         role: 'user',
-        content: `Create structured study notes for the lesson "${lessonTitle}" (Module: "${moduleTitle}", Course: "${courseTitle}").
+        content: [{ type: 'text', text: `Create structured study notes for the lesson "${lessonTitle}" (Module: "${moduleTitle}", Course: "${courseTitle}").
 ${chatSummary ? `\nBased on this tutoring session:\n${chatSummary}\n` : ''}
 Format the notes in markdown:
 - Start with ## Key Concepts (3–5 bullet points)
 - Then ## How It Works (brief explanation, may include a short code example if relevant)
 - Then ## Common Mistakes (2–3 pitfalls)
 - End with ## Remember (one-sentence summary)
-Be concise. Notes should fit on one screen.`,
+Be concise. Notes should fit on one screen.` }],
       }],
-    });
-    const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
+      1024,
+    );
     res.json({ notes: text });
   } catch (err) {
     console.error('[notes]', err.message);
@@ -1091,13 +1252,11 @@ app.post('/api/quiz', async (req, res) => {
     .join('\n\n');
 
   try {
-    const msg = await getClient().messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1800,
-      system: 'You are a quiz writer. Respond ONLY with valid JSON, no markdown fences.',
-      messages: [{
+    const text = await callGemini(
+      'You are a quiz writer. Respond ONLY with valid JSON, no markdown fences.',
+      [{
         role: 'user',
-        content: `Write a 5-question quiz for: lesson "${lessonTitle}" (module "${moduleTitle}", course "${courseTitle}").
+        content: [{ type: 'text', text: `Write a 5-question quiz for: lesson "${lessonTitle}" (module "${moduleTitle}", course "${courseTitle}").
 
 ${taughtContent
   ? `====== WHAT THE TUTOR ACTUALLY TAUGHT ======
@@ -1128,10 +1287,10 @@ Return ONLY valid JSON (no markdown fences, no explanation):
     { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": <0-3> }
   ],
   "practicalExercises": []
-}`,
+}` }],
       }],
-    });
-    const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
+      1800,
+    );
     const parsed = JSON.parse(text.trim().replace(/^```json\n?|```$/g, ''));
     parsed.questions = (parsed.questions || [])
       .filter((q) => Array.isArray(q.options) && q.options.length === 4)
@@ -1155,13 +1314,11 @@ Return ONLY valid JSON (no markdown fences, no explanation):
 app.post('/api/grade', async (req, res) => {
   const { question, sampleAnswer, userAnswer } = req.body;
   try {
-    const msg = await getClient().messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 300,
-      system: 'You are a strict but fair tutor grading a student answer. Respond ONLY with valid JSON.',
-      messages: [{
+    const text = await callGemini(
+      'You are a strict but fair tutor grading a student answer. Respond ONLY with valid JSON.',
+      [{
         role: 'user',
-        content: `Grade this student answer fairly.
+        content: [{ type: 'text', text: `Grade this student answer fairly.
 
 Question: "${question}"
 Model answer: "${sampleAnswer}"
@@ -1176,10 +1333,10 @@ GRADING RULES:
 - Pass threshold: score >= 0.7
 
 Return ONLY valid JSON:
-{ "passed": <true|false>, "score": <0.0-1.0>, "feedback": "One sentence — what they got right or what they missed." }`,
+{ "passed": <true|false>, "score": <0.0-1.0>, "feedback": "One sentence — what they got right or what they missed." }` }],
       }],
-    });
-    const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
+      300,
+    );
     res.json(JSON.parse(text.trim().replace(/^```json\n?|```$/g, '')));
   } catch (err) {
     console.error('[grade]', err.message);
@@ -1291,13 +1448,11 @@ app.post('/api/fetch-url', async (req, res) => {
 app.post('/api/curriculum-from-materials', async (req, res) => {
   const { topic, days, materialsContext } = req.body;
   try {
-    const msg = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
-      system: 'You are a curriculum designer. Respond ONLY with valid JSON, no markdown fences.',
-      messages: [{
+    const text = await callGemini(
+      'You are a curriculum designer. Respond ONLY with valid JSON, no markdown fences.',
+      [{
         role: 'user',
-        content: `Create a learning curriculum for: "${topic}". The student has ${days} days.
+        content: [{ type: 'text', text: `Create a learning curriculum for: "${topic}". The student has ${days} days.
 
 Here are the instructor's materials — build the curriculum STRICTLY from this content:
 ===
@@ -1317,11 +1472,13 @@ Return ONLY valid JSON:
   ]
 }
 Rules: 5–7 modules, 2–4 lessons each. Every lesson must be 2–5 minutes max; choose 2 for simple concepts, 3–4 for normal concepts, 5 only for dense technical concepts. Only cover topics that appear in the provided materials.
-Each lesson objective must describe what the student should understand by the end of that lesson, in one sentence.`,
+Each lesson objective must describe what the student should understand by the end of that lesson, in one sentence.` }],
       }],
-    });
-    const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const curriculum = normalizeCurriculum(JSON.parse(text.trim().replace(/^```json\n?|```$/g, '')));
+      8192,
+    );
+    const parsedFromMaterials = repairCurriculumJson(text);
+    if (!parsedFromMaterials) throw new Error('Could not parse curriculum JSON');
+    const curriculum = normalizeCurriculum(parsedFromMaterials);
     res.json({ ...curriculum, materialsContext: materialsContext || '' });
   } catch (err) {
     console.error('[curriculum-from-materials]', err.message);
@@ -1377,8 +1534,8 @@ export default app;
 if (!process.env.VERCEL) {
   app.listen(PORT, HOST, () => {
     console.log(`Learnor API → http://${HOST}:${PORT}`);
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.warn('⚠  ANTHROPIC_API_KEY not set — copy .env.example to .env');
+    if (!process.env.GEMINI_API_KEY) {
+      console.warn('⚠  GEMINI_API_KEY not set — copy .env.example to .env');
     }
   });
 }
