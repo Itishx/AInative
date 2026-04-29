@@ -2,19 +2,20 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HC } from '../theme';
 import { useStore } from '../store';
+import { useTheme } from '../lib/theme';
 import type { Course } from '../types';
 
 type Filter = 'all' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
 
 const D = {
-  bg: '#050505',
-  ink: '#f6f0e7',
-  mute: 'rgba(246,240,231,0.48)',
-  faint: 'rgba(246,240,231,0.10)',
-  softer: 'rgba(246,240,231,0.05)',
-  red: '#ff5148',
-  amber: '#d99b45',
-  green: '#72c089',
+  bg: 'var(--dash-bg)',
+  ink: 'var(--dash-ink)',
+  mute: 'var(--dash-mute)',
+  faint: 'var(--dash-faint)',
+  softer: 'var(--dash-softer)',
+  red: 'var(--dash-red)',
+  amber: 'var(--dash-amber)',
+  green: 'var(--dash-green)',
   serif: HC.serif,
   sans: HC.sans,
   mono: HC.mono,
@@ -239,6 +240,7 @@ function CourseRow({
 
 export default function Dashboard() {
   const { state, dispatch } = useStore();
+  const { dark } = useTheme();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
@@ -301,12 +303,27 @@ export default function Dashboard() {
     : new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
-    <div style={{ minHeight: '100vh', background: D.bg, color: D.ink, fontFamily: D.sans }}>
+    <div style={{
+      minHeight: '100vh',
+      background: D.bg,
+      color: D.ink,
+      fontFamily: D.sans,
+      '--dash-bg': dark ? '#050505' : '#f4f0e8',
+      '--dash-ink': dark ? '#f6f0e7' : '#1a1510',
+      '--dash-mute': dark ? 'rgba(246,240,231,0.48)' : 'rgba(26,21,16,0.52)',
+      '--dash-faint': dark ? 'rgba(246,240,231,0.10)' : 'rgba(26,21,16,0.12)',
+      '--dash-softer': dark ? 'rgba(246,240,231,0.05)' : 'rgba(26,21,16,0.05)',
+      '--dash-red': dark ? '#ff5148' : '#c4221b',
+      '--dash-amber': dark ? '#d99b45' : '#b87822',
+      '--dash-green': dark ? '#72c089' : '#2d6a3f',
+    } as React.CSSProperties}>
       <div style={{
         position: 'fixed',
         inset: 0,
         pointerEvents: 'none',
-        background: 'radial-gradient(circle at 72% 8%, rgba(255,81,72,0.10), transparent 30%), radial-gradient(circle at 15% 85%, rgba(246,240,231,0.06), transparent 28%)',
+        background: dark
+          ? 'radial-gradient(circle at 72% 8%, rgba(255,81,72,0.10), transparent 30%), radial-gradient(circle at 15% 85%, rgba(246,240,231,0.06), transparent 28%)'
+          : 'radial-gradient(circle at 72% 8%, rgba(196,34,27,0.08), transparent 30%), radial-gradient(circle at 15% 85%, rgba(26,21,16,0.045), transparent 28%)',
       }} />
 
       <main style={{ position: 'relative', maxWidth: 1280, margin: '0 auto', padding: '28px clamp(20px, 4vw, 58px) 64px' }}>
@@ -336,7 +353,9 @@ export default function Dashboard() {
                 borderRadius: '50%',
                 display: 'grid',
                 placeItems: 'center',
-                background: 'linear-gradient(135deg, rgba(246,240,231,0.18), rgba(255,81,72,0.35))',
+                background: dark
+                  ? 'linear-gradient(135deg, rgba(246,240,231,0.18), rgba(255,81,72,0.35))'
+                  : 'linear-gradient(135deg, rgba(26,21,16,0.08), rgba(196,34,27,0.18))',
                 border: `1px solid ${D.faint}`,
                 color: D.ink,
                 fontFamily: D.serif,

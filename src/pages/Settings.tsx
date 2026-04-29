@@ -12,7 +12,30 @@ export default function Settings() {
   const [displayName, setDisplayName] = useState(state.profile?.displayName ?? '');
   const [bio, setBio] = useState(state.profile?.bio ?? '');
   const [avatarUrl, setAvatarUrl] = useState(state.profile?.avatarUrl ?? '');
+  const [avatarError, setAvatarError] = useState('');
   const [saved, setSaved] = useState(false);
+
+  function handleAvatarUpload(file?: File) {
+    setAvatarError('');
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Please upload an image file.');
+      return;
+    }
+    if (file.size > 900_000) {
+      setAvatarError('Image is too large. Use something under 900KB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setAvatarUrl(reader.result);
+        setSaved(false);
+      }
+    };
+    reader.onerror = () => setAvatarError('Could not read that image.');
+    reader.readAsDataURL(file);
+  }
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -115,20 +138,47 @@ export default function Settings() {
 
           <div>
             <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: HC.mute, marginBottom: 8 }}>
-              Display picture URL
+              Display picture
             </div>
-            <input
-              type="url"
-              value={avatarUrl}
-              onChange={(e) => { setAvatarUrl(e.target.value); setSaved(false); }}
-              placeholder="https://..."
-              style={inputStyle}
-            />
-            {avatarUrl && (
-              <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-                <img src={avatarUrl} alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: `1px solid ${HC.ruleFaint}` }} />
-                <div style={{ fontFamily: HC.mono, fontSize: 9, color: HC.mute, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Preview</div>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 110,
+              border: `1.5px dashed ${HC.ruleFaint}`,
+              borderRadius: 14,
+              background: 'rgba(26,21,16,0.035)',
+              cursor: 'pointer',
+              overflow: 'hidden',
+            }}>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" style={{ width: '100%', height: 160, objectFit: 'cover' }} />
+              ) : (
+                <div style={{ textAlign: 'center', padding: 18 }}>
+                  <div style={{ fontFamily: HC.serif, fontSize: 28, color: HC.ink, letterSpacing: '-0.03em' }}>Upload image</div>
+                  <div style={{ marginTop: 6, fontFamily: HC.mono, fontSize: 9, color: HC.mute, letterSpacing: '0.10em', textTransform: 'uppercase' }}>PNG, JPG, GIF · under 900KB</div>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleAvatarUpload(e.target.files?.[0])}
+                style={{ display: 'none' }}
+              />
+            </label>
+            {avatarError && (
+              <div style={{ marginTop: 8, fontFamily: HC.mono, fontSize: 10, color: HC.red, letterSpacing: '0.06em' }}>
+                {avatarError}
               </div>
+            )}
+            {avatarUrl && (
+              <button
+                type="button"
+                onClick={() => { setAvatarUrl(''); setSaved(false); }}
+                style={{ marginTop: 10, border: 'none', background: 'transparent', color: HC.red, padding: 0, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}
+              >
+                Remove photo
+              </button>
             )}
           </div>
 
