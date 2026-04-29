@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
+import { useTheme as useAppTheme } from '../lib/theme';
 // ── Theme ─────────────────────────────────────────────────────────────────────
 type T = {
   bg: string; paper: string; paperAlt: string;
@@ -1126,9 +1127,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function Landing() {
   const navigate = useNavigate();
-  const [dark, setDark] = useState<boolean>(() => {
-    try { return localStorage.getItem('ain_dark') === 'true'; } catch { return false; }
-  });
+  const { dark, toggle } = useAppTheme();
   const [active, setActive] = useState('home');
 
   const sectionRefs = useRef<string[]>(['home', 'how', 'features', 'leaderboard', 'instructors', 'pricing', 'faq']);
@@ -1171,7 +1170,7 @@ export default function Landing() {
   return (
     <ThemeCtx.Provider value={{ t, dark }}>
       <div style={{ minHeight: '100vh', background: t.bg, transition: 'background 0.3s' }}>
-        <SiteNav active={active} dark={dark} onToggleDark={() => setDark((d) => !d)} onNav={onNav} />
+        <SiteNav active={active} dark={dark} onToggleDark={toggle} onNav={onNav} />
         <HeroSection onNav={onNav} />
         <TickerStrip />
         <HowSection />
