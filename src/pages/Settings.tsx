@@ -3,6 +3,7 @@ import { HC } from '../theme';
 import { Chrome } from '../components/Chrome';
 import { useStore } from '../store';
 import { useAuth } from '../lib/auth';
+import { supabase } from '../lib/supabase';
 
 export default function Settings() {
   const { state, dispatch } = useStore();
@@ -14,42 +15,100 @@ export default function Settings() {
   const [avatarUrl, setAvatarUrl] = useState(state.profile?.avatarUrl ?? '');
   const [avatarError, setAvatarError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
-  function handleAvatarUpload(file?: File) {
+  function compressImage(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          reject(new Error('Could not read that image.'));
+          return;
+        }
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const size = 320;
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Could not process that image.'));
+            return;
+          }
+          const scale = Math.max(size / img.width, size / img.height);
+          const width = img.width * scale;
+          const height = img.height * scale;
+          ctx.drawImage(img, (size - width) / 2, (size - height) / 2, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.78));
+        };
+        img.onerror = () => reject(new Error('Could not load that image.'));
+        img.src = reader.result;
+      };
+      reader.onerror = () => reject(new Error('Could not read that image.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleAvatarUpload(file?: File) {
     setAvatarError('');
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setAvatarError('Please upload an image file.');
       return;
     }
-    if (file.size > 900_000) {
-      setAvatarError('Image is too large. Use something under 900KB.');
+    if (file.size > 3_000_000) {
+      setAvatarError('Image is too large. Use something under 3MB.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setAvatarUrl(reader.result);
-        setSaved(false);
-      }
-    };
-    reader.onerror = () => setAvatarError('Could not read that image.');
-    reader.readAsDataURL(file);
+    try {
+      setAvatarUrl(await compressImage(file));
+      setSaved(false);
+      setSaveError('');
+    } catch (err) {
+      setAvatarError((err as Error).message || 'Could not process that image.');
+    }
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = username.trim();
     if (!trimmed) return;
+    setSaving(true);
+    setSaveError('');
+    const profile = {
+      displayName: displayName.trim(),
+      bio: bio.trim(),
+      avatarUrl: avatarUrl.trim(),
+    };
     dispatch({ type: 'SET_USERNAME', username: trimmed });
     dispatch({
       type: 'SET_PROFILE',
-      profile: {
-        displayName: displayName.trim(),
-        bio: bio.trim(),
-        avatarUrl: avatarUrl.trim(),
-      },
+      profile,
     });
+
+    if (user?.id) {
+      const { error } = await supabase
+        .from('user_courses')
+        .upsert({
+          user_id: user.id,
+          courses: state.courses,
+          username: trimmed,
+          profile,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        setSaving(false);
+        setSaveError(error.message.includes('profile')
+          ? 'Profile column is missing in Supabase. Run the profile migration SQL.'
+          : error.message);
+        return;
+      }
+    }
+
+    setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -156,7 +215,7 @@ export default function Settings() {
               ) : (
                 <div style={{ textAlign: 'center', padding: 18 }}>
                   <div style={{ fontFamily: HC.serif, fontSize: 28, color: HC.ink, letterSpacing: '-0.03em' }}>Upload image</div>
-                  <div style={{ marginTop: 6, fontFamily: HC.mono, fontSize: 9, color: HC.mute, letterSpacing: '0.10em', textTransform: 'uppercase' }}>PNG, JPG, GIF · under 900KB</div>
+                  <div style={{ marginTop: 6, fontFamily: HC.mono, fontSize: 9, color: HC.mute, letterSpacing: '0.10em', textTransform: 'uppercase' }}>PNG, JPG, GIF · auto-compressed</div>
                 </div>
               )}
               <input
@@ -184,6 +243,7 @@ export default function Settings() {
 
           <button
             type="submit"
+            disabled={saving}
             style={{
               alignSelf: 'flex-start',
               padding: '12px 22px',
@@ -196,12 +256,18 @@ export default function Settings() {
               fontWeight: 700,
               letterSpacing: '0.16em',
               textTransform: 'uppercase',
-              cursor: 'pointer',
+              cursor: saving ? 'wait' : 'pointer',
+              opacity: saving ? 0.65 : 1,
               transition: 'background 0.2s',
             }}
           >
-            {saved ? 'Saved ✓' : 'Save'}
+            {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
           </button>
+          {saveError && (
+            <div style={{ fontFamily: HC.mono, fontSize: 10, color: HC.red, letterSpacing: '0.06em', lineHeight: 1.5 }}>
+              {saveError}
+            </div>
+          )}
         </form>
 
         {/* Sign out */}

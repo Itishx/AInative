@@ -121,7 +121,11 @@ function loadState(userId?: string): AppState {
 }
 
 function saveLocal(state: AppState, userId?: string) {
-  localStorage.setItem(storageKey(userId), JSON.stringify(state));
+  try {
+    localStorage.setItem(storageKey(userId), JSON.stringify(state));
+  } catch (err) {
+    console.error('[store:local-save]', err);
+  }
 }
 
 type Action =
@@ -415,6 +419,7 @@ export function StoreProvider({
         })
         .then(({ error }) => {
           if (!error) return;
+          console.error('[store:supabase-save]', error.message);
           // Older Supabase tables may not have the profile column yet.
           // Still save courses/username instead of dropping all progress.
           supabase
@@ -430,7 +435,9 @@ export function StoreProvider({
                 .from('user_courses')
                 .update({ profile: state.profile, updated_at: new Date().toISOString() })
                 .eq('user_id', userId)
-                .then();
+                .then(({ error: profileError }) => {
+                  if (profileError) console.error('[store:profile-save]', profileError.message);
+                });
             });
         });
     }, 2000);
