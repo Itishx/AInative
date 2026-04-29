@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { HC } from '../theme';
 import { useStore } from '../store';
 import { useTheme } from '../lib/theme';
-import type { Course } from '../types';
+import type { Course, QuizAttempt } from '../types';
 
 type Filter = 'all' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
+type DashboardMode = 'courses' | 'quizzes';
 
 const D = {
   bg: 'var(--dash-bg)',
@@ -246,6 +247,8 @@ function ProfilePanel({
   joined,
   stats,
   courseCount,
+  activeMode,
+  onModeChange,
   onEdit,
 }: {
   displayName: string;
@@ -255,6 +258,8 @@ function ProfilePanel({
   joined: string;
   stats: { notStarted: number; inProgress: number; done: number; urgent: number; archived: number };
   courseCount: number;
+  activeMode: DashboardMode;
+  onModeChange: (mode: DashboardMode) => void;
   onEdit: () => void;
 }) {
   const profileScore = Math.max(1, Math.round((stats.inProgress * 7 + stats.done * 18 + courseCount * 3) * 10) / 10);
@@ -353,12 +358,28 @@ function ProfilePanel({
         </div>
 
         <div style={{ borderTop: `1px solid ${D.faint}`, marginTop: 28, paddingTop: 22 }}>
-          <div style={{ fontFamily: D.sans, fontSize: 15, fontWeight: 800, color: D.ink }}>Communities</div>
+          <div style={{ fontFamily: D.sans, fontSize: 15, fontWeight: 800, color: D.ink }}>Dashboard</div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-            {['Build3r', 'Cod3r'].map((item) => (
-              <span key={item} style={{ border: `1px solid ${D.faint}`, borderRadius: 999, padding: '7px 12px', color: D.mute, fontFamily: D.sans, fontSize: 12 }}>
-                {item}
-              </span>
+            {[
+              ['courses', 'Courses'],
+              ['quizzes', 'Quizzes'],
+            ].map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => onModeChange(mode as DashboardMode)}
+                style={{
+                  border: `1px solid ${activeMode === mode ? D.ink : D.faint}`,
+                  borderRadius: 999,
+                  padding: '7px 12px',
+                  color: activeMode === mode ? D.ink : D.mute,
+                  background: activeMode === mode ? D.softer : 'transparent',
+                  fontFamily: D.sans,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                {label}
+              </button>
             ))}
           </div>
         </div>
@@ -386,12 +407,120 @@ function ProfilePanel({
   );
 }
 
+function QuizHub({
+  courses,
+  attempts,
+  onOpenLessonQuiz,
+  onOpenAnyQuiz,
+}: {
+  courses: Course[];
+  attempts: QuizAttempt[];
+  onOpenLessonQuiz: (course: Course, moduleIndex: number, lessonIndex: number) => void;
+  onOpenAnyQuiz: (topic: string) => void;
+}) {
+  const [topic, setTopic] = useState('');
+  const quizTargets = courses
+    .filter((course) => course.status !== 'tombstone')
+    .flatMap((course) => course.curriculum.modules.flatMap((mod, mi) =>
+      mod.lessons.map((lesson, li) => ({ course, mod, lesson, mi, li }))
+    ))
+    .slice(0, 8);
+
+  return (
+    <>
+      <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 260px', gap: 22, alignItems: 'end', borderBottom: `1px solid ${D.faint}`, paddingBottom: 30 }}>
+        <div>
+          <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
+            Quiz mode
+          </div>
+          <h1 style={{ margin: '10px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(42px, 5.4vw, 78px)', lineHeight: 0.88, letterSpacing: '-0.07em', color: D.ink }}>
+            Your quizzes.
+          </h1>
+          <p style={{ maxWidth: 560, margin: '16px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 14, lineHeight: 1.55 }}>
+            Take a quick MCQ check from any course lesson, or generate a fresh quiz on any topic.
+          </p>
+        </div>
+
+        <div style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 14 }}>
+          <div style={{ fontFamily: D.serif, fontSize: 38, lineHeight: 0.9, color: D.ink }}>
+            {attempts.length
+              ? `${Math.round(attempts.reduce((sum, attempt) => sum + (attempt.score / Math.max(1, attempt.total)), 0) / attempts.length * 100)}%`
+              : '0/0'}
+          </div>
+          <div style={{ marginTop: 10, fontFamily: D.mono, fontSize: 9, color: D.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+            avg quiz score
+          </div>
+        </div>
+      </section>
+
+      <section style={{ padding: '28px 0', borderBottom: `1px solid ${D.faint}` }}>
+        <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: D.mute, marginBottom: 12 }}>
+          any topic
+        </div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <input
+            value={topic}
+            onChange={(event) => setTopic(event.target.value)}
+            placeholder="Quiz me on SQL joins, French verbs, investing..."
+            style={{ flex: '1 1 320px', border: 'none', borderBottom: `1px solid ${D.faint}`, background: 'transparent', color: D.ink, outline: 'none', padding: '12px 0', fontFamily: D.sans, fontSize: 15 }}
+          />
+          <button
+            onClick={() => {
+              const clean = topic.trim();
+              if (clean) onOpenAnyQuiz(clean);
+            }}
+            style={{ border: 'none', borderBottom: `1px solid ${D.ink}`, background: 'transparent', color: D.ink, cursor: topic.trim() ? 'pointer' : 'not-allowed', opacity: topic.trim() ? 1 : 0.45, padding: '10px 0', fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+          >
+            Start quiz
+          </button>
+        </div>
+      </section>
+
+      <section style={{ paddingTop: 8 }}>
+        {quizTargets.length === 0 ? (
+          <div style={{ padding: '44px 0', color: D.mute }}>No course lessons available yet.</div>
+        ) : quizTargets.map(({ course, mod, lesson, mi, li }) => (
+          <article key={`${course.id}-${mi}-${li}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px', gap: 18, alignItems: 'center', padding: '20px 0', borderTop: `1px solid ${D.faint}` }}>
+            <div style={{ minWidth: 0 }}>
+              <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 26, lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 400, color: D.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {lesson.title}
+              </h2>
+              <p style={{ margin: '8px 0 0', fontSize: 13, color: D.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {course.subject} · {mod.title}
+              </p>
+            </div>
+            <button
+              onClick={() => onOpenLessonQuiz(course, mi, li)}
+              style={{ border: 'none', borderBottom: `1px solid ${D.ink}`, background: 'transparent', color: D.ink, cursor: 'pointer', padding: '8px 0', fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+            >
+              Take quiz
+            </button>
+          </article>
+        ))}
+
+        {attempts.length > 0 && (
+          <div style={{ marginTop: 42, borderTop: `1px solid ${D.faint}`, paddingTop: 22 }}>
+            <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 34, fontWeight: 400, letterSpacing: '-0.055em' }}>Recent scores</h2>
+            {attempts.slice(0, 5).map((attempt) => (
+              <div key={attempt.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 18, padding: '14px 0', borderTop: `1px solid ${D.faint}`, color: D.mute, fontSize: 13 }}>
+                <span>{attempt.topic}{attempt.courseTitle ? ` · ${attempt.courseTitle}` : ''}</span>
+                <span style={{ color: D.ink, fontFamily: D.mono }}>{attempt.score}/{attempt.total}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
 export default function Dashboard() {
   const { state, dispatch } = useStore();
   const { dark } = useTheme();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [mode, setMode] = useState<DashboardMode>('courses');
 
   const stats = useMemo(() => {
     const notStarted = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'completed' && !courseHasStarted(c)).length;
@@ -501,10 +630,21 @@ export default function Dashboard() {
             joined={joined}
             stats={stats}
             courseCount={state.courses.length}
+            activeMode={mode}
+            onModeChange={setMode}
             onEdit={() => navigate('/settings')}
           />
 
           <div style={{ minWidth: 0 }}>
+        {mode === 'quizzes' ? (
+          <QuizHub
+            courses={state.courses}
+            attempts={state.quizAttempts}
+            onOpenLessonQuiz={(course, moduleIndex, lessonIndex) => navigate(`/quiz/${course.id}/${moduleIndex}/${lessonIndex}`)}
+            onOpenAnyQuiz={(topic) => navigate(`/quiz-any?topic=${encodeURIComponent(topic)}`)}
+          />
+        ) : (
+          <>
         <section style={{ borderBottom: `1px solid ${D.faint}`, paddingBottom: 34 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 420px)', gap: 34, alignItems: 'end' }}>
             <div style={{ minWidth: 0 }}>
@@ -657,6 +797,8 @@ export default function Dashboard() {
               })}
             </div>
           </section>
+        )}
+          </>
         )}
           </div>
         </div>

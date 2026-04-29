@@ -85,11 +85,24 @@ export interface UserProfile {
   avatarUrl?: string;
 }
 
+export interface QuizAttempt {
+  id: string;
+  topic: string;
+  courseId?: string;
+  courseTitle?: string;
+  moduleIndex?: number;
+  lessonIndex?: number;
+  score: number;
+  total: number;
+  createdAt: string;
+}
+
 export interface AppState {
   courses: Course[];
   leaderboard: LeaderboardEntry[];
   username: string;
   profile: UserProfile;
+  quizAttempts: QuizAttempt[];
 }
 
 // ── Instructor / Marketplace types ──────────────────────────────────────────

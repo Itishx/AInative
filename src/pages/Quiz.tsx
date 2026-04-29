@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { HC, btn } from '../theme';
 import { useStore } from '../store';
 import type { MCQQuestion } from '../types';
@@ -265,6 +265,20 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
       setResults(resultArr);
       const totalScore = resultArr.reduce((sum, r) => sum + r.score, 0) / resultArr.length;
       setOverallPreferredMet(totalScore >= 0.7);
+      dispatch({
+        type: 'RECORD_QUIZ_ATTEMPT',
+        attempt: {
+          id: genId(),
+          topic: lesson.title,
+          courseId: course.id,
+          courseTitle: course.subject,
+          moduleIndex: mi,
+          lessonIndex: li,
+          score: resultArr.reduce((sum, r) => sum + r.score, 0),
+          total: resultArr.length,
+          createdAt: new Date().toISOString(),
+        },
+      });
       setSubmitted(true);
     } catch (e) {
       setError((e as Error).message);
@@ -566,6 +580,128 @@ export default function Quiz() {
   }
 
   return <QuizContent courseId={course.id} mi={mi} li={li} />;
+}
+
+export function GeneralQuiz() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const { dispatch } = useStore();
+  const topic = params.get('topic')?.trim() || 'General knowledge';
+  const [questions, setQuestions] = useState<MCQQuestion[]>([]);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [results, setResults] = useState<Array<GradeResult | null>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+    fetch('/api/quiz', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        courseTitle: `Standalone quiz: ${topic}`,
+        moduleTitle: 'Practice',
+        lessonTitle: topic,
+        chatHistory: [],
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setQuestions(((data.questions as MCQQuestion[] | undefined) ?? [])
+          .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+          .map((q) => ({ ...q, type: 'mcq' as const })));
+      })
+      .catch((err) => setError(err?.message || 'Could not generate quiz.'))
+      .finally(() => setLoading(false));
+  }, [topic]);
+
+  const allAnswered = questions.length > 0 && questions.every((_, index) => (answers[index] ?? -1) >= 0);
+  const totalScore = submitted && results.length > 0
+    ? Math.round(results.reduce((sum, result) => sum + (result?.score ?? 0), 0) / results.length * 100)
+    : 0;
+
+  function submit() {
+    if (!allAnswered) return;
+    const resultArr: GradeResult[] = questions.map((question, index) => {
+      const passed = answers[index] === question.correct;
+      return {
+        passed,
+        score: passed ? 1 : 0,
+        feedback: passed ? 'Correct.' : `Correct answer: ${question.options[question.correct]}`,
+      };
+    });
+    setResults(resultArr);
+    dispatch({
+      type: 'RECORD_QUIZ_ATTEMPT',
+      attempt: {
+        id: genId(),
+        topic,
+        score: resultArr.reduce((sum, result) => sum + result.score, 0),
+        total: resultArr.length,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    setSubmitted(true);
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: HC.bg, color: HC.ink }}>
+      <main style={{ maxWidth: 840, margin: '0 auto', padding: '42px 34px 70px' }}>
+        <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: HC.red }}>
+          standalone quiz
+        </div>
+        <h1 style={{ margin: '8px 0 8px', fontFamily: HC.serif, fontSize: 'clamp(34px, 6vw, 70px)', fontWeight: 400, letterSpacing: '-0.055em', lineHeight: 0.95 }}>
+          {topic}
+        </h1>
+        <p style={{ margin: 0, color: HC.mute, fontSize: 14 }}>Five MCQs. No course required.</p>
+
+        {loading && <div style={{ marginTop: 34, color: HC.mute, fontFamily: HC.serif, fontStyle: 'italic' }}>Generating quiz...</div>}
+        {error && <div style={{ marginTop: 28, border: `1px solid ${HC.red}`, padding: 14, color: HC.red }}>{error}</div>}
+
+        {!loading && !error && questions.map((question, qi) => {
+          const result = submitted ? results[qi] : null;
+          return (
+            <section key={qi} style={{ marginTop: 28, paddingTop: 22, borderTop: `1px solid ${HC.ruleFaint}` }}>
+              <div style={{ fontFamily: HC.mono, color: HC.red, fontSize: 10, letterSpacing: '0.14em' }}>{String(qi + 1).padStart(2, '0')}</div>
+              <h2 style={{ margin: '8px 0 14px', fontFamily: HC.serif, fontSize: 22, fontWeight: 400, letterSpacing: '-0.015em' }}>{question.q}</h2>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {question.options.map((option, oi) => {
+                  const picked = answers[qi] === oi;
+                  const correct = question.correct === oi;
+                  const border = submitted && correct ? HC.green : submitted && picked ? HC.red : picked ? HC.ink : HC.ruleFaint;
+                  return (
+                    <button
+                      key={option}
+                      disabled={submitted}
+                      onClick={() => setAnswers((prev) => ({ ...prev, [qi]: oi }))}
+                      style={{ border: `1px solid ${border}`, background: picked ? HC.paper : 'transparent', color: submitted && correct ? HC.green : submitted && picked ? HC.red : HC.ink, padding: '12px 14px', textAlign: 'left', cursor: submitted ? 'default' : 'pointer', fontFamily: HC.serif, fontSize: 17 }}
+                    >
+                      {option}
+                    </button>
+                  );
+                })}
+              </div>
+              {result && <div style={{ marginTop: 10, color: result.passed ? HC.green : HC.red, fontSize: 13 }}>{result.feedback}</div>}
+            </section>
+          );
+        })}
+
+        {!loading && !error && questions.length > 0 && (
+          <div style={{ marginTop: 34, borderTop: `2px solid ${HC.ink}`, paddingTop: 22, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            {!submitted ? (
+              <button onClick={submit} disabled={!allAnswered} style={{ ...btn.primary, opacity: allAnswered ? 1 : 0.45, cursor: allAnswered ? 'pointer' : 'not-allowed' }}>Submit answers →</button>
+            ) : (
+              <div style={{ fontFamily: HC.serif, fontSize: 34, letterSpacing: '-0.03em' }}>{totalScore}%</div>
+            )}
+            <button onClick={() => navigate('/dashboard')} style={btn.outline}>Dashboard</button>
+          </div>
+        )}
+      </main>
+    </div>
+  );
 }
 
 function genId() {

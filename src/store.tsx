@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
-import type { AppState, Course, LeaderboardEntry, EnrolledCourse, UserProfile } from './types';
+import type { AppState, Course, LeaderboardEntry, EnrolledCourse, UserProfile, QuizAttempt } from './types';
 import { supabase } from './lib/supabase';
 
 const BASE_KEY = 'ainative_v3';
@@ -71,6 +71,17 @@ function mergeCourses(primary: Course[], secondary: Course[]): Course[] {
   return merged;
 }
 
+function mergeQuizAttempts(primary: QuizAttempt[], secondary: QuizAttempt[]): QuizAttempt[] {
+  const seen = new Set<string>();
+  const merged: QuizAttempt[] = [];
+  for (const attempt of [...primary, ...secondary]) {
+    if (!attempt?.id || seen.has(attempt.id)) continue;
+    seen.add(attempt.id);
+    merged.push(attempt);
+  }
+  return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 100);
+}
+
 function normalizeState(state: Partial<AppState> | null | undefined): AppState {
   const username = state?.username ?? 'you';
   return {
@@ -78,6 +89,7 @@ function normalizeState(state: Partial<AppState> | null | undefined): AppState {
     leaderboard: state?.leaderboard ?? SEED_LEADERBOARD,
     username,
     profile: { ...defaultProfile(username), ...(state?.profile ?? {}) },
+    quizAttempts: state?.quizAttempts ?? [],
   };
 }
 
@@ -125,10 +137,11 @@ type Action =
   | { type: 'SAVE_LESSON_NOTES'; id: string; moduleIndex: number; lessonIndex: number; notes: string }
   | { type: 'SAVE_MODULE_NOTES'; id: string; moduleIndex: number; notes: string }
   | { type: 'COMPLETE_LESSON'; id: string; moduleIndex: number; lessonIndex: number; preferredMet: boolean }
+  | { type: 'RECORD_QUIZ_ATTEMPT'; attempt: QuizAttempt }
   | { type: 'CHECK_DEADLINES' }
   | { type: 'ADD_LEADERBOARD'; entry: LeaderboardEntry }
   | { type: 'ENROLL_COURSE'; course: EnrolledCourse }
-  | { type: '_LOAD_FROM_DB'; courses: Course[]; username?: string; profile?: UserProfile };
+  | { type: '_LOAD_FROM_DB'; courses: Course[]; username?: string; profile?: UserProfile; quizAttempts?: QuizAttempt[] };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -154,6 +167,7 @@ function reducer(state: AppState, action: Action): AppState {
         courses: mergeCourses(state.courses, courses),
         username: action.username && action.username !== 'you' ? action.username : state.username,
         profile: { ...(action.profile ?? {}), ...state.profile },
+        quizAttempts: mergeQuizAttempts(state.quizAttempts, action.quizAttempts ?? []),
       });
     }
 
@@ -283,6 +297,9 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, courses };
     }
 
+    case 'RECORD_QUIZ_ATTEMPT':
+      return { ...state, quizAttempts: [action.attempt, ...state.quizAttempts].slice(0, 100) };
+
     case 'CHECK_DEADLINES':
       return checkDeadlines(state);
 
@@ -334,7 +351,7 @@ export function StoreProvider({
     if (!userId) return;
     supabase
       .from('user_courses')
-      .select('courses, username, profile')
+      .select('courses, username, profile, quiz_attempts')
       .eq('user_id', userId)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -342,18 +359,37 @@ export function StoreProvider({
         if (error) {
           supabase
             .from('user_courses')
-            .select('courses, username')
+            .select('courses, username, profile')
             .eq('user_id', userId)
             .maybeSingle()
-            .then(({ data: fallback }) => {
+            .then(({ data: fallback, error: fallbackError }) => {
               if (fallback) {
-                dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(fallback.courses) ? fallback.courses : [], username: fallback.username ?? undefined });
+                dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(fallback.courses) ? fallback.courses : [], username: fallback.username ?? undefined, profile: (fallback as { profile?: UserProfile }).profile });
+                return;
               }
+              if (!fallbackError) return;
+              supabase
+                .from('user_courses')
+                .select('courses, username')
+                .eq('user_id', userId)
+                .maybeSingle()
+                .then(({ data: baseFallback }) => {
+                  if (baseFallback) {
+                    dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(baseFallback.courses) ? baseFallback.courses : [], username: baseFallback.username ?? undefined });
+                  }
+                });
             });
           return;
         }
         if (!data) return;
-        dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(data.courses) ? data.courses : [], username: data.username ?? undefined, profile: (data as { profile?: UserProfile }).profile });
+        const row = data as { profile?: UserProfile; quiz_attempts?: QuizAttempt[] };
+        dispatch({
+          type: '_LOAD_FROM_DB',
+          courses: Array.isArray(data.courses) ? data.courses : [],
+          username: data.username ?? undefined,
+          profile: row.profile,
+          quizAttempts: Array.isArray(row.quiz_attempts) ? row.quiz_attempts : [],
+        });
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -374,6 +410,7 @@ export function StoreProvider({
           courses: state.courses,
           username: state.username,
           profile: state.profile,
+          quiz_attempts: state.quizAttempts,
           updated_at: new Date().toISOString(),
         })
         .then(({ error }) => {
@@ -388,7 +425,13 @@ export function StoreProvider({
               username: state.username,
               updated_at: new Date().toISOString(),
             })
-            .then();
+            .then(() => {
+              supabase
+                .from('user_courses')
+                .update({ profile: state.profile, updated_at: new Date().toISOString() })
+                .eq('user_id', userId)
+                .then();
+            });
         });
     }, 2000);
   }, [state, userId]);

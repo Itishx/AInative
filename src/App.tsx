@@ -6,7 +6,7 @@ import Landing from './pages/Landing';
 import NewCourse from './pages/NewCourse';
 import Dashboard from './pages/Dashboard';
 import Learn from './pages/Learn';
-import Quiz from './pages/Quiz';
+import Quiz, { GeneralQuiz } from './pages/Quiz';
 import Leaderboard from './pages/Leaderboard';
 import Certificate from './pages/Certificate';
 import CreateCourse from './pages/CreateCourse';
@@ -54,6 +54,7 @@ function AppRoutes() {
           <Route path="/new" element={<RequireAuth><NewCourse /></RequireAuth>} />
           <Route path="/learn/:id" element={<RequireAuth><Learn /></RequireAuth>} />
           <Route path="/quiz/:courseId/:modIdx/:lessonIdx" element={<RequireAuth><Quiz /></RequireAuth>} />
+          <Route path="/quiz-any" element={<RequireAuth><GeneralQuiz /></RequireAuth>} />
           <Route path="/create" element={<RequireAuth><CreateCourse /></RequireAuth>} />
           <Route path="/anything" element={<RequireAuth><Anything /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
