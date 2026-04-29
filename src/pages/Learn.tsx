@@ -777,6 +777,7 @@ function LessonCanvas({
   latestVisual,
   readyToMoveOn,
   narrow,
+  chatMessages,
 }: {
   course: Course;
   mod: Course['curriculum']['modules'][number];
@@ -785,7 +786,35 @@ function LessonCanvas({
   latestVisual: string;
   readyToMoveOn: boolean;
   narrow: boolean;
+  chatMessages: import('./types').ChatMsg[];
 }) {
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState('');
+
+  async function handleGenerateImage() {
+    setImageLoading(true);
+    setImageError('');
+    try {
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: chatMessages.slice(-5),
+          lessonTitle: lesson.title,
+          courseTitle: course.subject,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed');
+      setGeneratedImage(data.image);
+    } catch (err: any) {
+      setImageError('Could not generate image. Try again.');
+    } finally {
+      setImageLoading(false);
+    }
+  }
+
   const visualSource = latestVisual || latestTutorText;
   const code = extractFirstCodeBlock(visualSource);
   const table = extractFirstMarkdownTable(visualSource);
@@ -943,7 +972,19 @@ function LessonCanvas({
                   />
                 </svg>
               </div>
+            ) : generatedImage ? (
+              /* Generated AI image */
+              <div style={{ width: '100%', maxWidth: 820, position: 'relative', borderRadius: 28, overflow: 'hidden', border: '1px solid rgba(250,247,240,0.12)', boxShadow: '0 20px 60px rgba(0,0,0,0.28)' }}>
+                <img src={generatedImage} alt={lesson.title} style={{ width: '100%', display: 'block' }} />
+                <button
+                  onClick={() => { setGeneratedImage(null); handleGenerateImage(); }}
+                  style={{ position: 'absolute', bottom: 14, right: 14, padding: '8px 14px', background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(250,247,240,0.18)', borderRadius: 999, color: 'rgba(250,247,240,0.8)', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+                >
+                  ↻ Regenerate
+                </button>
+              </div>
             ) : (
+              /* Ambient fallback: key facts + generate button */
               <div style={{ width: '100%', maxWidth: 820, position: 'relative', borderRadius: 28, overflow: 'hidden', border: '1px solid rgba(250,247,240,0.10)', background: `linear-gradient(145deg, ${ambientPalette.base}, ${ambientPalette.mid} 60%, rgba(245,238,225,0.04) 100%)`, boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
                 <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 82% 14%, ${ambientPalette.glowC}, transparent 28%), radial-gradient(circle at 10% 80%, ${ambientPalette.glowA}, transparent 30%)` }} />
                 <div style={{ position: 'absolute', inset: 0, opacity: 0.08, backgroundImage: 'linear-gradient(rgba(250,247,240,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(250,247,240,0.2) 1px, transparent 1px)', backgroundSize: '56px 56px' }} />
@@ -969,15 +1010,42 @@ function LessonCanvas({
                       {objective}
                     </div>
                   )}
-                  <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid rgba(250,247,240,0.10)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    {[
-                      mod.title,
-                      readyToMoveOn ? '✓ objective covered' : `Lesson ${String(course.currentLesson + 1).padStart(2, '0')}`,
-                    ].map((item) => (
-                      <div key={item} style={{ padding: '7px 12px', borderRadius: 999, background: 'rgba(250,247,240,0.08)', color: 'rgba(250,247,240,0.70)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', border: '1px solid rgba(250,247,240,0.08)' }}>
-                        {item}
-                      </div>
-                    ))}
+                  <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid rgba(250,247,240,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {[
+                        mod.title,
+                        readyToMoveOn ? '✓ objective covered' : `Lesson ${String(course.currentLesson + 1).padStart(2, '0')}`,
+                      ].map((item) => (
+                        <div key={item} style={{ padding: '7px 12px', borderRadius: 999, background: 'rgba(250,247,240,0.08)', color: 'rgba(250,247,240,0.70)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', border: '1px solid rgba(250,247,240,0.08)' }}>
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                      <button
+                        onClick={handleGenerateImage}
+                        disabled={imageLoading || chatMessages.filter(m => m.who === 'tutor').length === 0}
+                        style={{
+                          padding: '9px 16px',
+                          background: imageLoading ? 'rgba(250,247,240,0.06)' : 'rgba(250,247,240,0.12)',
+                          border: '1px solid rgba(250,247,240,0.22)',
+                          borderRadius: 999,
+                          color: imageLoading ? 'rgba(250,247,240,0.4)' : 'rgba(250,247,240,0.85)',
+                          fontFamily: HC.mono,
+                          fontSize: 10,
+                          letterSpacing: '0.14em',
+                          textTransform: 'uppercase',
+                          cursor: imageLoading ? 'not-allowed' : 'pointer',
+                          backdropFilter: 'blur(8px)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {imageLoading ? '⟳ Generating…' : '✦ Show visual'}
+                      </button>
+                      {imageError && (
+                        <span style={{ fontFamily: HC.mono, fontSize: 9, color: 'rgba(220,100,80,0.85)', letterSpacing: '0.08em' }}>{imageError}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1957,6 +2025,7 @@ function LearnContent({ course }: { course: Course }) {
                 latestVisual={latestVisual}
                 readyToMoveOn={readyToMoveOn}
                 narrow={narrow}
+                chatMessages={currentChat}
               />
             )}
           </div>

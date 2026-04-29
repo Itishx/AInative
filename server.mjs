@@ -1,5 +1,6 @@
 import express from 'express';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import multer from 'multer';
 import cors from 'cors';
@@ -779,6 +780,47 @@ Write as direct instructions to yourself as the tutor, not to the student.`,
 });
 
 // ── AI tutor chat ────────────────────────────────────────────────────────────
+app.post('/api/generate-image', async (req, res) => {
+  const { messages, lessonTitle, courseTitle } = req.body;
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    // Build a concise description from the last 3-5 messages
+    const recentMessages = (Array.isArray(messages) ? messages : []).slice(-5);
+    const context = recentMessages
+      .map((m) => `${m.who === 'tutor' ? 'Tutor' : 'Student'}: ${String(m.text || '').slice(0, 300)}`)
+      .join('\n');
+
+    const prompt = `Create a clean, educational diagram or illustration for a learning platform.
+
+Topic being taught: "${lessonTitle}" (part of course: "${courseTitle}")
+
+Recent lesson conversation:
+${context}
+
+Create a clear, minimal educational visual that shows the key concept being discussed.
+Use a clean white or light background. Include simple labels.
+Style: clean technical diagram, textbook-quality, minimal colors (use black, white, and one accent color).
+No people, no stock photo style. Think: architecture diagram, concept map, or annotated illustration.`;
+
+    const result = await openai.images.generate({
+      model: 'gpt-image-1',
+      prompt,
+      n: 1,
+      size: '1024x1024',
+      quality: 'medium',
+    });
+
+    const b64 = result.data?.[0]?.b64_json;
+    if (!b64) return res.status(500).json({ error: 'No image returned' });
+
+    res.json({ image: `data:image/png;base64,${b64}` });
+  } catch (err) {
+    console.error('[generate-image]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/chat', async (req, res) => {
   const {
     messages,
