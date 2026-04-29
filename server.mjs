@@ -1,6 +1,5 @@
 import express from 'express';
 import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import multer from 'multer';
 import cors from 'cors';
@@ -788,8 +787,6 @@ app.post('/api/generate-image', async (req, res) => {
   }
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
     const recentMessages = (Array.isArray(messages) ? messages : []).slice(-5);
     const context = recentMessages
       .map((m) => `${m.who === 'tutor' ? 'Tutor' : 'Student'}: ${String(m.text || '').slice(0, 300)}`)
@@ -803,28 +800,39 @@ ${context}
 Draw a clean, minimal educational visual illustrating the key concept above.
 White background. Simple labels. Textbook-quality technical diagram style — architecture diagram, concept map, or annotated illustration. No people. One accent color maximum.`;
 
-    const result = await openai.images.generate({
-      model: 'gpt-image-1',
-      prompt,
-      n: 1,
-      size: '1024x1024',
-      quality: 'low',
+    const oaiRes = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-image-1',
+        prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'low',
+      }),
     });
 
-    console.log('[generate-image] response keys:', Object.keys(result.data?.[0] ?? {}));
+    const data = await oaiRes.json();
 
-    const b64 = result.data?.[0]?.b64_json;
+    if (!oaiRes.ok) {
+      const detail = data?.error?.message || JSON.stringify(data);
+      console.error('[generate-image]', detail);
+      return res.status(500).json({ error: detail });
+    }
+
+    const b64 = data.data?.[0]?.b64_json;
     if (b64) return res.json({ image: `data:image/png;base64,${b64}` });
 
-    // Some responses return a URL instead of b64
-    const url = result.data?.[0]?.url;
+    const url = data.data?.[0]?.url;
     if (url) return res.json({ image: url });
 
-    return res.status(500).json({ error: 'No image in response', raw: JSON.stringify(result.data?.[0]) });
+    return res.status(500).json({ error: 'No image in OpenAI response' });
   } catch (err) {
-    const detail = err?.error?.message || err?.message || String(err);
-    console.error('[generate-image]', detail);
-    res.status(500).json({ error: detail });
+    console.error('[generate-image]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
