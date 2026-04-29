@@ -782,42 +782,49 @@ Write as direct instructions to yourself as the tutor, not to the student.`,
 // ── AI tutor chat ────────────────────────────────────────────────────────────
 app.post('/api/generate-image', async (req, res) => {
   const { messages, lessonTitle, courseTitle } = req.body;
+
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'OPENAI_API_KEY not set in environment' });
+  }
+
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // Build a concise description from the last 3-5 messages
     const recentMessages = (Array.isArray(messages) ? messages : []).slice(-5);
     const context = recentMessages
       .map((m) => `${m.who === 'tutor' ? 'Tutor' : 'Student'}: ${String(m.text || '').slice(0, 300)}`)
       .join('\n');
 
-    const prompt = `Create a clean, educational diagram or illustration for a learning platform.
+    const prompt = `Educational diagram for a learning app. Topic: "${lessonTitle}" (course: "${courseTitle}").
 
-Topic being taught: "${lessonTitle}" (part of course: "${courseTitle}")
-
-Recent lesson conversation:
+Recent lesson:
 ${context}
 
-Create a clear, minimal educational visual that shows the key concept being discussed.
-Use a clean white or light background. Include simple labels.
-Style: clean technical diagram, textbook-quality, minimal colors (use black, white, and one accent color).
-No people, no stock photo style. Think: architecture diagram, concept map, or annotated illustration.`;
+Draw a clean, minimal educational visual illustrating the key concept above.
+White background. Simple labels. Textbook-quality technical diagram style — architecture diagram, concept map, or annotated illustration. No people. One accent color maximum.`;
 
     const result = await openai.images.generate({
       model: 'gpt-image-1',
       prompt,
       n: 1,
       size: '1024x1024',
-      quality: 'medium',
+      quality: 'low',
     });
 
-    const b64 = result.data?.[0]?.b64_json;
-    if (!b64) return res.status(500).json({ error: 'No image returned' });
+    console.log('[generate-image] response keys:', Object.keys(result.data?.[0] ?? {}));
 
-    res.json({ image: `data:image/png;base64,${b64}` });
+    const b64 = result.data?.[0]?.b64_json;
+    if (b64) return res.json({ image: `data:image/png;base64,${b64}` });
+
+    // Some responses return a URL instead of b64
+    const url = result.data?.[0]?.url;
+    if (url) return res.json({ image: url });
+
+    return res.status(500).json({ error: 'No image in response', raw: JSON.stringify(result.data?.[0]) });
   } catch (err) {
-    console.error('[generate-image]', err.message);
-    res.status(500).json({ error: err.message });
+    const detail = err?.error?.message || err?.message || String(err);
+    console.error('[generate-image]', detail);
+    res.status(500).json({ error: detail });
   }
 });
 

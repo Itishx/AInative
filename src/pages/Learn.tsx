@@ -809,7 +809,7 @@ function LessonCanvas({
       if (!res.ok || data.error) throw new Error(data.error || 'Failed');
       setGeneratedImage(data.image);
     } catch (err: any) {
-      setImageError('Could not generate image. Try again.');
+      setImageError(err?.message || 'Could not generate image. Try again.');
     } finally {
       setImageLoading(false);
     }
