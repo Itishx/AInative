@@ -294,11 +294,19 @@ function normalizeCurriculum(curriculum) {
 function buildTutorApiMessages(messages, starterText) {
   const cleaned = (Array.isArray(messages) ? messages : [])
     .filter((m) => m && (m.who === 'user' || m.who === 'tutor'))
-    .map((m) => ({
-      role: m.who === 'user' ? 'user' : 'assistant',
-      content: [{ type: 'text', text: String(m.text ?? '').trim() }],
-    }))
-    .filter((m) => m.content[0].text.length > 0);
+    .map((m) => {
+      const text = String(m.text ?? '').trim();
+      if (!text) return null;
+      // Include visual in tutor messages so the AI knows what's on the canvas
+      const visualNote = m.who === 'tutor' && m.visual
+        ? `\n[Canvas showed: ${String(m.visual).slice(0, 800)}]`
+        : '';
+      return {
+        role: m.who === 'user' ? 'user' : 'assistant',
+        content: [{ type: 'text', text: text + visualNote }],
+      };
+    })
+    .filter(Boolean);
 
   if (!cleaned.length || cleaned[0].role !== 'user') {
     return [{
@@ -914,6 +922,7 @@ CANVAS RULES (the "visual" field renders on the canvas panel beside the chat):
 - If this turn introduces no new code or structured data, set "visual" to null.
 - Never repeat content in both "text" and "visual". Text is for words; canvas is for code and structure.
 - If the student requested a canvas example, "visual" is REQUIRED this turn.
+- CRITICAL: If the student says the canvas is wrong, different, confusing, or doesn't match — you MUST immediately emit a corrected "visual" in THIS response. Do not just say "let me fix it" and set visual to null. Actually fix it: write the corrected code/table in "visual" right now. Your previous canvas content is shown as [Canvas showed: ...] in the conversation history — use that to understand what was wrong.
 
 CRITICAL BEHAVIOR RULES:
 1. Never dump the full lesson. Teach one tiny idea only.
