@@ -1468,7 +1468,7 @@ function LearnContent({ course }: { course: Course }) {
   const tutorTurnCount = currentChat.filter((m) => m.who === 'tutor').length;
   const readyToMoveOn = tutorTurnCount >= 5 && currentChat.some((msg) => msg.who === 'tutor' && !!msg.readyToMoveOn);
   const latestTutorText = lastTutorMsg?.text ?? '';
-  const latestVisual = [...currentChat].reverse().find((m) => m.who === 'tutor' && !!m.visual)?.visual ?? '';
+  const latestVisual = lastTutorMsg?.visual ?? '';
   const lessonHasNotes = !!lesson?.notes;
   const canGenerateNotes = currentChat.some((msg) => msg.who === 'tutor');
 
