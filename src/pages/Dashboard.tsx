@@ -637,20 +637,20 @@ export default function Dashboard() {
         <div style={{ minWidth: 0 }}>
         <section
           style={{
-            padding: '34px clamp(18px, 4vw, 44px) 42px',
+            padding: '100px 24px 120px',
             textAlign: 'center',
-            marginBottom: 'clamp(96px, 14vh, 160px)',
           }}
         >
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
-            <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: D.red, marginBottom: 18 }}>
-              Dashboard
+            <div style={{ fontFamily: D.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: D.red, marginBottom: 32 }}>
+              — dashboard
             </div>
-            <h1 style={{ margin: '0 0 18px', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(40px, 6.5vw, 78px)', lineHeight: 0.92, letterSpacing: '-0.045em', color: D.ink }}>
+            <h1 style={{ margin: '0 0 32px', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(56px, 9vw, 120px)', lineHeight: 0.92, letterSpacing: '-0.035em', color: D.ink }}>
               Hey {displayName},<br />
-              what do you want to learn today?
+              what do you want to{' '}
+              <span style={{ fontStyle: 'italic', color: D.red }}>learn today?</span>
             </h1>
-            <p style={{ margin: '0 auto 28px', maxWidth: 500, fontFamily: D.serif, fontStyle: 'italic', fontSize: 18, lineHeight: 1.4, color: D.mute }}>
+            <p style={{ margin: '0 auto 42px', maxWidth: 460, fontFamily: D.serif, fontStyle: 'italic', fontSize: 20, lineHeight: 1.4, color: D.mute }}>
               Start something new, or jump back into what is already on the clock.
             </p>
 
@@ -658,13 +658,13 @@ export default function Dashboard() {
               <div
                 style={{
                   border: `1.5px solid ${heroFocused ? D.ink : D.faint}`,
-                  background: dark ? 'rgba(246,240,231,0.04)' : 'rgba(255,252,245,0.72)',
-                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                  background: dark ? '#1c1a16' : '#faf7f0',
+                  transition: 'border-color 0.15s',
                   boxShadow: heroFocused ? `0 0 0 3px ${dark ? 'rgba(246,240,231,0.08)' : 'rgba(26,21,16,0.06)'}` : 'none',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', padding: '20px 20px 12px' }}>
-                  <span style={{ fontFamily: D.mono, fontSize: 13, color: D.red, marginRight: 14, marginTop: 4, flexShrink: 0 }}>$</span>
+                  <span style={{ fontFamily: D.mono, fontSize: 13, color: D.red, marginRight: 14, marginTop: 3, flexShrink: 0 }}>$</span>
                   <textarea
                     value={topic}
                     onChange={(event) => {
@@ -704,7 +704,7 @@ export default function Dashboard() {
                         key={suggestion}
                         type="button"
                         onClick={() => setTopic(`Teach me ${suggestion.toLowerCase()}`)}
-                        style={{ fontFamily: D.mono, fontSize: 10, padding: '6px 10px', letterSpacing: '0.08em', border: `1px solid ${D.faint}`, background: 'transparent', color: D.mute, cursor: 'pointer' }}
+                        style={{ fontFamily: D.mono, fontSize: 10, padding: '5px 10px', letterSpacing: '0.08em', border: `1px solid ${D.faint}`, background: 'transparent', color: D.mute, cursor: 'pointer' }}
                       >
                         {suggestion}
                       </button>
@@ -717,7 +717,7 @@ export default function Dashboard() {
                       background: topic.trim() ? D.ink : D.faint,
                       color: topic.trim() ? D.bg : D.mute,
                       border: 'none',
-                      padding: '12px 22px',
+                      padding: '12px 24px',
                       flexShrink: 0,
                       fontFamily: D.mono,
                       fontSize: 11,
