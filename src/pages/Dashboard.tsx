@@ -7,6 +7,7 @@ import type { Course, QuizAttempt } from '../types';
 
 type Filter = 'all' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
 type DashboardMode = 'courses' | 'quizzes';
+const DASHBOARD_SUGGESTIONS = ['SQL for analysts', 'Python basics', 'Mandarin tones', 'Design systems', 'Financial modeling'];
 
 const D = {
   bg: 'var(--dash-bg)',
@@ -524,6 +525,8 @@ export default function Dashboard() {
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<DashboardMode>('courses');
+  const [topic, setTopic] = useState('');
+  const [heroFocused, setHeroFocused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -565,6 +568,13 @@ export default function Dashboard() {
     dispatch({ type: 'DELETE_COURSE', id: course.id });
   }
 
+  function handleStartCourse(e: React.FormEvent) {
+    e.preventDefault();
+    const nextTopic = topic.trim();
+    if (!nextTopic) return;
+    navigate(`/new?topic=${encodeURIComponent(nextTopic)}`);
+  }
+
   const filters: { key: Filter; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: state.courses.length },
     { key: 'not-started', label: 'Not started', count: stats.notStarted },
@@ -581,6 +591,7 @@ export default function Dashboard() {
     ['Profile', '/profile'],
     ['Settings', '/settings'],
   ] as const;
+  const displayName = state.profile?.displayName?.trim() || (state.username === 'you' ? 'learner' : state.username);
   return (
     <div style={{
       minHeight: '100vh',
@@ -624,6 +635,99 @@ export default function Dashboard() {
         </nav>
 
         <div style={{ minWidth: 0 }}>
+        <section style={{ padding: '34px 0 48px', textAlign: 'center' }}>
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+            <div style={{ fontFamily: D.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: D.red, marginBottom: 24 }}>
+              Dashboard
+            </div>
+            <h1 style={{ margin: '0 0 22px', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(54px, 8.5vw, 112px)', lineHeight: 0.9, letterSpacing: '-0.045em', color: D.ink }}>
+              Hey {displayName},<br />
+              what do you want to learn today?
+            </h1>
+            <p style={{ margin: '0 auto 34px', maxWidth: 500, fontFamily: D.serif, fontStyle: 'italic', fontSize: 20, lineHeight: 1.4, color: D.mute }}>
+              Start something new, or jump back into what is already on the clock.
+            </p>
+
+            <form onSubmit={handleStartCourse}>
+              <div
+                style={{
+                  border: `1.5px solid ${heroFocused ? D.ink : D.faint}`,
+                  background: dark ? 'rgba(246,240,231,0.04)' : 'rgba(255,252,245,0.72)',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                  boxShadow: heroFocused ? `0 0 0 3px ${dark ? 'rgba(246,240,231,0.08)' : 'rgba(26,21,16,0.06)'}` : 'none',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', padding: '20px 20px 12px' }}>
+                  <span style={{ fontFamily: D.mono, fontSize: 13, color: D.red, marginRight: 14, marginTop: 4, flexShrink: 0 }}>$</span>
+                  <textarea
+                    value={topic}
+                    onChange={(event) => {
+                      setTopic(event.target.value);
+                      event.target.style.height = 'auto';
+                      event.target.style.height = `${event.target.scrollHeight}px`;
+                    }}
+                    onFocus={() => setHeroFocused(true)}
+                    onBlur={() => setHeroFocused(false)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        handleStartCourse(event);
+                      }
+                    }}
+                    placeholder="What do you want to learn?"
+                    rows={2}
+                    style={{
+                      flex: 1,
+                      border: 'none',
+                      outline: 'none',
+                      background: 'transparent',
+                      resize: 'none',
+                      fontFamily: D.serif,
+                      fontSize: 22,
+                      lineHeight: 1.4,
+                      color: D.ink,
+                      minHeight: 56,
+                      overflow: 'hidden',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, padding: '12px 20px', borderTop: `1px solid ${D.faint}`, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {DASHBOARD_SUGGESTIONS.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onClick={() => setTopic(`Teach me ${suggestion.toLowerCase()}`)}
+                        style={{ fontFamily: D.mono, fontSize: 10, padding: '6px 10px', letterSpacing: '0.08em', border: `1px solid ${D.faint}`, background: 'transparent', color: D.mute, cursor: 'pointer' }}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!topic.trim()}
+                    style={{
+                      background: topic.trim() ? D.ink : D.faint,
+                      color: topic.trim() ? D.bg : D.mute,
+                      border: 'none',
+                      padding: '12px 22px',
+                      flexShrink: 0,
+                      fontFamily: D.mono,
+                      fontSize: 11,
+                      letterSpacing: '0.18em',
+                      textTransform: 'uppercase',
+                      cursor: topic.trim() ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    Begin the clock →
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </section>
+
         <section style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', paddingBottom: 24, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {(['courses', 'quizzes'] as DashboardMode[]).map((item) => (
