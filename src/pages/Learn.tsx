@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { HC, btn } from '../theme';
+import { HC, HCDark, btn, type Colors } from '../theme';
 import { CountdownInline } from '../components/Countdown';
 import { useStore } from '../store';
 import { apiUrl } from '../api';
 import type { Course, ChatMsg, EnrolledCourse } from '../types';
+import { useTheme } from '../lib/theme';
 
 function renderInlineFormatting(text: string) {
   const nodes: React.ReactNode[] = [];
@@ -131,8 +132,13 @@ function renderSpokenMessage(text: string, visibleWords: number) {
   );
 }
 
-function renderChatMessage(text: string) {
+function renderChatMessage(text: string, theme: Colors, dark: boolean) {
   const blocks = normalizeChatCodeFences(text).split(/```/);
+  const softRule = dark ? 'rgba(250,247,240,0.12)' : 'rgba(26,21,16,0.12)';
+  const softerRule = dark ? 'rgba(250,247,240,0.10)' : 'rgba(26,21,16,0.10)';
+  const muted = dark ? 'rgba(250,247,240,0.62)' : 'rgba(26,21,16,0.52)';
+  const softFill = dark ? 'rgba(250,247,240,0.055)' : 'rgba(26,21,16,0.045)';
+  const accent = dark ? '#ff8c73' : theme.red;
 
   return blocks.map((block, blockIndex) => {
     if (blockIndex % 2 === 1) {
@@ -147,8 +153,9 @@ function renderChatMessage(text: string) {
           style={{
             margin: '10px 0',
             padding: '12px 14px',
-            background: '#16120f',
-            color: HC.paper,
+            background: dark ? '#16120f' : theme.paper,
+            color: dark ? HC.paper : theme.ink,
+            border: `1px solid ${softRule}`,
             overflowX: 'auto',
             fontFamily: HC.mono,
             fontSize: 13,
@@ -200,12 +207,12 @@ function renderChatMessage(text: string) {
                       style={{
                         textAlign: 'left',
                         padding: '8px 10px',
-                        borderBottom: '1px solid rgba(250,247,240,0.12)',
+                        borderBottom: `1px solid ${softRule}`,
                         fontFamily: HC.mono,
                         fontSize: 10,
                         letterSpacing: '0.12em',
                         textTransform: 'uppercase',
-                        color: 'rgba(250,247,240,0.62)',
+                        color: muted,
                         whiteSpace: 'nowrap',
                       }}
                     >
@@ -222,7 +229,7 @@ function renderChatMessage(text: string) {
                         key={`${key}-cell-${rowIndex}-${cellIndex}`}
                       style={{
                         padding: '10px',
-                        borderBottom: '1px solid rgba(250,247,240,0.10)',
+                        borderBottom: `1px solid ${softerRule}`,
                         whiteSpace: 'nowrap',
                       }}
                     >
@@ -239,12 +246,12 @@ function renderChatMessage(text: string) {
       }
 
       if (/^---+$/.test(trimmed)) {
-        rendered.push(<div key={key} style={{ height: 1, background: 'rgba(250,247,240,0.12)', margin: '14px 0' }} />);
+        rendered.push(<div key={key} style={{ height: 1, background: softRule, margin: '14px 0' }} />);
         continue;
       }
 
       if (trimmed.startsWith('## ')) {
-        rendered.push(<div key={key} style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#ff8c73', margin: '10px 0 4px' }}>{trimmed.slice(3)}</div>);
+        rendered.push(<div key={key} style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: accent, margin: '10px 0 4px' }}>{trimmed.slice(3)}</div>);
         continue;
       }
 
@@ -260,7 +267,7 @@ function renderChatMessage(text: string) {
       if (trimmed.startsWith('- ')) {
         rendered.push(
           <div key={key} style={{ display: 'flex', gap: 8, margin: '4px 0' }}>
-            <span style={{ color: '#ff8c73', fontFamily: HC.mono, fontSize: 10, flexShrink: 0, marginTop: 4 }}>•</span>
+            <span style={{ color: accent, fontFamily: HC.mono, fontSize: 10, flexShrink: 0, marginTop: 4 }}>•</span>
             <span>{renderInlineFormatting(trimmed.slice(2))}</span>
           </div>
         );
@@ -280,8 +287,8 @@ function renderChatMessage(text: string) {
               margin: '7px 0',
               padding: '9px 10px',
               borderRadius: 12,
-              background: 'rgba(250,247,240,0.055)',
-              border: '1px solid rgba(250,247,240,0.08)',
+              background: softFill,
+              border: `1px solid ${softerRule}`,
             }}
           >
             <span
@@ -292,8 +299,8 @@ function renderChatMessage(text: string) {
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'rgba(255,140,115,0.14)',
-                color: '#ff8c73',
+                background: dark ? 'rgba(255,140,115,0.14)' : 'rgba(196,34,27,0.10)',
+                color: accent,
                 fontFamily: HC.mono,
                 fontSize: 10,
                 fontWeight: 700,
@@ -788,6 +795,7 @@ function LessonCanvas({
   narrow: boolean;
   chatMessages: ChatMsg[];
 }) {
+  const { t, dark } = useTheme();
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncedVisual, setSyncedVisual] = useState<string | null>(null);
 
@@ -824,7 +832,7 @@ function LessonCanvas({
   const table = extractFirstMarkdownTable(visualSource);
   const chartMode = !code && !table && /(trend|chart|graph|growth|volume|increase|decrease|over time)/i.test(latestTutorText);
   const ambientMode = !table && !code && !chartMode;
-  const accent = readyToMoveOn ? HC.green : HC.red;
+  const accent = readyToMoveOn ? t.green : t.red;
   const objective = normalizeLessonObjective(lesson.objective, lesson.title);
   const ambientPalette = getAmbientPalette(`${course.subject}:${lesson.title}`);
 
@@ -853,11 +861,11 @@ function LessonCanvas({
       `}</style>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.mute }}>
+          <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute }}>
             Visual canvas
           </span>
           {readyToMoveOn && (
-            <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: HC.green }}>
+            <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.green }}>
               objective complete
             </span>
           )}
@@ -867,10 +875,10 @@ function LessonCanvas({
           disabled={syncLoading || chatMessages.filter(m => m.who === 'tutor').length === 0}
           style={{
             padding: '6px 12px',
-            background: syncLoading ? 'transparent' : 'rgba(26,21,16,0.06)',
-            border: `1px solid ${HC.ruleFaint}`,
+            background: syncLoading ? 'transparent' : (dark ? 'rgba(241,236,223,0.06)' : 'rgba(26,21,16,0.06)'),
+            border: `1px solid ${t.ruleFaint}`,
             borderRadius: 999,
-            color: HC.mute,
+            color: t.mute,
             fontFamily: HC.mono,
             fontSize: 9,
             letterSpacing: '0.14em',
@@ -889,18 +897,22 @@ function LessonCanvas({
           minHeight: narrow ? 380 : 'calc(100vh - 96px)',
           borderRadius: 28,
           overflow: 'hidden',
-          background: ambientMode
-            ? `linear-gradient(145deg, ${ambientPalette.base}, ${ambientPalette.mid} 48%, rgba(19, 17, 15, 0.98) 100%)`
-            : `linear-gradient(145deg, rgba(26,21,16,0.98), rgba(66,43,28,0.96) 38%, rgba(199,93,62,0.78) 100%)`,
-          boxShadow: '0 24px 80px rgba(26,21,16,0.20)',
+          background: dark
+            ? (ambientMode
+              ? `linear-gradient(145deg, ${ambientPalette.base}, ${ambientPalette.mid} 48%, rgba(19, 17, 15, 0.98) 100%)`
+              : `linear-gradient(145deg, rgba(26,21,16,0.98), rgba(66,43,28,0.96) 38%, rgba(199,93,62,0.78) 100%)`)
+            : 'linear-gradient(145deg, #faf7f0, #f4f0e8 52%, rgba(196,34,27,0.08) 100%)',
+          boxShadow: dark ? '0 24px 80px rgba(0,0,0,0.24)' : '0 24px 80px rgba(26,21,16,0.10)',
         }}
       >
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: ambientMode
-            ? `radial-gradient(circle at 76% 22%, ${ambientPalette.glowC}, transparent 24%), radial-gradient(circle at 70% 70%, ${ambientPalette.glowB}, transparent 28%), radial-gradient(circle at 28% 86%, ${ambientPalette.glowA}, transparent 24%)`
-            : 'radial-gradient(circle at 76% 22%, rgba(244,240,232,0.22), transparent 22%), radial-gradient(circle at 70% 70%, rgba(216,148,48,0.24), transparent 26%), radial-gradient(circle at 28% 86%, rgba(196,34,27,0.26), transparent 22%)',
+          background: dark
+            ? (ambientMode
+              ? `radial-gradient(circle at 76% 22%, ${ambientPalette.glowC}, transparent 24%), radial-gradient(circle at 70% 70%, ${ambientPalette.glowB}, transparent 28%), radial-gradient(circle at 28% 86%, ${ambientPalette.glowA}, transparent 24%)`
+              : 'radial-gradient(circle at 76% 22%, rgba(244,240,232,0.22), transparent 22%), radial-gradient(circle at 70% 70%, rgba(216,148,48,0.24), transparent 26%), radial-gradient(circle at 28% 86%, rgba(196,34,27,0.26), transparent 22%)')
+            : 'radial-gradient(circle at 76% 22%, rgba(196,34,27,0.10), transparent 24%), radial-gradient(circle at 18% 84%, rgba(26,21,16,0.06), transparent 28%)',
         }} />
         <svg viewBox="0 0 1200 900" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: ambientMode ? 0.24 : 0.38 }}>
           {Array.from({ length: 18 }).map((_, idx) => (
@@ -908,7 +920,7 @@ function LessonCanvas({
               key={idx}
               d={`M-40 ${640 + idx * 22} C 220 ${560 - idx * 10}, 420 ${860 - idx * 8}, 760 ${610 + idx * 8} S 1120 ${320 + idx * 10}, 1260 ${460 + idx * 6}`}
               fill="none"
-              stroke={ambientMode ? ambientPalette.line : 'rgba(244,240,232,0.12)'}
+              stroke={dark ? (ambientMode ? ambientPalette.line : 'rgba(244,240,232,0.12)') : 'rgba(26,21,16,0.08)'}
               strokeWidth={2}
             />
           ))}
@@ -917,19 +929,19 @@ function LessonCanvas({
         <div style={{ position: 'relative', zIndex: 1, height: '100%', padding: narrow ? '24px 24px 28px' : '32px 34px 36px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'start', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontFamily: HC.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.76)', marginBottom: 12 }}>
+              <div style={{ fontFamily: HC.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.76)' : t.mute, marginBottom: 12 }}>
                 {course.subject}
               </div>
-              <div style={{ fontFamily: HC.serif, fontSize: narrow ? 42 : 62, lineHeight: 0.96, letterSpacing: '-0.04em', color: HC.paper, maxWidth: 760 }}>
+              <div style={{ fontFamily: HC.serif, fontSize: narrow ? 42 : 62, lineHeight: 0.96, letterSpacing: '-0.04em', color: dark ? HC.paper : t.ink, maxWidth: 760 }}>
                 {lesson.title}
               </div>
             </div>
-            <div style={{ padding: '10px 12px', borderRadius: 999, background: 'rgba(250,247,240,0.10)', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.paper }}>
+            <div style={{ padding: '10px 12px', borderRadius: 999, background: dark ? 'rgba(250,247,240,0.10)' : 'rgba(26,21,16,0.06)', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: dark ? HC.paper : t.ink }}>
               Chapter {String(course.currentModule + 1).padStart(2, '0')} · Lesson {String(course.currentLesson + 1).padStart(2, '0')}
             </div>
           </div>
 
-          <div style={{ marginTop: 18, maxWidth: 560, fontSize: 16, lineHeight: 1.6, color: 'rgba(250,247,240,0.82)' }}>
+          <div style={{ marginTop: 18, maxWidth: 560, fontSize: 16, lineHeight: 1.6, color: dark ? 'rgba(250,247,240,0.82)' : t.mute }}>
             {objective}
           </div>
 
@@ -1166,6 +1178,12 @@ function CurriculumDrawer({
 function LearnContent({ course }: { course: Course }) {
   const navigate = useNavigate();
   const { state, dispatch } = useStore();
+  const { dark } = useTheme();
+  const theme = dark ? HCDark : HC;
+  const panelFill = dark ? 'rgba(241,236,223,0.06)' : 'rgba(26,21,16,0.045)';
+  const panelFillStrong = dark ? 'rgba(241,236,223,0.09)' : 'rgba(26,21,16,0.07)';
+  const subtleText = dark ? 'rgba(241,236,223,0.58)' : 'rgba(26,21,16,0.52)';
+  const faintText = dark ? 'rgba(241,236,223,0.44)' : 'rgba(26,21,16,0.40)';
 
   const [input, setInput] = useState('');
   const [curriculumOpen, setCurriculumOpen] = useState(false);
@@ -1749,7 +1767,7 @@ function LearnContent({ course }: { course: Course }) {
       ];
 
   return (
-    <div style={{ height: '100vh', background: `linear-gradient(90deg, #171410 0%, #171410 ${narrow ? '100%' : '30%'}, ${HC.bg} ${narrow ? '100%' : '30%'}, ${HC.bg} 100%)` }}>
+    <div style={{ height: '100vh', background: theme.bg, color: theme.ink }}>
       <CurriculumDrawer
         course={course}
         open={curriculumOpen}
@@ -1760,18 +1778,18 @@ function LearnContent({ course }: { course: Course }) {
       />
 
       <div style={{ height: '100%', display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'minmax(440px, 38vw) minmax(0, 1fr)', overflow: 'hidden' }}>
-        <section style={{ background: '#171410', color: HC.paper, display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: narrow ? 'none' : '1px solid rgba(250,247,240,0.08)' }}>
-          <div style={{ padding: '14px 18px 12px', borderBottom: '1px solid rgba(250,247,240,0.08)' }}>
+        <section style={{ background: theme.bg, color: theme.ink, display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: narrow ? 'none' : `1px solid ${theme.ruleFaint}` }}>
+          <div style={{ padding: '14px 18px 12px', borderBottom: `1px solid ${theme.ruleFaint}` }}>
             <button
               onClick={() => navigate('/dashboard')}
-              style={{ ...btn.ghost, padding: 0, fontSize: 10, color: 'rgba(250,247,240,0.62)' }}
+              style={{ ...btn.ghost, padding: 0, fontSize: 10, color: theme.mute }}
             >
               ← dashboard
             </button>
-            <div style={{ marginTop: 10, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.48)' }}>
+            <div style={{ marginTop: 10, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: faintText }}>
               {course.subject}
             </div>
-            <div style={{ marginTop: 6, fontFamily: HC.sans, fontSize: 23, fontWeight: 600, lineHeight: 1.15, letterSpacing: '-0.02em', color: HC.paper }}>
+            <div style={{ marginTop: 6, fontFamily: HC.sans, fontSize: 23, fontWeight: 600, lineHeight: 1.15, letterSpacing: '-0.02em', color: theme.ink }}>
               {lesson?.title}
             </div>
           </div>
@@ -1783,7 +1801,7 @@ function LearnContent({ course }: { course: Course }) {
                   fontFamily: HC.mono,
                   fontSize: 9,
                   letterSpacing: '0.16em',
-                  color: m.who === 'user' ? 'rgba(250,247,240,0.44)' : 'rgba(250,247,240,0.54)',
+                  color: m.who === 'user' ? faintText : subtleText,
                   textTransform: 'uppercase',
                   marginBottom: 8,
                 }}>
@@ -1793,17 +1811,17 @@ function LearnContent({ course }: { course: Course }) {
                   <div style={{
                     padding: '12px 14px',
                     borderRadius: 16,
-                    background: 'rgba(250,247,240,0.08)',
-                    border: '1px solid rgba(250,247,240,0.08)',
-                    color: HC.paper,
+                    background: panelFillStrong,
+                    border: `1px solid ${theme.ruleFaint}`,
+                    color: theme.ink,
                     fontSize: 15,
                     lineHeight: 1.55,
                   }}>
                     {m.text}
                   </div>
                 ) : (
-                  <div style={{ color: HC.paper, fontFamily: HC.sans, fontSize: 15.5, lineHeight: 1.72, letterSpacing: '-0.005em' }}>
-                    {speakingTs === m.ts ? renderSpokenMessage(m.text, spokenWords) : renderChatMessage(m.text)}
+                  <div style={{ color: theme.ink, fontFamily: HC.sans, fontSize: 15.5, lineHeight: 1.72, letterSpacing: '-0.005em' }}>
+                    {speakingTs === m.ts ? renderSpokenMessage(m.text, spokenWords) : renderChatMessage(m.text, theme, dark)}
                   </div>
                 )}
                 {m.who === 'tutor' && m.readyToMoveOn && tutorTurnCount >= 5 && (
@@ -1816,10 +1834,10 @@ function LearnContent({ course }: { course: Course }) {
 
             {aiLoading && (
               <div>
-                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.16em', color: 'rgba(250,247,240,0.54)', textTransform: 'uppercase', marginBottom: 8 }}>
+                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.16em', color: subtleText, textTransform: 'uppercase', marginBottom: 8 }}>
                   Learnor
                 </div>
-                <div style={{ fontFamily: HC.sans, fontSize: 15, fontStyle: 'italic', color: 'rgba(250,247,240,0.62)' }}>
+                <div style={{ fontFamily: HC.sans, fontSize: 15, fontStyle: 'italic', color: subtleText }}>
                   thinking…
                 </div>
               </div>
@@ -1828,7 +1846,7 @@ function LearnContent({ course }: { course: Course }) {
             <div ref={chatEndRef} />
           </div>
 
-          <div style={{ padding: '12px 18px 14px', borderTop: '1px solid rgba(250,247,240,0.08)', background: 'rgba(0,0,0,0.10)' }}>
+          <div style={{ padding: '12px 18px 14px', borderTop: `1px solid ${theme.ruleFaint}`, background: panelFill }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               {phase !== 'ASSESS' && (
                 <button
@@ -1838,8 +1856,8 @@ function LearnContent({ course }: { course: Course }) {
                     ...btn.ghost,
                     padding: '8px 10px',
                     fontSize: 10,
-                    color: exampleMode ? '#7ad08b' : 'rgba(250,247,240,0.54)',
-                    background: exampleMode ? 'rgba(122,208,139,0.10)' : 'rgba(250,247,240,0.04)',
+                    color: exampleMode ? theme.green : theme.mute,
+                    background: exampleMode ? (dark ? 'rgba(122,208,139,0.10)' : 'rgba(45,106,63,0.08)') : panelFill,
                     border: `1px solid ${exampleMode ? 'rgba(122,208,139,0.24)' : 'transparent'}`,
                     opacity: aiLoading || generatingNotes ? 0.5 : 1,
                   }}
@@ -1854,8 +1872,8 @@ function LearnContent({ course }: { course: Course }) {
                   ...btn.ghost,
                   padding: '8px 10px',
                   fontSize: 10,
-                  color: voiceMode ? '#7ad08b' : 'rgba(250,247,240,0.54)',
-                  background: voiceMode ? 'rgba(122,208,139,0.10)' : 'rgba(250,247,240,0.04)',
+                  color: voiceMode ? theme.green : theme.mute,
+                  background: voiceMode ? (dark ? 'rgba(122,208,139,0.10)' : 'rgba(45,106,63,0.08)') : panelFill,
                   border: `1px solid ${voiceMode ? 'rgba(122,208,139,0.24)' : 'transparent'}`,
                   opacity: generatingNotes ? 0.5 : 1,
                 }}
@@ -1863,7 +1881,7 @@ function LearnContent({ course }: { course: Course }) {
                 Voice {voiceMode ? 'on' : 'off'}
               </button>
               {voiceStatus && (
-                <span style={{ alignSelf: 'center', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.50)' }}>
+                <span style={{ alignSelf: 'center', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.mute }}>
                   {voiceStatus}
                 </span>
               )}
@@ -1876,9 +1894,9 @@ function LearnContent({ course }: { course: Course }) {
                     ...(action.primary ? btn.outline : btn.ghost),
                     padding: action.primary ? '8px 12px' : '8px 10px',
                     fontSize: 10,
-                    borderColor: action.primary ? 'rgba(250,247,240,0.18)' : 'transparent',
-                    color: action.primary ? HC.paper : 'rgba(250,247,240,0.70)',
-                    background: action.primary ? 'rgba(250,247,240,0.06)' : 'rgba(250,247,240,0.04)',
+                    borderColor: action.primary ? theme.ruleFaint : 'transparent',
+                    color: action.primary ? theme.ink : theme.mute,
+                    background: panelFill,
                     opacity: aiLoading || generatingNotes ? 0.5 : 1,
                   }}
                 >
@@ -1890,8 +1908,8 @@ function LearnContent({ course }: { course: Course }) {
             <div
               style={{
                 borderRadius: 16,
-                background: listening ? 'rgba(210,34,26,0.10)' : 'rgba(250,247,240,0.08)',
-                border: `1px solid ${listening ? 'rgba(210,34,26,0.55)' : 'rgba(250,247,240,0.08)'}`,
+                background: listening ? 'rgba(210,34,26,0.10)' : panelFillStrong,
+                border: `1px solid ${listening ? 'rgba(210,34,26,0.55)' : theme.ruleFaint}`,
                 boxShadow: listening ? '0 0 0 4px rgba(210,34,26,0.10)' : 'none',
                 padding: 8,
                 transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
@@ -1916,7 +1934,7 @@ function LearnContent({ course }: { course: Course }) {
                   border: 'none',
                   outline: 'none',
                   background: 'transparent',
-                  color: HC.paper,
+                  color: theme.ink,
                   fontFamily: HC.sans,
                   fontSize: 16,
                   lineHeight: 1.55,
@@ -1929,7 +1947,7 @@ function LearnContent({ course }: { course: Course }) {
                     fontSize: 10,
                     letterSpacing: '0.12em',
                     textTransform: 'uppercase',
-                    color: listening ? '#ff6b61' : voiceMode ? '#7ad08b' : 'rgba(250,247,240,0.44)',
+                    color: listening ? theme.red : voiceMode ? theme.green : faintText,
                   }}
                 >
                   {voiceMode ? (listening ? 'recording... release space to send' : 'hold space to talk') : 'take the quiz whenever you feel ready'}
@@ -1941,8 +1959,8 @@ function LearnContent({ course }: { course: Course }) {
                     ...btn.primary,
                     padding: '10px 16px',
                     fontSize: 10,
-                    background: HC.paper,
-                    color: HC.ink,
+                    background: theme.ink,
+                    color: theme.bg,
                     opacity: aiLoading || !input.trim() || generatingNotes ? 0.45 : 1,
                   }}
                 >
@@ -1953,14 +1971,14 @@ function LearnContent({ course }: { course: Course }) {
           </div>
         </section>
 
-        <section style={{ background: HC.bg, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <section style={{ background: theme.bg, color: theme.ink, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '18px 22px 0', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
               <div>
-                <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: HC.red }}>
+                <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.red }}>
                   Chapter {String(course.currentModule + 1).padStart(2, '0')} · Lesson {String(course.currentLesson + 1).padStart(2, '0')}
                 </div>
-                <div style={{ marginTop: 6, fontFamily: HC.serif, fontSize: 26, lineHeight: 1.05, letterSpacing: '-0.02em', color: HC.ink }}>
+                <div style={{ marginTop: 6, fontFamily: HC.serif, fontSize: 26, lineHeight: 1.05, letterSpacing: '-0.02em', color: theme.ink }}>
                   {mod?.title}
                 </div>
               </div>
@@ -1995,11 +2013,11 @@ function LearnContent({ course }: { course: Course }) {
                 >
                   {lessonHasNotes ? 'Refresh notes' : 'Generate notes'}
                 </button>
-                <div style={{ padding: '10px 12px', borderRadius: 999, background: HC.paper, border: `1px solid ${HC.ruleFaint}`, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: HC.mute }}>
+                <div style={{ padding: '10px 12px', borderRadius: 999, background: theme.paper, border: `1px solid ${theme.ruleFaint}`, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.mute }}>
                   {Math.round(course.progress * 100)}% done
                 </div>
-                <div style={{ padding: '10px 12px', borderRadius: 999, background: HC.paper, border: `1px solid ${HC.ruleFaint}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: HC.mute }}>
+                <div style={{ padding: '10px 12px', borderRadius: 999, background: theme.paper, border: `1px solid ${theme.ruleFaint}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.mute }}>
                     Time
                   </span>
                   <CountdownInline deadline={course.deadline} paused={course.paused} />
@@ -2016,7 +2034,7 @@ function LearnContent({ course }: { course: Course }) {
                       ...btn.ghost,
                       padding: '10px 10px',
                       fontSize: 10,
-                      color: course.pauseUsed ? HC.mute : HC.red,
+                      color: course.pauseUsed ? theme.mute : theme.red,
                       opacity: course.pauseUsed ? 0.4 : 1,
                     }}
                   >

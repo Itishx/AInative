@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HC } from '../theme';
+import { useTheme } from '../lib/theme';
 
 function msLeft(deadline: string, paused: boolean): number {
   if (paused) return Infinity;
@@ -58,6 +59,7 @@ export function Countdown({ deadline, paused, size = 44 }: CountdownProps) {
 }
 
 export function CountdownInline({ deadline, paused }: { deadline: string; paused: boolean }) {
+  const { t } = useTheme();
   const [ms, setMs] = useState(() => msLeft(deadline, paused));
   useEffect(() => {
     if (paused) { setMs(Infinity); return; }
@@ -66,15 +68,15 @@ export function CountdownInline({ deadline, paused }: { deadline: string; paused
     return () => clearInterval(id);
   }, [deadline, paused]);
 
-  if (paused) return <span style={{ color: HC.amber, fontFamily: HC.mono, fontSize: 11 }}>paused</span>;
-  if (ms <= 0) return <span style={{ color: HC.mute, fontStyle: 'italic', fontFamily: HC.serif }}>expired</span>;
+  if (paused) return <span style={{ color: t.amber, fontFamily: HC.mono, fontSize: 11 }}>paused</span>;
+  if (ms <= 0) return <span style={{ color: t.mute, fontStyle: 'italic', fontFamily: HC.serif }}>expired</span>;
 
   const totalH = Math.floor(ms / 3600000);
   const d = Math.floor(totalH / 24);
   const h = totalH % 24;
   const danger = ms < 72 * 3600000;
   return (
-    <span style={{ fontFamily: HC.serif, fontStyle: 'italic', color: danger ? HC.red : HC.ink }}>
+    <span style={{ fontFamily: HC.serif, fontStyle: 'italic', color: danger ? t.red : t.ink }}>
       {d}d {String(h).padStart(2, '0')}h
     </span>
   );
