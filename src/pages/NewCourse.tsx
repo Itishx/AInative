@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { HC, btn } from '../theme';
 import { Chrome } from '../components/Chrome';
 import { apiJson } from '../api';
@@ -27,7 +27,11 @@ export default function NewCourse() {
   const [params] = useSearchParams();
   const topic = params.get('topic') || '';
   const navigate = useNavigate();
+  const location = useLocation();
   const { dispatch } = useStore();
+
+  // Curriculum passed directly from Udemy import (via router state — no API call needed)
+  const udemyCurriculum = (location.state as any)?.udemyCurriculum ?? null;
 
   const [days, setDays] = useState(30);
   const [curriculum, setCurriculum] = useState<null | {
@@ -99,6 +103,15 @@ export default function NewCourse() {
 
   useEffect(() => {
     if (!topic) { navigate('/'); return; }
+
+    // Pre-parsed curriculum from Udemy import — skip API entirely
+    if (udemyCurriculum) {
+      setCurriculum(udemyCurriculum);
+      setGeneratedMaterialsContext(udemyCurriculum.materialsContext || '');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
     const endpoint = materialsContext ? '/api/curriculum-from-materials' : '/api/curriculum';

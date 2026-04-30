@@ -323,6 +323,105 @@ function repairCurriculumJson(raw) {
   return null;
 }
 
+// Parses raw Udemy page innerText into { title, level, estimatedHours, modules }
+// Heuristic: a text line followed by a timestamp (M:SS / MM:SS / H:MM:SS) is a lecture
+function parseUdemyText(rawText) {
+  const courseStart = rawText.indexOf('Course content');
+  if (courseStart === -1) return null;
+
+  const text = rawText.slice(courseStart);
+  const allLines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  const isTimestamp = (s) => /^\d{1,2}:\d{2}(:\d{2})?$/.test(s);
+
+  const isSkip = (s) =>
+    s === 'Course content' ||
+    s === 'Expand all sections' ||
+    s === 'Collapse all sections' ||
+    /^\d+\s*sections?\s*[•·]\s*\d+\s*lectures?/.test(s) ||
+    /^\d+\s*lectures?\s*[•·]/.test(s) ||
+    /^\d+h\s+\d+m/.test(s) ||
+    /^(Preview|New|Quiz|Article)$/i.test(s) ||
+    isTimestamp(s) ||
+    s.length < 2;
+
+  const modules = [];
+  let currentModule = null;
+
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i];
+    if (isSkip(line)) continue;
+
+    // Look ahead up to 3 lines for a timestamp (skips "Preview", "New", etc.)
+    let tsIdx = -1;
+    for (let j = i + 1; j <= i + 3 && j < allLines.length; j++) {
+      if (isTimestamp(allLines[j])) { tsIdx = j; break; }
+      if (!isSkip(allLines[j])) break; // hit a real line before timestamp → section header
+    }
+
+    if (tsIdx !== -1) {
+      if (!currentModule) {
+        currentModule = { title: 'Introduction', lessons: [] };
+        modules.push(currentModule);
+      }
+      const tsParts = allLines[tsIdx].split(':');
+      let minutes = 0;
+      if (tsParts.length === 3) {
+        minutes = parseInt(tsParts[0]) * 60 + parseInt(tsParts[1]);
+      } else {
+        minutes = parseInt(tsParts[0]);
+      }
+      currentModule.lessons.push({
+        title: line,
+        objective: `Understand ${line}`,
+        minutes: Math.max(1, minutes),
+      });
+      i = tsIdx;
+    } else {
+      // Section header
+      currentModule = { title: line, lessons: [] };
+      modules.push(currentModule);
+    }
+  }
+
+  const filtered = modules.filter((m) => m.lessons.length > 0);
+  if (filtered.length < 1) return null;
+
+  const metaLine = allLines.find((l) => /\d+h\s+\d+m/.test(l));
+  const hoursMatch = metaLine?.match(/(\d+)h\s+(\d+)m/);
+  const estimatedHours = hoursMatch
+    ? parseInt(hoursMatch[1]) + Math.round(parseInt(hoursMatch[2]) / 60)
+    : Math.round(filtered.reduce((s, m) => s + m.lessons.reduce((a, l) => a + l.minutes, 0), 0) / 60);
+
+  return {
+    title: 'Udemy Course',
+    level: 'intermediate',
+    estimatedHours: Math.max(1, estimatedHours),
+    modules: filtered,
+  };
+}
+
+// Like normalizeCurriculum but preserves actual minutes (Udemy lectures can be 30+ min)
+function normalizeUdemyCurriculum(curriculum) {
+  if (!curriculum || !Array.isArray(curriculum.modules)) return curriculum;
+  let totalMinutes = 0;
+  const modules = curriculum.modules.map((module) => ({
+    ...module,
+    lessons: Array.isArray(module.lessons)
+      ? module.lessons.map((lesson) => {
+          const mins = Math.max(1, Number(lesson.minutes) || 1);
+          totalMinutes += mins;
+          return { ...lesson, objective: lesson.objective || fallbackObjective(lesson.title), minutes: mins };
+        })
+      : [],
+  }));
+  return {
+    ...curriculum,
+    estimatedHours: Number(Math.max(0.1, totalMinutes / 60).toFixed(1)),
+    modules,
+  };
+}
+
 function normalizeCurriculum(curriculum) {
   if (!curriculum || !Array.isArray(curriculum.modules)) return curriculum;
   let totalMinutes = 0;
@@ -1548,19 +1647,137 @@ app.post('/api/fetch-url', async (req, res) => {
   }
 });
 
+// ── Course page crawler (Udemy etc) ──────────────────────────────────────────
+app.post('/api/crawl-course', async (req, res) => {
+  const { url } = req.body;
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url required' });
+
+  let parsed;
+  try { parsed = new URL(url); } catch { return res.status(400).json({ error: 'Invalid URL' }); }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return res.status(400).json({ error: 'Only http/https URLs supported' });
+
+  const BROWSER_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Upgrade-Insecure-Requests': '1',
+  };
+
+  async function tryFetch(targetUrl) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const r = await fetch(targetUrl, { headers: BROWSER_HEADERS, redirect: 'follow', signal: controller.signal });
+      clearTimeout(timer);
+      return r;
+    } catch (e) { clearTimeout(timer); throw e; }
+  }
+
+  function extractFromHtml(html) {
+    // 1. Try JSON-LD structured data first (most reliable)
+    const jsonLdMatches = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+    const jsonLdBlocks = jsonLdMatches.map((m) => { try { return JSON.parse(m[1]); } catch { return null; } }).filter(Boolean);
+
+    // 2. Try __INITIAL_STATE__ / __UDEMY_INITIAL_DATA__ embedded JSON
+    const initDataMatch = html.match(/(?:__UDEMY_INITIAL_DATA__|__INITIAL_STATE__|__NEXT_DATA__)\s*=\s*({[\s\S]+?})(?:\s*;?\s*<\/script>|\s*;?\s*window\.)/);
+    let initData = null;
+    if (initDataMatch) {
+      try { initData = JSON.parse(initDataMatch[1]); } catch {}
+    }
+
+    // 3. Fallback: strip HTML to readable text
+    const plainText = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 15000);
+
+    return { jsonLdBlocks, initData, plainText };
+  }
+
+  try {
+    let html = '';
+    let strategy = '';
+
+    // Strategy 1: direct fetch
+    try {
+      const r = await tryFetch(url);
+      if (r.ok) {
+        html = await r.text();
+        strategy = 'direct';
+      } else if (r.status === 403 || r.status === 429 || r.status === 503) {
+        // Strategy 2: allorigins proxy
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+        const pr = await tryFetch(proxyUrl);
+        if (pr.ok) {
+          const pd = await pr.json();
+          html = pd.contents || '';
+          strategy = 'proxy';
+        }
+      }
+    } catch {
+      // Strategy 2 fallback
+      try {
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+        const pr = await tryFetch(proxyUrl);
+        if (pr.ok) {
+          const pd = await pr.json();
+          html = pd.contents || '';
+          strategy = 'proxy';
+        }
+      } catch {}
+    }
+
+    if (!html || html.length < 200) {
+      return res.status(400).json({ error: 'Could not fetch this page. Udemy may require login or blocks crawlers. Try pasting course content manually.' });
+    }
+
+    const { jsonLdBlocks, initData, plainText } = extractFromHtml(html);
+
+    res.json({
+      strategy,
+      plainText,
+      charCount: plainText.length,
+      jsonLd: jsonLdBlocks,
+      hasInitData: !!initData,
+      initDataKeys: initData ? Object.keys(initData).slice(0, 20) : [],
+    });
+  } catch (err) {
+    console.error('[crawl-course]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Generate curriculum from instructor materials ─────────────────────────────
 app.post('/api/curriculum-from-materials', async (req, res) => {
-  const { topic, days, materialsContext } = req.body;
+  const { topic, materialsContext } = req.body;
   try {
+    // Try direct Udemy text parsing first — preserves exact sections & lectures
+    const direct = parseUdemyText(materialsContext || '');
+    if (direct && direct.modules.length >= 1) {
+      if (topic && !topic.startsWith('http')) direct.title = topic;
+      const curriculum = normalizeUdemyCurriculum(direct);
+      return res.json({ ...curriculum, materialsContext: (materialsContext || '').slice(0, 30000) });
+    }
+
+    // Fallback: ask Gemini to EXTRACT the exact outline, not generate a new one
     const text = await callGemini(
-      'You are a curriculum designer. Respond ONLY with valid JSON, no markdown fences.',
+      'You are a course outline extractor. Respond ONLY with valid JSON, no markdown fences.',
       [{
         role: 'user',
-        content: [{ type: 'text', text: `Create a learning curriculum for: "${topic}". The student has ${days} days.
+        content: [{ type: 'text', text: `Extract the EXACT course outline from this Udemy page text. Preserve every section title and lecture title EXACTLY as they appear — do not summarize, rename, combine, or invent anything.
 
-Here are the instructor's materials — build the curriculum STRICTLY from this content:
 ===
-${(materialsContext || '').slice(0, 10000)}
+${(materialsContext || '').slice(0, 15000)}
 ===
 
 Return ONLY valid JSON:
@@ -1570,19 +1787,19 @@ Return ONLY valid JSON:
   "estimatedHours": <number>,
   "modules": [
     {
-      "title": "...",
-      "lessons": [{ "title": "...", "objective": "...", "minutes": <number> }]
+      "title": "Section title exactly as shown",
+      "lessons": [{ "title": "Lecture title exactly as shown", "objective": "One sentence: what this lecture covers", "minutes": <integer from timestamp> }]
     }
   ]
 }
-Rules: 5–7 modules, 2–4 lessons each. Every lesson must be 2–5 minutes max; choose 2 for simple concepts, 3–4 for normal concepts, 5 only for dense technical concepts. Only cover topics that appear in the provided materials.
-Each lesson objective must describe what the student should understand by the end of that lesson, in one sentence.` }],
+
+Include EVERY section and EVERY lecture. Use the exact titles. Set minutes from the timestamp shown next to each lecture.` }],
       }],
       8192,
     );
     const parsedFromMaterials = repairCurriculumJson(text);
     if (!parsedFromMaterials) throw new Error('Could not parse curriculum JSON');
-    const curriculum = normalizeCurriculum(parsedFromMaterials);
+    const curriculum = normalizeUdemyCurriculum(parsedFromMaterials);
     res.json({ ...curriculum, materialsContext: materialsContext || '' });
   } catch (err) {
     console.error('[curriculum-from-materials]', err.message);
