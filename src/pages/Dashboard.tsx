@@ -740,7 +740,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <section style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', paddingBottom: 24, flexWrap: 'wrap' }}>
+        <section style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', padding: '28px 0 24px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {(['courses', 'quizzes'] as DashboardMode[]).map((item) => (
               <button
