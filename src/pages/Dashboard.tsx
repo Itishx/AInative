@@ -635,16 +635,28 @@ export default function Dashboard() {
         </nav>
 
         <div style={{ minWidth: 0 }}>
-        <section style={{ padding: '34px 0 48px', textAlign: 'center' }}>
-          <div style={{ maxWidth: 800, margin: '0 auto' }}>
-            <div style={{ fontFamily: D.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: D.red, marginBottom: 24 }}>
+        <section
+          style={{
+            padding: '34px clamp(18px, 4vw, 44px) 42px',
+            textAlign: 'center',
+            border: `1px solid ${D.faint}`,
+            borderRadius: 34,
+            background: dark
+              ? 'radial-gradient(circle at 20% 0%, rgba(255,81,72,0.10), transparent 34%), linear-gradient(135deg, rgba(246,240,231,0.055), rgba(246,240,231,0.018))'
+              : 'radial-gradient(circle at 20% 0%, rgba(196,34,27,0.08), transparent 34%), linear-gradient(135deg, rgba(255,252,245,0.82), rgba(238,229,214,0.55))',
+            boxShadow: dark ? '0 28px 80px rgba(0,0,0,0.20)' : '0 28px 80px rgba(26,21,16,0.07)',
+            marginBottom: 28,
+          }}
+        >
+          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+            <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: D.red, marginBottom: 18 }}>
               Dashboard
             </div>
-            <h1 style={{ margin: '0 0 22px', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(54px, 8.5vw, 112px)', lineHeight: 0.9, letterSpacing: '-0.045em', color: D.ink }}>
+            <h1 style={{ margin: '0 0 18px', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(40px, 6.5vw, 78px)', lineHeight: 0.92, letterSpacing: '-0.045em', color: D.ink }}>
               Hey {displayName},<br />
               what do you want to learn today?
             </h1>
-            <p style={{ margin: '0 auto 34px', maxWidth: 500, fontFamily: D.serif, fontStyle: 'italic', fontSize: 20, lineHeight: 1.4, color: D.mute }}>
+            <p style={{ margin: '0 auto 28px', maxWidth: 500, fontFamily: D.serif, fontStyle: 'italic', fontSize: 18, lineHeight: 1.4, color: D.mute }}>
               Start something new, or jump back into what is already on the clock.
             </p>
 
