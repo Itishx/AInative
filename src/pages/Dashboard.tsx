@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HC } from '../theme';
 import { useStore } from '../store';
@@ -39,6 +39,16 @@ function daysUntil(deadline: string) {
 
 function formatDeadline(deadline: string) {
   return new Date(deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function countdownParts(deadline: string, now: number) {
+  const ms = Math.max(0, new Date(deadline).getTime() - now);
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return { days, hours, minutes, seconds, expired: ms <= 0, urgent: ms > 0 && ms < 72 * 3600000 };
 }
 
 function statusFor(course: Course) {
@@ -136,10 +146,12 @@ function ConsistencyGrid({ courses }: { courses: Course[] }) {
 
 function CourseCard({
   course,
+  now,
   onOpen,
   onDelete,
 }: {
   course: Course;
+  now: number;
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -148,8 +160,10 @@ function CourseCard({
   const currentLesson = course.curriculum.modules[course.currentModule]?.lessons[course.currentLesson];
   const progress = Math.round(course.progress * 100);
   const daysLeft = daysUntil(course.deadline);
+  const timeLeft = countdownParts(course.deadline, now);
   const status = statusFor(course);
   const archived = course.status === 'tombstone';
+  const clockColor = course.paused ? D.amber : timeLeft.expired || archived ? D.mute : timeLeft.urgent ? D.red : D.ink;
 
   return (
     <article
@@ -202,8 +216,16 @@ function CourseCard({
         </div>
         <div>
           <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: D.mute }}>Clock</div>
-          <div style={{ marginTop: 5, fontFamily: D.sans, fontSize: 14, color: course.status === 'active-urgent' ? D.red : D.ink }}>
-            {course.status === 'completed' ? 'Finished' : daysLeft <= 0 ? 'Due now' : `${daysLeft} days`}
+          <div style={{ marginTop: 5, fontFamily: D.mono, fontSize: 13, letterSpacing: '0.04em', color: clockColor }}>
+            {course.status === 'completed'
+              ? 'finished'
+              : archived
+                ? 'archived'
+                : course.paused
+                  ? 'paused'
+                  : timeLeft.expired || daysLeft <= 0
+                    ? 'due now'
+                    : `${String(timeLeft.days).padStart(2, '0')}d ${String(timeLeft.hours).padStart(2, '0')}h ${String(timeLeft.minutes).padStart(2, '0')}m ${String(timeLeft.seconds).padStart(2, '0')}s`}
           </div>
         </div>
       </div>
@@ -502,6 +524,12 @@ export default function Dashboard() {
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<DashboardMode>('courses');
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const stats = useMemo(() => {
     const notStarted = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'completed' && !courseHasStarted(c)).length;
@@ -781,6 +809,7 @@ export default function Dashboard() {
                 <CourseCard
                   key={course.id}
                   course={course}
+                  now={now}
                   onDelete={() => handleDeleteCourse(course)}
                   onOpen={() => {
                     if (course.status === 'completed') navigate(`/certificate/${course.id}`);
