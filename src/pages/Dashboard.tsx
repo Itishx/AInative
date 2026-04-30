@@ -664,8 +664,19 @@ export default function Dashboard() {
           </p>
         </section>
 
-        <section style={{ display: 'flex', justifyContent: 'space-between', gap: 22, alignItems: 'center', padding: '26px 0 8px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <section style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', padding: '26px 0 8px', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              padding: 6,
+              border: `1px solid ${D.faint}`,
+              borderRadius: 999,
+              background: D.softer,
+            }}
+          >
             {filters.map((item) => {
               const active = filter === item.key;
               return (
@@ -673,46 +684,76 @@ export default function Dashboard() {
                   key={item.key}
                   onClick={() => setFilter(item.key)}
                   style={{
-                    border: 'none',
-                    background: 'transparent',
-                    color: active ? D.ink : D.mute,
-                    borderBottom: active ? `1px solid ${D.ink}` : '1px solid transparent',
-                    padding: '0 0 6px',
+                    border: `1px solid ${active ? D.ink : 'transparent'}`,
+                    borderRadius: 999,
+                    background: active ? D.ink : 'transparent',
+                    color: active ? D.bg : D.mute,
+                    padding: '10px 13px',
                     cursor: 'pointer',
                     fontFamily: D.mono,
-                    fontSize: 9.5,
-                    letterSpacing: '0.13em',
+                    fontSize: 9,
+                    letterSpacing: '0.11em',
                     textTransform: 'uppercase',
+                    transition: 'background 160ms ease, color 160ms ease, border-color 160ms ease',
                   }}
                 >
-                  {item.label} {item.count}
+                  {item.label}
+                  <span style={{ marginLeft: 8, opacity: active ? 0.72 : 0.86 }}>{item.count}</span>
                 </button>
               );
             })}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search courses"
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <label
               style={{
-                width: 210,
-                border: 'none',
-                borderBottom: `1px solid ${D.faint}`,
-                background: 'transparent',
-                color: D.ink,
-                outline: 'none',
-                padding: '8px 0',
-                fontFamily: D.sans,
-                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                width: 'min(320px, 54vw)',
+                border: `1px solid ${D.faint}`,
+                borderRadius: 999,
+                background: D.softer,
+                padding: '0 14px',
               }}
-            />
+            >
+              <span style={{ color: D.mute, fontFamily: D.mono, fontSize: 12 }}>⌕</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search courses"
+                style={{
+                  width: '100%',
+                  border: 'none',
+                  background: 'transparent',
+                  color: D.ink,
+                  outline: 'none',
+                  padding: '12px 0',
+                  fontFamily: D.sans,
+                  fontSize: 13,
+                }}
+              />
+            </label>
             <button
               onClick={() => navigate('/')}
-              style={{ border: 'none', borderBottom: `1px solid ${D.ink}`, background: 'transparent', color: D.ink, cursor: 'pointer', padding: '8px 0', fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+              aria-label="Create a new course"
+              title="Create a new course"
+              style={{
+                width: 44,
+                height: 44,
+                border: `1px solid ${D.ink}`,
+                borderRadius: '50%',
+                background: D.ink,
+                color: D.bg,
+                cursor: 'pointer',
+                display: 'grid',
+                placeItems: 'center',
+                fontFamily: D.sans,
+                fontSize: 24,
+                lineHeight: 1,
+              }}
             >
-              New course
+              +
             </button>
           </div>
         </section>
