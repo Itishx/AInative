@@ -14,6 +14,7 @@ const SEED_LEADERBOARD: LeaderboardEntry[] = [];
 function defaultProfile(username = 'you'): UserProfile {
   return {
     displayName: username && username !== 'you' ? username : '',
+    headline: '',
     bio: '',
     avatarUrl: '',
   };

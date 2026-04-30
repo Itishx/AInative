@@ -1,6 +1,13 @@
 alter table public.user_courses
 add column if not exists profile jsonb not null default '{}'::jsonb;
 
+-- Profile headline is stored inside the profile jsonb column as profile.headline.
+-- This backfills existing rows with an explicit empty headline key without
+-- changing any user's saved display name, bio, or avatar.
+update public.user_courses
+set profile = coalesce(profile, '{}'::jsonb) || jsonb_build_object('headline', coalesce(profile->>'headline', ''))
+where profile is null or not (profile ? 'headline');
+
 alter table public.user_courses
 add column if not exists quiz_attempts jsonb not null default '[]'::jsonb;
 

@@ -81,6 +81,7 @@ export interface LeaderboardEntry {
 
 export interface UserProfile {
   displayName?: string;
+  headline?: string;
   bio?: string;
   avatarUrl?: string;
 }

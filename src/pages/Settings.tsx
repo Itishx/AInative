@@ -15,6 +15,7 @@ export default function Settings() {
   const [tab, setTab] = useState<SettingsTab>('profile');
   const [username, setUsername] = useState(state.username ?? '');
   const [displayName, setDisplayName] = useState(state.profile?.displayName ?? '');
+  const [headline, setHeadline] = useState(state.profile?.headline ?? '');
   const [bio, setBio] = useState(state.profile?.bio ?? '');
   const [avatarUrl, setAvatarUrl] = useState(state.profile?.avatarUrl ?? '');
   const [avatarError, setAvatarError] = useState('');
@@ -71,6 +72,7 @@ export default function Settings() {
     setSaveError('');
     const profile = {
       displayName: displayName.trim(),
+      headline: headline.trim(),
       bio: bio.trim(),
       avatarUrl: avatarUrl.trim(),
     };
@@ -179,6 +181,10 @@ export default function Settings() {
 
               <Field label="Username / handle"><input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your_handle" maxLength={32} style={inputStyle} /></Field>
               <Field label="Display name"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your public name" maxLength={48} style={inputStyle} /></Field>
+              <Field label="Profile headline">
+                <input value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="Welcome back, learner." maxLength={72} style={inputStyle} />
+                <div style={{ fontFamily: HC.mono, fontSize: 9, color: HC.mute, marginTop: 6, letterSpacing: '0.08em' }}>{headline.length}/72 characters.</div>
+              </Field>
               <Field label="Bio">
                 <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="What are you learning, building, or racing against?" maxLength={160} rows={4} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} />
                 <div style={{ fontFamily: HC.mono, fontSize: 9, color: HC.mute, marginTop: 6, letterSpacing: '0.08em' }}>{bio.length}/160 characters.</div>

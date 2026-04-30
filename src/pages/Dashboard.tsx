@@ -581,14 +581,6 @@ export default function Dashboard() {
     ['Profile', '/profile'],
     ['Settings', '/settings'],
   ] as const;
-  const handle = makeHandle(state.username);
-  const displayName = state.profile?.displayName?.trim() || (state.username === 'you' ? 'Learner' : state.username);
-  const bio = state.profile?.bio?.trim() || 'Learning in public, racing deadlines, and turning unfinished curiosity into finished courses.';
-  const avatarUrl = state.profile?.avatarUrl?.trim();
-  const joined = state.courses.length
-    ? new Date(Math.min(...state.courses.map((course) => new Date(course.createdAt).getTime()).filter(Number.isFinite))).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-    : new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -631,82 +623,37 @@ export default function Dashboard() {
           </div>
         </nav>
 
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 440px)',
-            gap: 'clamp(28px, 5vw, 70px)',
-            alignItems: 'start',
-            border: `1px solid ${D.faint}`,
-            borderRadius: 34,
-            padding: 'clamp(24px, 4vw, 46px)',
-            background: 'linear-gradient(145deg, rgba(255,255,255,0.04), rgba(26,21,16,0.018))',
-            boxShadow: '0 30px 100px rgba(26,21,16,0.07)',
-            marginBottom: 30,
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '8px 11px', border: `1px solid ${D.faint}`, borderRadius: 999, background: D.softer, marginBottom: 20 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: D.red }} />
-              <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: D.mute }}>
-                Dashboard
-              </span>
-            </div>
-            <h1 style={{ margin: 0, fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(52px, 8vw, 112px)', lineHeight: 0.82, letterSpacing: '-0.08em', color: D.ink }}>
-              Welcome back, {displayName}.
-            </h1>
-            <p style={{ maxWidth: 650, margin: '22px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 16, lineHeight: 1.6 }}>
-              Pick up the next lesson, watch the clocks, and keep every course moving without digging through a profile sidebar.
-            </p>
-            <div style={{ marginTop: 26, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {(['courses', 'quizzes'] as DashboardMode[]).map((item) => (
-                <button
-                  key={item}
-                  onClick={() => setMode(item)}
-                  style={{
-                    border: `1px solid ${mode === item ? D.ink : D.faint}`,
-                    borderRadius: 999,
-                    background: mode === item ? D.ink : 'transparent',
-                    color: mode === item ? D.bg : D.ink,
-                    cursor: 'pointer',
-                    padding: '11px 16px',
-                    fontFamily: D.mono,
-                    fontSize: 9.5,
-                    letterSpacing: '0.13em',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {item === 'courses' ? 'Your courses' : 'Your quizzes'}
-                </button>
-              ))}
-              <button
-                onClick={() => navigate('/profile')}
-                style={{ border: `1px solid ${D.faint}`, borderRadius: 999, background: D.softer, color: D.mute, cursor: 'pointer', padding: '11px 16px', fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
-              >
-                View profile
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gap: 18 }}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => navigate('/profile')}
-                style={{ width: 58, height: 58, borderRadius: '50%', border: `1px solid ${D.faint}`, background: D.ink, color: D.bg, overflow: 'hidden', display: 'grid', placeItems: 'center', fontFamily: D.mono, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
-                aria-label="Open profile"
-              >
-                {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : displayName.slice(0, 2).toUpperCase()}
-              </button>
-              <div style={{ textAlign: 'right', minWidth: 0 }}>
-                <div style={{ fontFamily: D.sans, fontSize: 15, fontWeight: 800, color: D.ink }}>{displayName}</div>
-                <div style={{ marginTop: 4, fontFamily: D.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: D.mute }}>@{handle}</div>
-              </div>
-            </div>
-            <ConsistencyGrid courses={state.courses} />
-          </div>
-        </section>
-
         <div style={{ minWidth: 0 }}>
+        <section style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', paddingBottom: 24, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {(['courses', 'quizzes'] as DashboardMode[]).map((item) => (
+              <button
+                key={item}
+                onClick={() => setMode(item)}
+                style={{
+                  border: `1px solid ${mode === item ? D.ink : D.faint}`,
+                  borderRadius: 999,
+                  background: mode === item ? D.ink : D.softer,
+                  color: mode === item ? D.bg : D.ink,
+                  cursor: 'pointer',
+                  padding: '11px 16px',
+                  fontFamily: D.mono,
+                  fontSize: 9.5,
+                  letterSpacing: '0.13em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {item === 'courses' ? 'Your courses' : 'Your quizzes'}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => navigate('/profile')}
+            style={{ border: `1px solid ${D.faint}`, borderRadius: 999, background: D.softer, color: D.mute, cursor: 'pointer', padding: '11px 16px', fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+          >
+            View profile
+          </button>
+        </section>
         {mode === 'quizzes' ? (
           <QuizHub
             courses={state.courses}

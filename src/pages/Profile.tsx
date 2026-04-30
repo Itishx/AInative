@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { useTheme } from '../lib/theme';
 import { HC } from '../theme';
+import type { Course } from '../types';
 
 const P = {
   bg: 'var(--profile-bg)',
@@ -21,27 +21,62 @@ function makeHandle(username: string) {
   return username.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 18) || 'learner';
 }
 
+function ConsistencyGrid({ courses }: { courses: Course[] }) {
+  const today = new Date();
+  const days = Array.from({ length: 84 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (83 - index));
+    const key = date.toISOString().slice(0, 10);
+    const count = courses.reduce((sum, course) => sum + (course.lastStudiedDate === key ? 1 : 0), 0);
+    return { key, count };
+  });
+
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', marginBottom: 14 }}>
+        <span style={{ fontFamily: P.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: P.mute }}>Consistency</span>
+        <span style={{ fontFamily: P.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: P.mute }}>
+          {days.reduce((sum, day) => sum + day.count, 0)} study signals · last 12 weeks
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(14, minmax(8px, 1fr))', gap: 6 }}>
+        {days.map((day) => {
+          const level = Math.min(3, day.count);
+          const color = level === 0
+            ? P.softer
+            : level === 1
+              ? 'rgba(45,106,63,0.45)'
+              : level === 2
+                ? 'rgba(45,106,63,0.72)'
+                : P.green;
+          return (
+            <span
+              key={day.key}
+              title={`${day.key}: ${day.count} activity`}
+              style={{
+                aspectRatio: '1 / 1',
+                minWidth: 8,
+                borderRadius: 3,
+                background: color,
+                boxShadow: level > 0 ? `0 0 18px ${color}` : 'none',
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Profile() {
   const { state } = useStore();
   const { dark } = useTheme();
   const navigate = useNavigate();
   const displayName = state.profile?.displayName?.trim() || (state.username === 'you' ? 'Learner' : state.username);
   const handle = makeHandle(state.username);
+  const headline = state.profile?.headline?.trim() || `Welcome back, ${displayName}.`;
   const bio = state.profile?.bio?.trim() || 'Learning in public, racing deadlines, and turning unfinished curiosity into finished courses.';
   const avatarUrl = state.profile?.avatarUrl?.trim();
-
-  const stats = useMemo(() => {
-    const active = state.courses.filter((course) => course.status !== 'tombstone' && course.status !== 'completed').length;
-    const done = state.courses.filter((course) => course.status === 'completed').length;
-    const urgent = state.courses.filter((course) => course.status === 'active-urgent').length;
-    const quizTotal = state.quizAttempts.reduce((sum, attempt) => sum + attempt.score, 0);
-    const quizAvg = state.quizAttempts.length ? Math.round(quizTotal / state.quizAttempts.length) : 0;
-    return { active, done, urgent, quizAvg };
-  }, [state.courses, state.quizAttempts]);
-
-  const joined = state.courses.length
-    ? new Date(Math.min(...state.courses.map((course) => new Date(course.createdAt).getTime()).filter(Number.isFinite))).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-    : new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
     <main
@@ -70,58 +105,65 @@ export default function Profile() {
         </div>
       </nav>
 
-      <section style={{ maxWidth: 1280, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(260px, 390px) minmax(0, 1fr)', gap: 'clamp(32px, 6vw, 86px)', alignItems: 'start' }}>
-        <aside style={{ border: `1px solid ${P.faint}`, borderRadius: 34, padding: 30, background: P.softer }}>
-          <div style={{ width: 156, height: 156, borderRadius: '50%', overflow: 'hidden', background: P.ink, color: P.bg, display: 'grid', placeItems: 'center', fontFamily: P.mono, fontSize: 28, fontWeight: 800, marginBottom: 26 }}>
-            {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : displayName.slice(0, 2).toUpperCase()}
+      <section
+        style={{
+          maxWidth: 1280,
+          margin: '0 auto',
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 440px)',
+          gap: 'clamp(28px, 5vw, 70px)',
+          alignItems: 'start',
+          border: `1px solid ${P.faint}`,
+          borderRadius: 34,
+          padding: 'clamp(24px, 4vw, 46px)',
+          background: 'linear-gradient(145deg, rgba(255,255,255,0.04), rgba(26,21,16,0.018))',
+          boxShadow: '0 30px 100px rgba(26,21,16,0.07)',
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '8px 11px', border: `1px solid ${P.faint}`, borderRadius: 999, background: P.softer, marginBottom: 20 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: P.red }} />
+            <span style={{ fontFamily: P.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: P.mute }}>
+              @{handle}
+            </span>
           </div>
-          <h1 style={{ margin: 0, fontFamily: P.sans, fontSize: 30, letterSpacing: '-0.05em', color: P.ink }}>{displayName}</h1>
-          <div style={{ marginTop: 7, color: P.mute, fontSize: 18 }}>@{handle}</div>
-          <p style={{ margin: '28px 0 0', color: P.ink, fontSize: 20, lineHeight: 1.45 }}>{bio}</p>
-          <div style={{ marginTop: 30, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => navigate('/settings')} style={{ border: `1px solid ${P.ink}`, borderRadius: 999, background: P.ink, color: P.bg, cursor: 'pointer', padding: '12px 18px', fontFamily: P.sans, fontSize: 14, fontWeight: 800 }}>Edit profile</button>
-            <button onClick={() => navigate('/dashboard')} style={{ border: `1px solid ${P.faint}`, borderRadius: 999, background: 'transparent', color: P.ink, cursor: 'pointer', padding: '12px 18px', fontFamily: P.sans, fontSize: 14, fontWeight: 800 }}>Dashboard</button>
+          <h1 style={{ margin: 0, fontFamily: P.serif, fontWeight: 400, fontSize: 'clamp(52px, 8vw, 112px)', lineHeight: 0.82, letterSpacing: '-0.08em', color: P.ink }}>
+            {headline}
+          </h1>
+          <p style={{ maxWidth: 650, margin: '22px 0 0', color: P.mute, fontFamily: P.sans, fontSize: 16, lineHeight: 1.6 }}>
+            {bio}
+          </p>
+          <div style={{ marginTop: 26, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => navigate('/settings')}
+              style={{ border: `1px solid ${P.ink}`, borderRadius: 999, background: P.ink, color: P.bg, cursor: 'pointer', padding: '11px 16px', fontFamily: P.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+            >
+              Edit profile
+            </button>
+            <button
+              onClick={() => navigate('/dashboard')}
+              style={{ border: `1px solid ${P.faint}`, borderRadius: 999, background: P.softer, color: P.mute, cursor: 'pointer', padding: '11px 16px', fontFamily: P.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+            >
+              Dashboard
+            </button>
           </div>
-          <div style={{ marginTop: 32, paddingTop: 24, borderTop: `1px solid ${P.faint}`, display: 'grid', gap: 11, color: P.mute, fontSize: 15 }}>
-            <span>⌖ Hyderabad</span>
-            <span>↗ learnor.app</span>
-            <span>▣ Joined {joined}</span>
-          </div>
-        </aside>
+        </div>
 
-        <div>
-          <div style={{ fontFamily: P.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: P.red }}>Profile</div>
-          <h2 style={{ margin: '12px 0 0', fontFamily: P.serif, fontSize: 'clamp(54px, 8vw, 112px)', lineHeight: 0.84, fontWeight: 400, letterSpacing: '-0.08em' }}>
-            Learning record.
-          </h2>
-          <div style={{ marginTop: 38, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 18 }}>
-            {[
-              ['Active', stats.active],
-              ['Finished', stats.done],
-              ['Urgent', stats.urgent],
-              ['Quiz avg', `${stats.quizAvg}%`],
-            ].map(([label, value]) => (
-              <div key={label} style={{ borderTop: `1px solid ${P.faint}`, paddingTop: 16 }}>
-                <div style={{ fontFamily: P.serif, fontSize: 46, lineHeight: 0.9, color: label === 'Urgent' ? P.red : P.ink }}>{value}</div>
-                <div style={{ marginTop: 12, fontFamily: P.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase', color: P.mute }}>{label}</div>
-              </div>
-            ))}
+        <div style={{ display: 'grid', gap: 18 }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => navigate('/settings')}
+              style={{ width: 58, height: 58, borderRadius: '50%', border: `1px solid ${P.faint}`, background: P.ink, color: P.bg, overflow: 'hidden', display: 'grid', placeItems: 'center', fontFamily: P.mono, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+              aria-label="Edit profile"
+            >
+              {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : displayName.slice(0, 2).toUpperCase()}
+            </button>
+            <div style={{ textAlign: 'right', minWidth: 0 }}>
+              <div style={{ fontFamily: P.sans, fontSize: 15, fontWeight: 800, color: P.ink }}>{displayName}</div>
+              <div style={{ marginTop: 4, fontFamily: P.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: P.mute }}>@{handle}</div>
+            </div>
           </div>
-
-          <section style={{ marginTop: 52, borderTop: `1px solid ${P.faint}`, paddingTop: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'baseline', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontFamily: P.serif, fontSize: 38, fontWeight: 400, letterSpacing: '-0.055em' }}>Courses</h3>
-              <span style={{ fontFamily: P.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: P.mute }}>{state.courses.length} total</span>
-            </div>
-            <div style={{ display: 'grid', gap: 18 }}>
-              {state.courses.slice(0, 8).map((course) => (
-                <button key={course.id} onClick={() => navigate(course.status === 'completed' ? `/certificate/${course.id}` : `/learn/${course.id}`)} style={{ border: 'none', borderTop: `1px solid ${P.faint}`, background: 'transparent', color: P.ink, cursor: 'pointer', padding: '18px 0 0', textAlign: 'left' }}>
-                  <div style={{ fontFamily: P.serif, fontSize: 30, letterSpacing: '-0.055em' }}>{course.subject}</div>
-                  <div style={{ marginTop: 7, fontFamily: P.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase', color: P.mute }}>{course.status.replace('-', ' ')} · {Math.round(course.progress * 100)}%</div>
-                </button>
-              ))}
-            </div>
-          </section>
+          <ConsistencyGrid courses={state.courses} />
         </div>
       </section>
     </main>
