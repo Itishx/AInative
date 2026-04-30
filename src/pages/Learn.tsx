@@ -2015,7 +2015,7 @@ function LearnContent({ course }: { course: Course }) {
                     cursor: aiLoading || generatingNotes ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  Take quiz →
+                  Mark completed →
                 </button>
                 <button
                   onClick={handleGenerateNotesOnly}

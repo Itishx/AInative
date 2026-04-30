@@ -1356,7 +1356,7 @@ app.post('/api/quiz', async (req, res) => {
       'You are a quiz writer. Respond ONLY with valid JSON, no markdown fences.',
       [{
         role: 'user',
-        content: [{ type: 'text', text: `Write a 5-question quiz for: lesson "${lessonTitle}" (module "${moduleTitle}", course "${courseTitle}").
+        content: [{ type: 'text', text: `Write an 8-question quiz for: lesson "${lessonTitle}" (module "${moduleTitle}", course "${courseTitle}").
 
 ${taughtContent
   ? `====== WHAT THE TUTOR ACTUALLY TAUGHT ======
@@ -1374,12 +1374,15 @@ STRICT RULES — read carefully:
   : `No chat history — write fair, introductory-level questions for "${lessonTitle}". Test conceptual understanding, not trivia or memorized syntax.`}
 
 Write:
-- exactly 5 MCQ questions
+- exactly 8 MCQ questions
 - 0 to 2 practical exercises. Prefer 0 unless there is a genuinely fair hands-on task from the taught content.
 
 Return ONLY valid JSON (no markdown fences, no explanation):
 {
   "questions": [
+    { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": <0-3> },
+    { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": <0-3> },
+    { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": <0-3> },
     { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": <0-3> },
     { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": <0-3> },
     { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": <0-3> },
@@ -1397,7 +1400,8 @@ Return ONLY valid JSON (no markdown fences, no explanation):
       .map((q) => ({
         ...q,
         type: 'mcq',
-      }));
+      }))
+      .slice(0, 8);
     parsed.practicalExercises = Array.isArray(parsed.practicalExercises)
       ? parsed.practicalExercises
           .filter((exercise) => practicalExerciseIsFair(exercise, taughtContent))

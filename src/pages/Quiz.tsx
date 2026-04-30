@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { HC, btn } from '../theme';
+import { HC, HCDark, btn, type Colors } from '../theme';
 import { useStore } from '../store';
 import type { MCQQuestion } from '../types';
+import { useTheme } from '../lib/theme';
 
 interface GradeResult { passed: boolean; score: number; feedback: string; }
 interface PracticalExercise {
@@ -60,7 +61,7 @@ function parseMarkdownTableRow(line: string) {
     .map((cell) => cell.trim());
 }
 
-function renderMarkdown(text: string) {
+function renderMarkdown(text: string, theme: Colors, dark = false) {
   const lines = text.split('\n');
   const rendered: React.ReactNode[] = [];
 
@@ -82,8 +83,8 @@ function renderMarkdown(text: string) {
           style={{
             margin: '12px 0 16px',
             padding: '12px 14px',
-            background: '#16120f',
-            color: HC.paper,
+            background: dark ? 'rgba(250,247,240,0.08)' : '#16120f',
+            color: dark ? theme.ink : HC.paper,
             overflowX: 'auto',
             fontFamily: HC.mono,
             fontSize: 13,
@@ -115,7 +116,7 @@ function renderMarkdown(text: string) {
       i -= 1;
       rendered.push(
         <div key={`table-${i}`} style={{ overflowX: 'auto', margin: '14px 0 18px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, lineHeight: 1.5, color: HC.ink }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, lineHeight: 1.5, color: theme.ink }}>
             <thead>
               <tr>
                 {header.map((cell, cellIndex) => (
@@ -124,12 +125,12 @@ function renderMarkdown(text: string) {
                     style={{
                       textAlign: 'left',
                       padding: '8px 10px',
-                      borderBottom: `1px solid ${HC.ruleFaint}`,
+                      borderBottom: `1px solid ${theme.ruleFaint}`,
                       fontFamily: HC.mono,
                       fontSize: 10,
                       letterSpacing: '0.12em',
                       textTransform: 'uppercase',
-                      color: HC.mute,
+                      color: theme.mute,
                       whiteSpace: 'nowrap',
                     }}
                   >
@@ -146,7 +147,7 @@ function renderMarkdown(text: string) {
                       key={`cell-${i}-${rowIndex}-${cellIndex}`}
                       style={{
                         padding: '10px',
-                        borderBottom: `1px solid ${HC.ruleFaint}`,
+                        borderBottom: `1px solid ${theme.ruleFaint}`,
                         whiteSpace: 'nowrap',
                       }}
                     >
@@ -163,26 +164,26 @@ function renderMarkdown(text: string) {
     }
 
     if (/^---+$/.test(trimmed)) {
-      rendered.push(<div key={`rule-${i}`} style={{ height: 1, background: HC.ruleFaint, margin: '14px 0' }} />);
+      rendered.push(<div key={`rule-${i}`} style={{ height: 1, background: theme.ruleFaint, margin: '22px 0' }} />);
       continue;
     }
 
     if (trimmed.startsWith('## ')) {
-      rendered.push(<h3 key={`h2-${i}`} style={{ fontFamily: HC.serif, fontSize: 20, fontWeight: 400, margin: '18px 0 6px', letterSpacing: '-0.01em', color: HC.ink }}>{renderInlineFormatting(trimmed.slice(3))}</h3>);
+      rendered.push(<h3 key={`h2-${i}`} style={{ fontFamily: HC.serif, fontSize: 26, fontWeight: 400, margin: '28px 0 10px', letterSpacing: '-0.02em', color: theme.ink }}>{renderInlineFormatting(trimmed.slice(3))}</h3>);
       continue;
     }
 
     if (trimmed.startsWith('# ')) {
-      rendered.push(<h2 key={`h1-${i}`} style={{ fontFamily: HC.serif, fontSize: 24, fontWeight: 400, margin: '18px 0 8px', letterSpacing: '-0.02em', color: HC.ink }}>{renderInlineFormatting(trimmed.slice(2))}</h2>);
+      rendered.push(<h2 key={`h1-${i}`} style={{ fontFamily: HC.serif, fontSize: 34, fontWeight: 400, margin: '28px 0 12px', letterSpacing: '-0.03em', color: theme.ink }}>{renderInlineFormatting(trimmed.slice(2))}</h2>);
       continue;
     }
 
     if (trimmed.startsWith('- ')) {
-      rendered.push(<div key={`bullet-${i}`} style={{ display: 'flex', gap: 8, marginBottom: 4, color: HC.ink }}><span style={{ color: HC.red, fontFamily: HC.mono, fontSize: 12 }}>·</span><span style={{ fontSize: 14, lineHeight: 1.55 }}>{renderInlineFormatting(trimmed.slice(2))}</span></div>);
+      rendered.push(<div key={`bullet-${i}`} style={{ display: 'flex', gap: 10, marginBottom: 8, color: theme.ink }}><span style={{ color: theme.red, fontFamily: HC.mono, fontSize: 14 }}>·</span><span style={{ fontSize: 17, lineHeight: 1.72 }}>{renderInlineFormatting(trimmed.slice(2))}</span></div>);
       continue;
     }
 
-    rendered.push(<div key={`text-${i}`} style={{ fontSize: 14, lineHeight: 1.6, color: HC.ink }}>{renderInlineFormatting(line)}</div>);
+    rendered.push(<p key={`text-${i}`} style={{ margin: '0 0 16px', fontSize: 18, lineHeight: 1.78, color: theme.ink }}>{renderInlineFormatting(line)}</p>);
   }
 
   return rendered;
@@ -191,6 +192,23 @@ function renderMarkdown(text: string) {
 function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: number }) {
   const navigate = useNavigate();
   const { state, dispatch } = useStore();
+  const { dark } = useTheme();
+  const theme = dark ? HCDark : HC;
+  const panelFill = dark ? 'rgba(241,236,223,0.055)' : 'rgba(26,21,16,0.035)';
+  const panelFillStrong = dark ? 'rgba(241,236,223,0.09)' : 'rgba(26,21,16,0.065)';
+  const tabBase: React.CSSProperties = {
+    border: `1px solid ${theme.ruleFaint}`,
+    background: panelFill,
+    color: theme.mute,
+    borderRadius: 999,
+    padding: '11px 18px',
+    fontFamily: HC.mono,
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.14em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+  };
 
   const course = state.courses.find((c) => c.id === courseId)!;
   const mod = course.curriculum.modules[mi];
@@ -210,9 +228,7 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
   const [results, setResults] = useState<Array<GradeResult | null>>([]);
   const [overallPreferredMet, setOverallPreferredMet] = useState(false);
 
-  const [showNotes, setShowNotes] = useState(true);
-  const preferredThreshold = 70;
-
+  const [activeTab, setActiveTab] = useState<'notes' | 'quiz'>(lesson.notes ? 'notes' : 'quiz');
   async function loadQuizPayload() {
     setLoading(true);
     setError('');
@@ -232,7 +248,8 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
       if (data.error) throw new Error(data.error);
       const normalizedQuestions = (data.questions as MCQQuestion[] | undefined ?? [])
         .filter((q) => Array.isArray(q.options) && q.options.length === 4)
-        .map((q) => ({ ...q, type: 'mcq' as const }));
+        .map((q) => ({ ...q, type: 'mcq' as const }))
+        .slice(0, 8);
       setQuestions(normalizedQuestions);
       setPracticalExercises(Array.isArray(data.practicalExercises) ? data.practicalExercises : []);
     } catch (e) {
@@ -316,70 +333,114 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
     : 0;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: HC.bg, color: HC.ink }}>
-      <div style={{ flex: 1, maxWidth: 840, margin: '0 auto', width: '100%', padding: '40px 40px 60px' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: theme.bg, color: theme.ink }}>
+      <div style={{ flex: 1, maxWidth: 980, margin: '0 auto', width: '100%', padding: '44px 40px 72px' }}>
         {/* Header */}
-        <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: HC.red }}>
+        <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.red }}>
           {course.subject} · Module {mi + 1} · Lesson {li + 1}
         </div>
-        <h1 style={{ fontFamily: HC.serif, fontSize: 'clamp(28px, 4vw, 48px)', fontWeight: 400, letterSpacing: '-0.025em', margin: '6px 0 4px', color: HC.ink }}>
+        <h1 style={{ fontFamily: HC.serif, fontSize: 'clamp(30px, 4vw, 54px)', fontWeight: 400, letterSpacing: '-0.035em', margin: '8px 0 6px', color: theme.ink }}>
           {lesson.title}
         </h1>
-        <div style={{ fontFamily: HC.mono, fontSize: 11, color: HC.mute }}>
-          70% is preferred. You can still continue even if you score lower.
+        <div style={{ fontFamily: HC.sans, fontSize: 15, color: theme.mute, lineHeight: 1.55, maxWidth: 620 }}>
+          Read the important notes first, then take the 8-question MCQ check when you feel ready. 70% is preferred, not a wall.
         </div>
 
-        {/* Notes panel */}
-        {lesson.notes && (
-          <div style={{ marginTop: 28, border: `1px solid ${HC.ruleFaint}`, background: HC.paper, color: HC.ink }}>
-            <button
-              onClick={() => setShowNotes(!showNotes)}
-              style={{
-                width: '100%', padding: '12px 18px', background: 'none', border: 'none', cursor: 'pointer',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                fontFamily: HC.mono, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.ink,
-              }}
-            >
-              <span>Lesson Notes</span>
-              <span style={{ color: HC.mute }}>{showNotes ? '▲ hide' : '▼ show'}</span>
-            </button>
-            {showNotes && (
-              <div style={{ padding: '0 18px 18px', borderTop: `1px solid ${HC.ruleFaint}`, color: HC.ink }}>
-                {renderMarkdown(lesson.notes)}
+        <div style={{ marginTop: 30, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setActiveTab('notes')}
+            style={{
+              ...tabBase,
+              background: activeTab === 'notes' ? theme.ink : panelFill,
+              color: activeTab === 'notes' ? theme.bg : theme.mute,
+              borderColor: activeTab === 'notes' ? theme.ink : theme.ruleFaint,
+            }}
+          >
+            Notes
+          </button>
+          <button
+            onClick={() => setActiveTab('quiz')}
+            style={{
+              ...tabBase,
+              background: activeTab === 'quiz' ? theme.ink : panelFill,
+              color: activeTab === 'quiz' ? theme.bg : theme.mute,
+              borderColor: activeTab === 'quiz' ? theme.ink : theme.ruleFaint,
+            }}
+          >
+            Quiz · 8 questions
+          </button>
+        </div>
+
+        {activeTab === 'notes' && (
+          <div style={{ marginTop: 34, maxWidth: 760 }}>
+            <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.red, marginBottom: 14 }}>
+              important notes
+            </div>
+            {lesson.notes ? (
+              <article
+                style={{
+                  borderTop: `1px solid ${theme.ruleFaint}`,
+                  paddingTop: 22,
+                  color: theme.ink,
+                }}
+              >
+                {renderMarkdown(lesson.notes, theme, dark)}
+              </article>
+            ) : (
+              <div style={{ padding: 22, border: `1px solid ${theme.ruleFaint}`, background: panelFill, color: theme.mute, fontFamily: HC.sans, lineHeight: 1.6 }}>
+                No notes were generated yet. Go back to the lesson and hit Mark completed again to generate notes before the quiz.
               </div>
             )}
+            <button
+              onClick={() => setActiveTab('quiz')}
+              style={{
+                marginTop: 22,
+                border: `1px solid ${theme.ink}`,
+                background: theme.ink,
+                color: theme.bg,
+                fontFamily: HC.mono,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                padding: '13px 20px',
+                cursor: 'pointer',
+              }}
+            >
+              Start quiz →
+            </button>
           </div>
         )}
 
         {/* Loading */}
-        {loading && (
-          <div style={{ marginTop: 40, fontFamily: HC.serif, fontStyle: 'italic', fontSize: 18, color: HC.mute }}>
+        {activeTab === 'quiz' && loading && (
+          <div style={{ marginTop: 40, fontFamily: HC.serif, fontStyle: 'italic', fontSize: 18, color: theme.mute }}>
             Generating quiz…
           </div>
         )}
 
         {/* Error */}
-        {error && (
-          <div style={{ marginTop: 28, padding: '12px 16px', border: `1px solid ${HC.red}`, background: 'rgba(196,34,27,0.05)', display: 'flex', gap: 10 }}>
-            <span style={{ color: HC.red, fontFamily: HC.mono, fontWeight: 700 }}>!</span>
+        {activeTab === 'quiz' && error && (
+          <div style={{ marginTop: 28, padding: '12px 16px', border: `1px solid ${theme.red}`, background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.05)', display: 'flex', gap: 10 }}>
+            <span style={{ color: theme.red, fontFamily: HC.mono, fontWeight: 700 }}>!</span>
             <div style={{ fontSize: 13 }}>{error}</div>
           </div>
         )}
 
         {/* Questions */}
-        {!loading && !error && questions.map((q, qi) => {
+        {activeTab === 'quiz' && !loading && !error && questions.map((q, qi) => {
           const result = submitted ? results[qi] : null;
           return (
             <div key={qi} style={{
-              marginTop: 32, paddingTop: 24, borderTop: `1px solid ${HC.ruleFaint}`,
+              marginTop: 30, paddingTop: 24, borderTop: `1px solid ${theme.ruleFaint}`,
             }}>
               <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                <span style={{ fontFamily: HC.mono, fontSize: 11, color: HC.red, flexShrink: 0, marginTop: 3 }}>
+                <span style={{ fontFamily: HC.mono, fontSize: 11, color: theme.red, flexShrink: 0, marginTop: 3 }}>
                   {String(qi + 1).padStart(2, '0')}
                 </span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontFamily: HC.serif, fontSize: 20, letterSpacing: '-0.01em', lineHeight: 1.4 }}>{q.q}</div>
-                  <div style={{ fontFamily: HC.mono, fontSize: 10, color: HC.mute, marginTop: 4, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  <div style={{ fontFamily: HC.mono, fontSize: 10, color: theme.mute, marginTop: 4, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
                     Multiple choice
                   </div>
 
@@ -388,13 +449,13 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                       const picked = mcqAnswers[qi] === oi;
                       const isCorrect = q.correct === oi;
                       let bg = 'transparent';
-                      let border = `1px solid ${HC.ruleFaint}`;
-                      let textColor: string = HC.ink;
+                      let border = `1px solid ${theme.ruleFaint}`;
+                      let textColor: string = theme.ink;
                       if (submitted) {
-                        if (isCorrect) { bg = 'rgba(45,106,63,0.1)'; border = `1px solid ${HC.green}`; textColor = HC.green as string; }
-                        else if (picked && !isCorrect) { bg = 'rgba(196,34,27,0.08)'; border = `1px solid ${HC.red}`; textColor = HC.red as string; }
+                        if (isCorrect) { bg = dark ? 'rgba(106,174,127,0.13)' : 'rgba(45,106,63,0.1)'; border = `1px solid ${theme.green}`; textColor = theme.green as string; }
+                        else if (picked && !isCorrect) { bg = dark ? 'rgba(232,81,74,0.13)' : 'rgba(196,34,27,0.08)'; border = `1px solid ${theme.red}`; textColor = theme.red as string; }
                       } else if (picked) {
-                        bg = HC.paper; border = `1px solid ${HC.ink}`;
+                        bg = panelFillStrong; border = `1px solid ${theme.ink}`;
                       }
                       return (
                         <button key={oi} onClick={() => { if (!submitted) setMcqAnswers((p) => ({ ...p, [qi]: oi })); }}
@@ -415,14 +476,14 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                   {submitted && result && (
                     <div style={{
                       marginTop: 10, padding: '10px 14px',
-                      border: `1px solid ${result.passed ? HC.green : HC.red}`,
-                      background: result.passed ? 'rgba(45,106,63,0.06)' : 'rgba(196,34,27,0.04)',
+                      border: `1px solid ${result.passed ? theme.green : theme.red}`,
+                      background: result.passed ? (dark ? 'rgba(106,174,127,0.10)' : 'rgba(45,106,63,0.06)') : (dark ? 'rgba(232,81,74,0.10)' : 'rgba(196,34,27,0.04)'),
                       display: 'flex', gap: 10, alignItems: 'flex-start',
                     }}>
-                      <span style={{ fontFamily: HC.mono, fontSize: 12, color: result.passed ? HC.green : HC.red, flexShrink: 0 }}>
+                      <span style={{ fontFamily: HC.mono, fontSize: 12, color: result.passed ? theme.green : theme.red, flexShrink: 0 }}>
                         {result.passed ? '✓' : '✗'}
                       </span>
-                      <div style={{ fontSize: 13, lineHeight: 1.5, color: HC.ink }}>{result.feedback}</div>
+                      <div style={{ fontSize: 13, lineHeight: 1.5, color: theme.ink }}>{result.feedback}</div>
                     </div>
                   )}
                 </div>
@@ -432,19 +493,19 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
         })}
 
         {/* Submit / Result */}
-        {!loading && !error && questions.length > 0 && (
-          <div style={{ marginTop: 40, borderTop: `2px solid ${HC.ink}`, paddingTop: 28 }}>
+        {activeTab === 'quiz' && !loading && !error && questions.length > 0 && (
+          <div style={{ marginTop: 40, borderTop: `2px solid ${theme.ink}`, paddingTop: 28 }}>
             {!submitted ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <button onClick={handleSubmit} disabled={!allAnswered || grading} style={{
-                  ...btn.primary, padding: '14px 32px', fontSize: 13,
+                  ...btn.primary, padding: '14px 32px', fontSize: 13, background: theme.ink, color: theme.bg,
                   opacity: !allAnswered || grading ? 0.4 : 1,
                   cursor: !allAnswered || grading ? 'not-allowed' : 'pointer',
                 }}>
                   {grading ? 'Grading…' : 'Submit answers →'}
                 </button>
                 {!allAnswered && (
-                  <span style={{ fontFamily: HC.mono, fontSize: 11, color: HC.mute }}>
+                  <span style={{ fontFamily: HC.mono, fontSize: 11, color: theme.mute }}>
                     Answer all questions first.
                   </span>
                 )}
@@ -454,35 +515,35 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                 {/* Score banner */}
                 <div style={{
                   padding: '20px 24px',
-                  border: `1.5px solid ${overallPreferredMet ? HC.green : HC.amber}`,
-                  background: overallPreferredMet ? 'rgba(45,106,63,0.07)' : 'rgba(216,148,48,0.10)',
+                  border: `1.5px solid ${overallPreferredMet ? theme.green : theme.amber}`,
+                  background: overallPreferredMet ? (dark ? 'rgba(106,174,127,0.10)' : 'rgba(45,106,63,0.07)') : (dark ? 'rgba(227,164,71,0.10)' : 'rgba(216,148,48,0.10)'),
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}>
                   <div>
-                    <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: overallPreferredMet ? HC.green : HC.amber }}>
+                    <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: overallPreferredMet ? theme.green : theme.amber }}>
                       {overallPreferredMet ? 'Preferred score met' : 'Below preferred'}
                     </div>
                     <div style={{ fontFamily: HC.serif, fontSize: 36, fontWeight: 400, letterSpacing: '-0.02em', marginTop: 4 }}>
                       {totalScore}% — {overallPreferredMet ? 'you can continue.' : 'still okay to continue.'}
                     </div>
-                    <div style={{ fontSize: 13, lineHeight: 1.5, color: HC.mute, marginTop: 8 }}>
+                    <div style={{ fontSize: 13, lineHeight: 1.5, color: theme.mute, marginTop: 8 }}>
                       70% is the target. This quiz is not a blocker anymore.
                     </div>
                   </div>
-                  <div style={{ fontFamily: HC.serif, fontSize: 56, color: overallPreferredMet ? HC.green : HC.amber }}>
+                  <div style={{ fontFamily: HC.serif, fontSize: 56, color: overallPreferredMet ? theme.green : theme.amber }}>
                     {overallPreferredMet ? '✓' : '→'}
                   </div>
                 </div>
 
                 {practicalExercises.length > 0 && (
                   <div style={{ marginTop: 28 }}>
-                    <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: HC.red, marginBottom: 10 }}>
+                    <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.red, marginBottom: 10 }}>
                       optional practice
                     </div>
                     <div style={{ fontFamily: HC.serif, fontSize: 22, letterSpacing: '-0.015em', marginBottom: 8 }}>
                       Hands-on task, only if this lesson supports it.
                     </div>
-                    <div style={{ fontSize: 14, lineHeight: 1.6, color: HC.mute, marginBottom: 14 }}>
+                    <div style={{ fontSize: 14, lineHeight: 1.6, color: theme.mute, marginBottom: 14 }}>
                       This is separate from your score. Skip it or upload what you made when it actually helps.
                     </div>
 
@@ -490,28 +551,28 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                       {practicalExercises.map((exercise, idx) => {
                         const uploaded = uploads[idx];
                         return (
-                          <div key={`${exercise.title}-${idx}`} style={{ background: HC.paper, border: `1px solid ${HC.ruleFaint}`, padding: '18px 18px 16px' }}>
-                            <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: HC.red, marginBottom: 8 }}>
+                          <div key={`${exercise.title}-${idx}`} style={{ background: panelFill, border: `1px solid ${theme.ruleFaint}`, padding: '18px 18px 16px' }}>
+                            <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.red, marginBottom: 8 }}>
                               Exercise {String(idx + 1).padStart(2, '0')}
                             </div>
                             <div style={{ fontFamily: HC.serif, fontSize: 24, letterSpacing: '-0.015em', marginBottom: 8 }}>
                               {exercise.title}
                             </div>
-                            <div style={{ fontSize: 15, lineHeight: 1.65, color: HC.ink, marginBottom: 12 }}>
+                            <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink, marginBottom: 12 }}>
                               {exercise.task}
                             </div>
-                            <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: HC.mute, marginBottom: 6 }}>
+                            <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.mute, marginBottom: 6 }}>
                               deliverable
                             </div>
-                            <div style={{ fontSize: 14, lineHeight: 1.55, color: HC.ink, marginBottom: 12 }}>
+                            <div style={{ fontSize: 14, lineHeight: 1.55, color: theme.ink, marginBottom: 12 }}>
                               {exercise.deliverable}
                             </div>
-                            <div style={{ fontSize: 13, lineHeight: 1.55, color: HC.mute, marginBottom: 14 }}>
+                            <div style={{ fontSize: 13, lineHeight: 1.55, color: theme.mute, marginBottom: 14 }}>
                               {exercise.submissionHint}
                             </div>
 
                             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                              <span style={{ ...btn.outline, padding: '10px 14px', fontSize: 10 }}>
+                              <span style={{ ...btn.outline, padding: '10px 14px', fontSize: 10, borderColor: theme.ink, color: theme.ink }}>
                                 {uploaded ? 'Replace upload' : 'Upload answer'}
                               </span>
                               <input
@@ -519,7 +580,7 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                                 onChange={(e) => setUploads((prev) => ({ ...prev, [idx]: e.target.files?.[0] ?? null }))}
                                 style={{ display: 'none' }}
                               />
-                              <span style={{ fontFamily: HC.mono, fontSize: 10, color: uploaded ? HC.green : HC.mute, letterSpacing: '0.08em' }}>
+                              <span style={{ fontFamily: HC.mono, fontSize: 10, color: uploaded ? theme.green : theme.mute, letterSpacing: '0.08em' }}>
                                 {uploaded ? `attached: ${uploaded.name}` : 'nothing attached yet'}
                               </span>
                             </label>
@@ -531,7 +592,7 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                 )}
 
                 <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-                  <button onClick={handleContinue} style={{ ...btn.primary, padding: '14px 28px' }}>
+                  <button onClick={handleContinue} style={{ ...btn.primary, padding: '14px 28px', background: theme.ink, color: theme.bg }}>
                     Continue →
                   </button>
                   {!overallPreferredMet && (
@@ -542,11 +603,11 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                       setUploads({});
                       setPracticalExercises([]);
                       loadQuizPayload();
-                    }} style={{ ...btn.danger, padding: '14px 28px' }}>
+                    }} style={{ ...btn.danger, padding: '14px 28px', background: theme.red }}>
                       Try for 70% →
                     </button>
                   )}
-                  <button onClick={() => navigate(`/learn/${course.id}`)} style={btn.outline}>
+                  <button onClick={() => navigate(`/learn/${course.id}`)} style={{ ...btn.outline, borderColor: theme.ink, color: theme.ink }}>
                     ← Back to lesson
                   </button>
                 </div>
@@ -612,7 +673,8 @@ export function GeneralQuiz() {
         if (data.error) throw new Error(data.error);
         setQuestions(((data.questions as MCQQuestion[] | undefined) ?? [])
           .filter((q) => Array.isArray(q.options) && q.options.length === 4)
-          .map((q) => ({ ...q, type: 'mcq' as const })));
+          .map((q) => ({ ...q, type: 'mcq' as const }))
+          .slice(0, 8));
       })
       .catch((err) => setError(err?.message || 'Could not generate quiz.'))
       .finally(() => setLoading(false));
@@ -656,7 +718,7 @@ export function GeneralQuiz() {
         <h1 style={{ margin: '8px 0 8px', fontFamily: HC.serif, fontSize: 'clamp(34px, 6vw, 70px)', fontWeight: 400, letterSpacing: '-0.055em', lineHeight: 0.95 }}>
           {topic}
         </h1>
-        <p style={{ margin: 0, color: HC.mute, fontSize: 14 }}>Five MCQs. No course required.</p>
+        <p style={{ margin: 0, color: HC.mute, fontSize: 14 }}>Eight MCQs. No course required.</p>
 
         {loading && <div style={{ marginTop: 34, color: HC.mute, fontFamily: HC.serif, fontStyle: 'italic' }}>Generating quiz...</div>}
         {error && <div style={{ marginTop: 28, border: `1px solid ${HC.red}`, padding: 14, color: HC.red }}>{error}</div>}
