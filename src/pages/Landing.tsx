@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { useTheme as useAppTheme } from '../lib/theme';
+import { useAuth } from '../lib/auth';
 // ── Theme ─────────────────────────────────────────────────────────────────────
 type T = {
   bg: string; paper: string; paperAlt: string;
@@ -56,8 +57,8 @@ function Wrap({ id, children, bg, pad = '96px 32px', borderTop, borderBottom }: 
 }
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
-function SiteNav({ active, dark, onToggleDark, onNav, onToggleSaas }: {
-  active: string; dark: boolean; onToggleDark: () => void; onNav: (id: string) => void;
+function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark, onNav, onToggleSaas }: {
+  active: string; dark: boolean; loggedIn: boolean; avatarUrl?: string; profileLabel: string; onToggleDark: () => void; onNav: (id: string) => void;
 }) {
   const { t } = useTheme();
   const items: [string, string][] = [
@@ -154,8 +155,31 @@ function SiteNav({ active, dark, onToggleDark, onNav, onToggleSaas }: {
           }}>{dark ? '☀' : '☾'}</button>
           <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{
             fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
-            color: t.ink, textDecoration: 'none', padding: '10px 12px', whiteSpace: 'nowrap',
-          }}>Log in</a>
+            color: t.ink, textDecoration: 'none', padding: loggedIn ? 0 : '10px 12px', whiteSpace: 'nowrap',
+            display: 'grid', placeItems: 'center',
+          }}>
+            {loggedIn ? (
+              <span style={{
+                width: 42,
+                height: 42,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                display: 'grid',
+                placeItems: 'center',
+                background: t.ink,
+                color: dark ? '#141210' : t.paper,
+                border: `1px solid ${t.ruleFaint}`,
+                fontFamily: MONO,
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: '0.04em',
+              }}>
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : profileLabel.slice(0, 2).toUpperCase()}
+              </span>
+            ) : 'Log in'}
+          </a>
         </div>
       </div>
     </nav>
@@ -1127,6 +1151,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function Landing() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { dark, toggle } = useAppTheme();
   const [active, setActive] = useState('home');
 
@@ -1155,8 +1180,8 @@ export default function Landing() {
   }, []);
 
   function onNav(target: string) {
-    if (target === 'new') { navigate('/auth'); return; }
-    if (target === 'dashboard') { navigate('/auth'); return; }
+    if (target === 'new') { navigate(user ? '/new' : '/auth'); return; }
+    if (target === 'dashboard') { navigate(user ? '/dashboard' : '/auth'); return; }
     if (target === 'leaderboard-page') { navigate('/leaderboard'); return; }
     if (target === 'browse') { navigate('/browse'); return; }
     if (target === 'create') { navigate('/create'); return; }
@@ -1166,11 +1191,14 @@ export default function Landing() {
   }
 
   const t = dark ? DARK : LIGHT;
+  const { state } = useStore();
+  const profileLabel = state.profile?.displayName?.trim() || state.username || user?.email || 'me';
+  const avatarUrl = state.profile?.avatarUrl?.trim();
 
   return (
     <ThemeCtx.Provider value={{ t, dark }}>
       <div style={{ minHeight: '100vh', background: t.bg, transition: 'background 0.3s' }}>
-        <SiteNav active={active} dark={dark} onToggleDark={toggle} onNav={onNav} />
+        <SiteNav active={active} dark={dark} loggedIn={!!user} avatarUrl={avatarUrl} profileLabel={profileLabel} onToggleDark={toggle} onNav={onNav} />
         <HeroSection onNav={onNav} />
         <TickerStrip />
         <HowSection />

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
+import { useAuth } from '../lib/auth';
 
 const S = {
   bg: '#000000',
@@ -54,8 +55,8 @@ function formatMargin(ms: number) {
 }
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
-function SaasNav({ active, onSwitchTheme, onNav }: {
-  active: string; onSwitchTheme: () => void; onNav: (id: string) => void;
+function SaasNav({ active, loggedIn, avatarUrl, profileLabel, onSwitchTheme, onNav }: {
+  active: string; loggedIn: boolean; avatarUrl?: string; profileLabel: string; onSwitchTheme: () => void; onNav: (id: string) => void;
 }) {
   const items: [string, string][] = [
     ['how', 'How it works'], ['features', 'Features'],
@@ -106,8 +107,30 @@ function SaasNav({ active, onSwitchTheme, onNav }: {
 
         <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{
           fontFamily: I, fontSize: 13, fontWeight: 500,
-          color: S.inkSoft, textDecoration: 'none', padding: '8px 10px', whiteSpace: 'nowrap',
-        }}>Log in</a>
+          color: S.inkSoft, textDecoration: 'none', padding: loggedIn ? 0 : '8px 10px', whiteSpace: 'nowrap',
+          display: 'grid', placeItems: 'center',
+        }}>
+          {loggedIn ? (
+            <span style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              overflow: 'hidden',
+              display: 'grid',
+              placeItems: 'center',
+              background: S.ink,
+              color: S.bg,
+              border: `1px solid ${S.border}`,
+              fontFamily: I,
+              fontSize: 12,
+              fontWeight: 800,
+            }}>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : profileLabel.slice(0, 2).toUpperCase()}
+            </span>
+          ) : 'Log in'}
+        </a>
 
         <button onClick={() => onNav('new')} style={{
           padding: '10px 20px', borderRadius: 10, background: GRAD,
@@ -866,6 +889,8 @@ function SaasFooter({ onNav }: { onNav: (k: string) => void }) {
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function LandingSaaS({ onSwitchTheme }: { onSwitchTheme: () => void }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { state } = useStore();
   const [active, setActive] = useState('home');
   const sectionRefs = useRef(['home', 'how', 'features', 'leaderboard', 'instructors', 'pricing', 'faq']);
 
@@ -906,7 +931,14 @@ export default function LandingSaaS({ onSwitchTheme }: { onSwitchTheme: () => vo
 
   return (
     <div style={{ minHeight: '100vh', background: S.bg, color: S.ink }}>
-      <SaasNav active={active} onSwitchTheme={onSwitchTheme} onNav={onNav} />
+      <SaasNav
+        active={active}
+        loggedIn={!!user}
+        avatarUrl={state.profile?.avatarUrl?.trim()}
+        profileLabel={state.profile?.displayName?.trim() || state.username || user?.email || 'me'}
+        onSwitchTheme={onSwitchTheme}
+        onNav={onNav}
+      />
       <SaasHero onNav={onNav} />
       <SaasTickerStrip />
       <SaasHowSection />
