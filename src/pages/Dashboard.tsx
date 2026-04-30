@@ -639,12 +639,9 @@ export default function Dashboard() {
           style={{
             padding: '34px clamp(18px, 4vw, 44px) 42px',
             textAlign: 'center',
-            border: `1px solid ${D.faint}`,
-            borderRadius: 34,
             background: dark
-              ? 'radial-gradient(circle at 20% 0%, rgba(255,81,72,0.10), transparent 34%), linear-gradient(135deg, rgba(246,240,231,0.055), rgba(246,240,231,0.018))'
-              : 'radial-gradient(circle at 20% 0%, rgba(196,34,27,0.08), transparent 34%), linear-gradient(135deg, rgba(255,252,245,0.82), rgba(238,229,214,0.55))',
-            boxShadow: dark ? '0 28px 80px rgba(0,0,0,0.20)' : '0 28px 80px rgba(26,21,16,0.07)',
+              ? 'radial-gradient(circle at 50% 0%, rgba(255,81,72,0.10), transparent 42%)'
+              : 'radial-gradient(circle at 50% 0%, rgba(196,34,27,0.08), transparent 42%)',
             marginBottom: 28,
           }}
         >
