@@ -1184,6 +1184,25 @@ function LearnContent({ course }: { course: Course }) {
   const panelFillStrong = dark ? 'rgba(241,236,223,0.09)' : 'rgba(26,21,16,0.07)';
   const subtleText = dark ? 'rgba(241,236,223,0.58)' : 'rgba(26,21,16,0.52)';
   const faintText = dark ? 'rgba(241,236,223,0.44)' : 'rgba(26,21,16,0.40)';
+  const headerButtonBase: React.CSSProperties = {
+    padding: '10px 14px',
+    borderRadius: 999,
+    border: `1px solid ${theme.ruleFaint}`,
+    background: panelFillStrong,
+    color: theme.ink,
+    fontFamily: HC.mono,
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.14em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+  };
+  const headerPrimaryButton: React.CSSProperties = {
+    ...headerButtonBase,
+    border: `1px solid ${theme.ink}`,
+    background: theme.ink,
+    color: theme.bg,
+  };
 
   const [input, setInput] = useState('');
   const [curriculumOpen, setCurriculumOpen] = useState(false);
@@ -1984,16 +2003,14 @@ function LearnContent({ course }: { course: Course }) {
               </div>
 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <button onClick={() => setCurriculumOpen(true)} style={{ ...btn.outline, padding: '10px 14px', fontSize: 10 }}>
+                <button onClick={() => setCurriculumOpen(true)} style={headerButtonBase}>
                   Curriculum
                 </button>
                 <button
                   onClick={handleLessonDone}
                   disabled={aiLoading || generatingNotes}
                   style={{
-                    ...btn.primary,
-                    padding: '10px 14px',
-                    fontSize: 10,
+                    ...headerPrimaryButton,
                     opacity: aiLoading || generatingNotes ? 0.45 : 1,
                     cursor: aiLoading || generatingNotes ? 'not-allowed' : 'pointer',
                   }}
@@ -2004,26 +2021,24 @@ function LearnContent({ course }: { course: Course }) {
                   onClick={handleGenerateNotesOnly}
                   disabled={!canGenerateNotes || generatingNotes || aiLoading}
                   style={{
-                    ...btn.outline,
-                    padding: '10px 14px',
-                    fontSize: 10,
+                    ...headerButtonBase,
                     opacity: !canGenerateNotes || generatingNotes || aiLoading ? 0.45 : 1,
                     cursor: !canGenerateNotes || generatingNotes || aiLoading ? 'not-allowed' : 'pointer',
                   }}
                 >
                   {lessonHasNotes ? 'Refresh notes' : 'Generate notes'}
                 </button>
-                <div style={{ padding: '10px 12px', borderRadius: 999, background: theme.paper, border: `1px solid ${theme.ruleFaint}`, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.mute }}>
+                <div style={{ padding: '10px 12px', borderRadius: 999, background: panelFillStrong, border: `1px solid ${theme.ruleFaint}`, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.ink }}>
                   {Math.round(course.progress * 100)}% done
                 </div>
-                <div style={{ padding: '10px 12px', borderRadius: 999, background: theme.paper, border: `1px solid ${theme.ruleFaint}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ padding: '10px 12px', borderRadius: 999, background: panelFillStrong, border: `1px solid ${theme.ruleFaint}`, display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.mute }}>
                     Time
                   </span>
                   <CountdownInline deadline={course.deadline} paused={course.paused} />
                 </div>
                 {course.paused ? (
-                  <button onClick={() => dispatch({ type: 'RESUME_COURSE', id: course.id })} style={{ ...btn.outline, padding: '10px 14px', fontSize: 10 }}>
+                  <button onClick={() => dispatch({ type: 'RESUME_COURSE', id: course.id })} style={headerButtonBase}>
                     Resume
                   </button>
                 ) : (
@@ -2031,9 +2046,9 @@ function LearnContent({ course }: { course: Course }) {
                     onClick={() => dispatch({ type: 'PAUSE_COURSE', id: course.id })}
                     disabled={course.pauseUsed}
                     style={{
-                      ...btn.ghost,
-                      padding: '10px 10px',
-                      fontSize: 10,
+                      ...headerButtonBase,
+                      borderColor: course.pauseUsed ? theme.ruleFaint : 'rgba(210,34,26,0.36)',
+                      background: course.pauseUsed ? 'transparent' : 'rgba(210,34,26,0.08)',
                       color: course.pauseUsed ? theme.mute : theme.red,
                       opacity: course.pauseUsed ? 0.4 : 1,
                     }}
