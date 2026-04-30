@@ -14,6 +14,7 @@ import Browse from './pages/Browse';
 import Anything from './pages/Anything';
 import Logos from './pages/Logos';
 import Settings from './pages/Settings';
+import Profile from './pages/Profile';
 import Slides from './pages/Slides';
 import { HC } from './theme';
 import { ThemeProvider } from './lib/theme';
@@ -58,6 +59,7 @@ function AppRoutes() {
           <Route path="/create" element={<RequireAuth><CreateCourse /></RequireAuth>} />
           <Route path="/anything" element={<RequireAuth><Anything /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+          <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -153,7 +153,24 @@ function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark
             color: t.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: MONO, fontSize: 14,
           }}>{dark ? '☀' : '☾'}</button>
-          <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{
+          {loggedIn && (
+            <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: t.ink,
+              textDecoration: 'none',
+              padding: '12px 13px',
+              borderRadius: 999,
+              background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.04)',
+              border: `1px solid ${t.ruleFaint}`,
+              whiteSpace: 'nowrap',
+            }}>
+              Dashboard
+            </a>
+          )}
+          <a href={loggedIn ? '#profile' : '#dashboard'} onClick={(e) => { e.preventDefault(); onNav(loggedIn ? 'profile' : 'dashboard'); }} style={{
             fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
             color: t.ink, textDecoration: 'none', padding: loggedIn ? 0 : '10px 12px', whiteSpace: 'nowrap',
             display: 'grid', placeItems: 'center',
@@ -1182,6 +1199,7 @@ export default function Landing() {
   function onNav(target: string) {
     if (target === 'new') { navigate(user ? '/new' : '/auth'); return; }
     if (target === 'dashboard') { navigate(user ? '/dashboard' : '/auth'); return; }
+    if (target === 'profile') { navigate(user ? '/profile' : '/auth'); return; }
     if (target === 'leaderboard-page') { navigate('/leaderboard'); return; }
     if (target === 'browse') { navigate('/browse'); return; }
     if (target === 'create') { navigate('/create'); return; }

@@ -578,6 +578,7 @@ export default function Dashboard() {
     ['Home', '/'],
     ['Browse', '/browse'],
     ['Leaderboard', '/leaderboard'],
+    ['Profile', '/profile'],
     ['Settings', '/settings'],
   ] as const;
   const handle = makeHandle(state.username);
@@ -630,21 +631,82 @@ export default function Dashboard() {
           </div>
         </nav>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 300px) minmax(0, 1fr)', gap: 'clamp(28px, 4vw, 56px)', alignItems: 'start' }}>
-          <ProfilePanel
-            displayName={displayName}
-            handle={handle}
-            bio={bio}
-            avatarUrl={avatarUrl}
-            joined={joined}
-            stats={stats}
-            courseCount={state.courses.length}
-            activeMode={mode}
-            onModeChange={setMode}
-            onEdit={() => navigate('/settings')}
-          />
-
+        <section
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 440px)',
+            gap: 'clamp(28px, 5vw, 70px)',
+            alignItems: 'start',
+            border: `1px solid ${D.faint}`,
+            borderRadius: 34,
+            padding: 'clamp(24px, 4vw, 46px)',
+            background: 'linear-gradient(145deg, rgba(255,255,255,0.04), rgba(26,21,16,0.018))',
+            boxShadow: '0 30px 100px rgba(26,21,16,0.07)',
+            marginBottom: 30,
+          }}
+        >
           <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '8px 11px', border: `1px solid ${D.faint}`, borderRadius: 999, background: D.softer, marginBottom: 20 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: D.red }} />
+              <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: D.mute }}>
+                Dashboard
+              </span>
+            </div>
+            <h1 style={{ margin: 0, fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(52px, 8vw, 112px)', lineHeight: 0.82, letterSpacing: '-0.08em', color: D.ink }}>
+              Welcome back, {displayName}.
+            </h1>
+            <p style={{ maxWidth: 650, margin: '22px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 16, lineHeight: 1.6 }}>
+              Pick up the next lesson, watch the clocks, and keep every course moving without digging through a profile sidebar.
+            </p>
+            <div style={{ marginTop: 26, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {(['courses', 'quizzes'] as DashboardMode[]).map((item) => (
+                <button
+                  key={item}
+                  onClick={() => setMode(item)}
+                  style={{
+                    border: `1px solid ${mode === item ? D.ink : D.faint}`,
+                    borderRadius: 999,
+                    background: mode === item ? D.ink : 'transparent',
+                    color: mode === item ? D.bg : D.ink,
+                    cursor: 'pointer',
+                    padding: '11px 16px',
+                    fontFamily: D.mono,
+                    fontSize: 9.5,
+                    letterSpacing: '0.13em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {item === 'courses' ? 'Your courses' : 'Your quizzes'}
+                </button>
+              ))}
+              <button
+                onClick={() => navigate('/profile')}
+                style={{ border: `1px solid ${D.faint}`, borderRadius: 999, background: D.softer, color: D.mute, cursor: 'pointer', padding: '11px 16px', fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+              >
+                View profile
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: 18 }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => navigate('/profile')}
+                style={{ width: 58, height: 58, borderRadius: '50%', border: `1px solid ${D.faint}`, background: D.ink, color: D.bg, overflow: 'hidden', display: 'grid', placeItems: 'center', fontFamily: D.mono, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                aria-label="Open profile"
+              >
+                {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : displayName.slice(0, 2).toUpperCase()}
+              </button>
+              <div style={{ textAlign: 'right', minWidth: 0 }}>
+                <div style={{ fontFamily: D.sans, fontSize: 15, fontWeight: 800, color: D.ink }}>{displayName}</div>
+                <div style={{ marginTop: 4, fontFamily: D.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: D.mute }}>@{handle}</div>
+              </div>
+            </div>
+            <ConsistencyGrid courses={state.courses} />
+          </div>
+        </section>
+
+        <div style={{ minWidth: 0 }}>
         {mode === 'quizzes' ? (
           <QuizHub
             courses={state.courses}
@@ -655,11 +717,11 @@ export default function Dashboard() {
         ) : (
           <>
         <section style={{ borderBottom: `1px solid ${D.faint}`, paddingBottom: 34 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 420px)', gap: 34, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 34, alignItems: 'start' }}>
             <div style={{ minWidth: 0 }}>
               <div>
                 <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
-                  Dashboard
+                  Courses
                 </div>
                 <h1 style={{ margin: '10px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(42px, 5.4vw, 78px)', lineHeight: 0.88, letterSpacing: '-0.07em', color: D.ink }}>
                   Your courses.
@@ -683,8 +745,6 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
-
-            <ConsistencyGrid courses={state.courses} />
           </div>
 
           <p style={{ maxWidth: 560, margin: '22px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 15, lineHeight: 1.55 }}>
@@ -863,7 +923,6 @@ export default function Dashboard() {
           </>
         )}
           </div>
-        </div>
       </main>
     </div>
   );

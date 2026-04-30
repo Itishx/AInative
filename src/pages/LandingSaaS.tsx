@@ -105,7 +105,24 @@ function SaasNav({ active, loggedIn, avatarUrl, profileLabel, onSwitchTheme, onN
           fontFamily: I, fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
         }}>◈ Editorial</button>
 
-        <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{
+        {loggedIn && (
+          <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{
+            fontFamily: I,
+            fontSize: 13,
+            fontWeight: 500,
+            color: S.ink,
+            textDecoration: 'none',
+            padding: '8px 10px',
+            borderRadius: 8,
+            border: `1px solid ${S.border}`,
+            background: 'rgba(255,255,255,0.05)',
+            whiteSpace: 'nowrap',
+          }}>
+            Dashboard
+          </a>
+        )}
+
+        <a href={loggedIn ? '#profile' : '#dashboard'} onClick={(e) => { e.preventDefault(); onNav(loggedIn ? 'profile' : 'dashboard'); }} style={{
           fontFamily: I, fontSize: 13, fontWeight: 500,
           color: S.inkSoft, textDecoration: 'none', padding: loggedIn ? 0 : '8px 10px', whiteSpace: 'nowrap',
           display: 'grid', placeItems: 'center',
@@ -921,6 +938,7 @@ export default function LandingSaaS({ onSwitchTheme }: { onSwitchTheme: () => vo
   function onNav(target: string) {
     if (target === 'new') { navigate('/new'); return; }
     if (target === 'dashboard') { navigate('/dashboard'); return; }
+    if (target === 'profile') { navigate('/profile'); return; }
     if (target === 'leaderboard-page') { navigate('/leaderboard'); return; }
     if (target === 'browse') { navigate('/browse'); return; }
     if (target === 'create') { navigate('/create'); return; }
