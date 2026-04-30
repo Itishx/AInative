@@ -639,10 +639,7 @@ export default function Dashboard() {
           style={{
             padding: '34px clamp(18px, 4vw, 44px) 42px',
             textAlign: 'center',
-            background: dark
-              ? 'radial-gradient(circle at 50% 0%, rgba(255,81,72,0.10), transparent 42%)'
-              : 'radial-gradient(circle at 50% 0%, rgba(196,34,27,0.08), transparent 42%)',
-            marginBottom: 28,
+            marginBottom: 'clamp(96px, 14vh, 160px)',
           }}
         >
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
