@@ -585,7 +585,7 @@ export default function Dashboard() {
       }} />
 
       <main style={{ position: 'relative', maxWidth: 1520, margin: '0 auto', padding: '28px clamp(20px, 4vw, 58px) 64px' }}>
-        <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, paddingBottom: 42 }}>
+        <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, paddingBottom: 26 }}>
           <button onClick={() => navigate('/')} style={{ border: 'none', background: 'transparent', color: D.ink, cursor: 'pointer', padding: 0, fontFamily: D.serif, fontSize: 30, letterSpacing: '-0.055em' }}>
             Learnor
           </button>
@@ -627,7 +627,7 @@ export default function Dashboard() {
         ) : (
           <>
         <section style={{ borderBottom: `1px solid ${D.faint}`, paddingBottom: 34 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 420px)', gap: 34, alignItems: 'end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 420px)', gap: 34, alignItems: 'start' }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
                 Dashboard
