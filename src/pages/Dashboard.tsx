@@ -340,7 +340,7 @@ function ProfilePanel({
             Edit profile
           </button>
           <button
-            onClick={() => navigator.clipboard?.writeText(window.location.href)}
+            onClick={onEdit}
             style={{
               border: `1px solid ${D.faint}`,
               borderRadius: 999,
@@ -353,7 +353,7 @@ function ProfilePanel({
               cursor: 'pointer',
             }}
           >
-            Share
+            Settings
           </button>
         </div>
 
