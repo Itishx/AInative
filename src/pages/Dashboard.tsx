@@ -134,7 +134,7 @@ function ConsistencyGrid({ courses }: { courses: Course[] }) {
   );
 }
 
-function CourseRow({
+function CourseCard({
   course,
   onOpen,
   onDelete,
@@ -154,39 +154,35 @@ function CourseRow({
   return (
     <article
       style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1.5fr) 110px 110px 130px 104px',
-        gap: 18,
-        alignItems: 'center',
-        padding: '24px 0',
-        borderTop: `1px solid ${D.faint}`,
+        minHeight: 260,
+        border: `1px solid ${D.faint}`,
+        borderRadius: 28,
+        padding: 22,
+        background: 'linear-gradient(145deg, rgba(255,255,255,0.035), rgba(26,21,16,0.018))',
+        boxShadow: '0 24px 80px rgba(26,21,16,0.06)',
         opacity: archived ? 0.45 : 1,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        gap: 22,
       }}
     >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-          <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 26, lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 400, color: D.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {course.subject}
-          </h2>
-          <span style={{ flexShrink: 0, fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase', color: status.color }}>
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, marginBottom: 24 }}>
+          <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: status.color }}>
             {status.label}
           </span>
+          <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: D.mute }}>
+            {course.curriculum.modules.length} modules
+          </span>
         </div>
-        <p style={{ margin: '9px 0 0', fontFamily: D.sans, fontSize: 13, lineHeight: 1.45, color: D.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {currentLesson?.title ?? 'No lesson selected'} · {course.curriculum.modules.length} modules
+
+        <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 'clamp(30px, 3vw, 46px)', lineHeight: 0.92, letterSpacing: '-0.055em', fontWeight: 400, color: D.ink }}>
+            {course.subject}
+        </h2>
+        <p style={{ margin: '14px 0 0', fontFamily: D.sans, fontSize: 14, lineHeight: 1.45, color: D.mute }}>
+          {currentLesson?.title ?? 'No lesson selected'}
         </p>
-      </div>
-
-      <div>
-        <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: D.mute }}>Deadline</div>
-        <div style={{ marginTop: 5, fontFamily: D.sans, fontSize: 13, color: D.ink }}>{formatDeadline(course.deadline)}</div>
-      </div>
-
-      <div>
-        <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: D.mute }}>Clock</div>
-        <div style={{ marginTop: 5, fontFamily: D.sans, fontSize: 13, color: course.status === 'active-urgent' ? D.red : D.ink }}>
-          {course.status === 'completed' ? 'Finished' : daysLeft <= 0 ? 'Due now' : `${daysLeft} days`}
-        </div>
       </div>
 
       <div>
@@ -194,44 +190,29 @@ function CourseRow({
           <span>{progress}%</span>
           <span>{doneLessons}/{lessons.length}</span>
         </div>
-        <div style={{ marginTop: 8, height: 1, background: D.faint }}>
-          <div style={{ width: `${progress}%`, height: 1, background: course.status === 'active-urgent' ? D.red : D.ink }} />
+        <div style={{ marginTop: 10, height: 6, borderRadius: 999, background: D.softer, overflow: 'hidden' }}>
+          <div style={{ width: `${progress}%`, height: '100%', borderRadius: 999, background: course.status === 'active-urgent' ? D.red : D.ink }} />
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-        <button
-          onClick={onOpen}
-          disabled={archived}
-          style={{
-            border: 'none',
-            borderBottom: `1px solid ${archived ? D.faint : D.ink}`,
-            background: 'transparent',
-            color: archived ? D.mute : D.ink,
-            cursor: archived ? 'not-allowed' : 'pointer',
-            padding: '6px 0',
-            fontFamily: D.mono,
-            fontSize: 9,
-            letterSpacing: '0.13em',
-            textTransform: 'uppercase',
-          }}
-        >
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div>
+          <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: D.mute }}>Deadline</div>
+          <div style={{ marginTop: 5, fontFamily: D.sans, fontSize: 14, color: D.ink }}>{formatDeadline(course.deadline)}</div>
+        </div>
+        <div>
+          <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: D.mute }}>Clock</div>
+          <div style={{ marginTop: 5, fontFamily: D.sans, fontSize: 14, color: course.status === 'active-urgent' ? D.red : D.ink }}>
+            {course.status === 'completed' ? 'Finished' : daysLeft <= 0 ? 'Due now' : `${daysLeft} days`}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', borderTop: `1px solid ${D.faint}`, paddingTop: 16 }}>
+        <button onClick={onOpen} disabled={archived} style={{ border: `1px solid ${archived ? D.faint : D.ink}`, borderRadius: 999, background: archived ? 'transparent' : D.ink, color: archived ? D.mute : D.bg, cursor: archived ? 'not-allowed' : 'pointer', padding: '10px 16px', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
           {course.status === 'completed' ? 'Cert' : courseHasStarted(course) ? 'Resume' : 'Start'}
         </button>
-        <button
-          onClick={onDelete}
-          style={{
-            border: 'none',
-            background: 'transparent',
-            color: D.red,
-            cursor: 'pointer',
-            padding: '6px 0',
-            fontFamily: D.mono,
-            fontSize: 9,
-            letterSpacing: '0.13em',
-            textTransform: 'uppercase',
-          }}
-        >
+        <button onClick={onDelete} style={{ border: 'none', background: 'transparent', color: D.red, cursor: 'pointer', padding: '8px 0', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
           Delete
         </button>
       </div>
@@ -745,17 +726,26 @@ export default function Dashboard() {
           ) : filteredCourses.length === 0 ? (
             <div style={{ borderTop: `1px solid ${D.faint}`, padding: '44px 0', color: D.mute }}>Nothing in this bucket.</div>
           ) : (
-            filteredCourses.map((course) => (
-              <CourseRow
-                key={course.id}
-                course={course}
-                onDelete={() => handleDeleteCourse(course)}
-                onOpen={() => {
-                  if (course.status === 'completed') navigate(`/certificate/${course.id}`);
-                  else navigate(`/learn/${course.id}`);
-                }}
-              />
-            ))
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: 18,
+                paddingTop: 18,
+              }}
+            >
+              {filteredCourses.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  onDelete={() => handleDeleteCourse(course)}
+                  onOpen={() => {
+                    if (course.status === 'completed') navigate(`/certificate/${course.id}`);
+                    else navigate(`/learn/${course.id}`);
+                  }}
+                />
+              ))}
+            </div>
           )}
         </section>
 
