@@ -645,7 +645,7 @@ export default function Dashboard() {
             <div style={{ fontFamily: D.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: D.red, marginBottom: 32 }}>
               — dashboard
             </div>
-            <h1 style={{ margin: '0 0 32px', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(56px, 9vw, 120px)', lineHeight: 0.92, letterSpacing: '-0.035em', color: D.ink }}>
+            <h1 style={{ margin: '0 0 28px', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(42px, 6.8vw, 86px)', lineHeight: 0.94, letterSpacing: '-0.035em', color: D.ink }}>
               Hey {displayName},<br />
               what do you want to{' '}
               <span style={{ fontStyle: 'italic', color: D.red }}>learn today?</span>
