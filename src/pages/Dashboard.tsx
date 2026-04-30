@@ -629,32 +629,34 @@ export default function Dashboard() {
         <section style={{ borderBottom: `1px solid ${D.faint}`, paddingBottom: 34 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 420px)', gap: 34, alignItems: 'start' }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
-                Dashboard
+              <div>
+                <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
+                  Dashboard
+                </div>
+                <h1 style={{ margin: '10px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(42px, 5.4vw, 78px)', lineHeight: 0.88, letterSpacing: '-0.07em', color: D.ink }}>
+                  Your courses.
+                </h1>
+                <p style={{ maxWidth: 560, margin: '16px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 14, lineHeight: 1.55 }}>
+                  Pick up anything, jump to any lesson, and keep the clock visible without the page feeling like a spreadsheet.
+                </p>
               </div>
-              <h1 style={{ margin: '10px 0 0', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(42px, 5.4vw, 78px)', lineHeight: 0.88, letterSpacing: '-0.07em', color: D.ink }}>
-                Your courses.
-              </h1>
-              <p style={{ maxWidth: 560, margin: '16px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 14, lineHeight: 1.55 }}>
-                Pick up anything, jump to any lesson, and keep the clock visible without the page feeling like a spreadsheet.
-              </p>
+
+              <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 18 }}>
+                {[
+                  ['Active', stats.inProgress],
+                  ['Waiting', stats.notStarted],
+                  ['Urgent', stats.urgent],
+                  ['Done', stats.done],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 14 }}>
+                    <div style={{ fontFamily: D.serif, fontSize: 38, lineHeight: 0.9, color: label === 'Urgent' ? D.red : D.ink }}>{value}</div>
+                    <div style={{ marginTop: 10, fontFamily: D.mono, fontSize: 9, color: D.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <ConsistencyGrid courses={state.courses} />
-          </div>
-
-          <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 18 }}>
-            {[
-              ['Active', stats.inProgress],
-              ['Waiting', stats.notStarted],
-              ['Urgent', stats.urgent],
-              ['Done', stats.done],
-            ].map(([label, value]) => (
-              <div key={label} style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 14 }}>
-                <div style={{ fontFamily: D.serif, fontSize: 38, lineHeight: 0.9, color: label === 'Urgent' ? D.red : D.ink }}>{value}</div>
-                <div style={{ marginTop: 10, fontFamily: D.mono, fontSize: 9, color: D.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}</div>
-              </div>
-            ))}
           </div>
 
           <p style={{ maxWidth: 560, margin: '22px 0 0', color: D.mute, fontFamily: D.sans, fontSize: 15, lineHeight: 1.55 }}>
