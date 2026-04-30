@@ -97,7 +97,7 @@ export default function Settings() {
           username: trimmed,
           profile,
           updated_at: new Date().toISOString(),
-        });
+        }, { onConflict: 'user_id' });
 
       if (error) {
         setSaving(false);

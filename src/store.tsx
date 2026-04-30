@@ -82,6 +82,12 @@ function mergeQuizAttempts(primary: QuizAttempt[], secondary: QuizAttempt[]): Qu
   return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 100);
 }
 
+function mergeProfileFromDb(current: UserProfile, incoming?: UserProfile): UserProfile {
+  if (!incoming) return current;
+  // DB should win on load. Empty local defaults must not erase saved profile fields.
+  return { ...current, ...incoming };
+}
+
 function normalizeState(state: Partial<AppState> | null | undefined): AppState {
   const username = state?.username ?? 'you';
   return {
@@ -170,7 +176,7 @@ function reducer(state: AppState, action: Action): AppState {
         // Keep local versions first, then backfill anything only found in DB.
         courses: mergeCourses(state.courses, courses),
         username: action.username && action.username !== 'you' ? action.username : state.username,
-        profile: { ...(action.profile ?? {}), ...state.profile },
+        profile: mergeProfileFromDb(state.profile, action.profile),
         quizAttempts: mergeQuizAttempts(state.quizAttempts, action.quizAttempts ?? []),
       });
     }
@@ -349,6 +355,12 @@ export function StoreProvider({
 
   // Prevent initial save from clobbering DB before the async load resolves
   const dbLoadedRef = useRef(false);
+  const lastUserIdRef = useRef<string | undefined>(userId);
+
+  if (lastUserIdRef.current !== userId) {
+    lastUserIdRef.current = userId;
+    dbLoadedRef.current = !userId;
+  }
 
   // Load from Supabase on mount — DB is source of truth
   useEffect(() => {
@@ -359,7 +371,6 @@ export function StoreProvider({
       .eq('user_id', userId)
       .maybeSingle()
       .then(({ data, error }) => {
-        dbLoadedRef.current = true;
         if (error) {
           supabase
             .from('user_courses')
@@ -369,9 +380,13 @@ export function StoreProvider({
             .then(({ data: fallback, error: fallbackError }) => {
               if (fallback) {
                 dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(fallback.courses) ? fallback.courses : [], username: fallback.username ?? undefined, profile: (fallback as { profile?: UserProfile }).profile });
+                setTimeout(() => { dbLoadedRef.current = true; }, 0);
                 return;
               }
-              if (!fallbackError) return;
+              if (!fallbackError) {
+                dbLoadedRef.current = true;
+                return;
+              }
               supabase
                 .from('user_courses')
                 .select('courses, username')
@@ -381,11 +396,15 @@ export function StoreProvider({
                   if (baseFallback) {
                     dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(baseFallback.courses) ? baseFallback.courses : [], username: baseFallback.username ?? undefined });
                   }
+                  setTimeout(() => { dbLoadedRef.current = true; }, 0);
                 });
             });
           return;
         }
-        if (!data) return;
+        if (!data) {
+          dbLoadedRef.current = true;
+          return;
+        }
         const row = data as { profile?: UserProfile; quiz_attempts?: QuizAttempt[] };
         dispatch({
           type: '_LOAD_FROM_DB',
@@ -394,6 +413,7 @@ export function StoreProvider({
           profile: row.profile,
           quizAttempts: Array.isArray(row.quiz_attempts) ? row.quiz_attempts : [],
         });
+        setTimeout(() => { dbLoadedRef.current = true; }, 0);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -416,7 +436,7 @@ export function StoreProvider({
           profile: state.profile,
           quiz_attempts: state.quizAttempts,
           updated_at: new Date().toISOString(),
-        })
+        }, { onConflict: 'user_id' })
         .then(({ error }) => {
           if (!error) return;
           console.error('[store:supabase-save]', error.message);
@@ -429,7 +449,7 @@ export function StoreProvider({
               courses: state.courses,
               username: state.username,
               updated_at: new Date().toISOString(),
-            })
+            }, { onConflict: 'user_id' })
             .then(() => {
               supabase
                 .from('user_courses')
