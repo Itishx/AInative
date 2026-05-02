@@ -29,11 +29,19 @@ function calcProgress(course: Course): number {
 function checkDeadlines(state: AppState): AppState {
   const now = Date.now();
   const courses = state.courses.map((c) => {
-    if (c.status === 'tombstone' || c.status === 'completed') return c;
+    if (c.status === 'tombstone' || c.status === 'expired' || c.status === 'completed') return c;
     if (c.paused) return c;
     const deadline = new Date(c.deadline).getTime();
     const hoursLeft = (deadline - now) / 3600000;
-    if (hoursLeft <= 0 && c.progress < 1) return { ...c, status: 'tombstone' as const, streak: 0 };
+    if (hoursLeft <= 0 && c.progress < 1) {
+      const attempt = { deadline: c.deadline, missedAt: new Date().toISOString() };
+      return {
+        ...c,
+        status: 'expired' as const,
+        streak: 0,
+        deadlineHistory: [...(c.deadlineHistory ?? []), attempt],
+      };
+    }
     if (hoursLeft <= 72 && hoursLeft > 0 && c.status !== 'active-urgent') return { ...c, status: 'active-urgent' as const };
     if (hoursLeft > 72 && c.status === 'active-urgent') return { ...c, status: 'active' as const };
     return c;
@@ -150,6 +158,7 @@ type Action =
   | { type: 'COMPLETE_LESSON'; id: string; moduleIndex: number; lessonIndex: number; preferredMet: boolean }
   | { type: 'RECORD_QUIZ_ATTEMPT'; attempt: QuizAttempt }
   | { type: 'CHECK_DEADLINES' }
+  | { type: 'RECOMMIT'; id: string; newDeadline: string }
   | { type: 'ADD_LEADERBOARD'; entry: LeaderboardEntry }
   | { type: 'ENROLL_COURSE'; course: EnrolledCourse }
   | { type: '_LOAD_FROM_DB'; courses: Course[]; username?: string; profile?: UserProfile; quizAttempts?: QuizAttempt[] };
@@ -310,6 +319,14 @@ function reducer(state: AppState, action: Action): AppState {
 
     case 'RECORD_QUIZ_ATTEMPT':
       return { ...state, quizAttempts: [action.attempt, ...state.quizAttempts].slice(0, 100) };
+
+    case 'RECOMMIT': {
+      const courses = state.courses.map((c) => {
+        if (c.id !== action.id) return c;
+        return { ...c, status: 'active' as const, deadline: action.newDeadline };
+      });
+      return checkDeadlines({ ...state, courses });
+    }
 
     case 'CHECK_DEADLINES':
       return checkDeadlines(state);

@@ -204,24 +204,20 @@ function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark
 }
 
 // ── Hero ──────────────────────────────────────────────────────────────────────
-const SUGGESTIONS = [
-  'How to dougie', 'SQL for analysts', 'Python basics',
-  'Mandarin tones', 'Color theory', 'Financial modeling',
-];
 
 function HeroSection({ onNav }: { onNav: (k: string) => void }) {
   const { t, dark } = useTheme();
   const { state } = useStore();
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [showResources, setShowResources] = useState(false);
-  const [resourceUrl, setResourceUrl] = useState('');
   const [resourceFile, setResourceFile] = useState<File | null>(null);
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [materialsError, setMaterialsError] = useState('');
   const navigate = useNavigate();
   const finishers = state.courses.filter((c) => c.status === 'completed').length + 247;
-  const deleted   = state.courses.filter((c) => c.status === 'tombstone').length + 1412;
+  const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length + 1412;
 
   async function handleStart(e: React.FormEvent) {
     e.preventDefault();
@@ -231,7 +227,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
 
     let materialsContext = '';
 
-    if (resourceUrl.trim() || resourceFile) {
+    if (resourceFile) {
       setMaterialsLoading(true);
       try {
         async function safeJson(res: Response) {
@@ -240,16 +236,6 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
         }
 
         const parts: string[] = [];
-        if (resourceUrl.trim()) {
-          const res = await fetch('/api/fetch-url', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: resourceUrl.trim() }),
-          });
-          const data = await safeJson(res);
-          if (data.error) throw new Error(data.error);
-          if (data.text) parts.push(`[Source: ${resourceUrl.trim()}]\n${data.text}`);
-        }
         if (resourceFile) {
           const form = new FormData();
           form.append('files', resourceFile);
@@ -279,7 +265,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
 
         {/* Kicker */}
         <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: t.red, marginBottom: 32 }}>
-          — a learning platform with stakes
+          — active learning. not passive watching.
         </div>
 
         {/* Headline */}
@@ -327,82 +313,85 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
               />
             </div>
 
-            {/* Resources toggle row */}
-            <div style={{ borderTop: `1px solid ${t.ruleFaint}`, padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button
-                type="button"
-                onClick={() => setShowResources((s) => !s)}
-                style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', background: 'none', border: 'none', cursor: 'pointer', color: showResources ? t.ink : t.mute, padding: 0 }}
-              >
-                {showResources ? '− hide resources' : '+ add your own resources'}
-              </button>
-              {(resourceUrl || resourceFile) && !showResources && (
-                <span style={{ fontFamily: MONO, fontSize: 10, color: t.green, letterSpacing: '0.1em' }}>
-                  {[resourceUrl && '1 url', resourceFile && '1 pdf'].filter(Boolean).join(' · ')} attached
-                </span>
-              )}
-            </div>
-
-            {/* Resources panel */}
+            {/* PDF panel — shown when resources selected */}
             {showResources && (
-              <div style={{ padding: '12px 20px 16px', borderTop: `1px dashed ${t.ruleFaint}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, width: 28 }}>url</span>
-                  <input
-                    type="url"
-                    value={resourceUrl}
-                    onChange={(e) => setResourceUrl(e.target.value)}
-                    placeholder="https://… (article, docs page, blog post)"
-                    style={{ flex: 1, border: 'none', borderBottom: `1px solid ${t.ruleFaint}`, outline: 'none', background: 'transparent', fontFamily: MONO, fontSize: 12, color: t.ink, padding: '4px 0' }}
-                  />
-                  {resourceUrl && (
-                    <button type="button" onClick={() => setResourceUrl('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 12, color: t.mute, padding: 0 }}>×</button>
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, width: 28 }}>pdf</span>
-                  <label style={{ cursor: 'pointer', flex: 1 }}>
-                    <span style={{ fontFamily: MONO, fontSize: 12, color: resourceFile ? t.ink : t.mute, borderBottom: `1px solid ${resourceFile ? t.ink : t.ruleFaint}`, paddingBottom: 2 }}>
-                      {resourceFile ? resourceFile.name : 'choose a pdf file…'}
-                    </span>
-                    <input type="file" accept=".pdf" onChange={(e) => setResourceFile(e.target.files?.[0] ?? null)} style={{ display: 'none' }} />
-                  </label>
-                  {resourceFile && (
-                    <button type="button" onClick={() => setResourceFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 12, color: t.mute, padding: 0 }}>×</button>
-                  )}
-                </div>
+              <div style={{ padding: '12px 20px 14px', borderTop: `1px dashed ${t.ruleFaint}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>pdf</span>
+                <label style={{ cursor: 'pointer', flex: 1 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 12, color: resourceFile ? t.ink : t.mute, borderBottom: `1px solid ${resourceFile ? t.ink : t.ruleFaint}`, paddingBottom: 2 }}>
+                    {resourceFile ? resourceFile.name : 'choose a pdf file…'}
+                  </span>
+                  <input type="file" accept=".pdf" onChange={(e) => { setResourceFile(e.target.files?.[0] ?? null); }} style={{ display: 'none' }} />
+                </label>
+                {resourceFile && (
+                  <button type="button" onClick={() => setResourceFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 12, color: t.mute, padding: 0 }}>×</button>
+                )}
                 {materialsError && (
-                  <div style={{ fontFamily: MONO, fontSize: 10, color: t.red, letterSpacing: '0.1em' }}>{materialsError}</div>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: t.red, letterSpacing: '0.1em' }}>{materialsError}</span>
                 )}
               </div>
             )}
 
             {/* Bottom bar */}
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '12px 20px', borderTop: `1px solid ${t.ruleFaint}`,
-            }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {SUGGESTIONS.map((s) => (
-                  <button key={s} type="button"
-                    onClick={() => { setInput(`Teach me ${s.toLowerCase()}`); }}
-                    style={{
-                      fontFamily: MONO, fontSize: 10, padding: '5px 10px', letterSpacing: '0.08em',
-                      border: `1px solid ${t.ruleFaint}`, background: 'transparent',
-                      color: t.mute, cursor: 'pointer',
-                    }}>
-                    {s}
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px 10px 16px', borderTop: `1px solid ${t.ruleFaint}`, gap: 10 }}>
+
+              {/* + modal */}
+              {showModal && (
+                <div style={{
+                  position: 'absolute', bottom: 'calc(100% + 8px)', left: 12,
+                  background: t.paper, border: `1px solid ${t.ruleFaint}`,
+                  borderRadius: 14, overflow: 'hidden',
+                  boxShadow: dark ? '0 16px 48px rgba(0,0,0,0.36)' : '0 16px 48px rgba(26,21,16,0.14)',
+                  minWidth: 240, zIndex: 10,
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => { setShowModal(false); setShowResources(true); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: 'none', border: 'none', borderBottom: `1px solid ${t.ruleFaint}`, cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <span style={{ fontSize: 16 }}>📄</span>
+                    <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', color: t.ink }}>Add your own resources</span>
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => { setShowModal(false); navigate('/import'); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <span style={{ fontSize: 16 }}>↗</span>
+                    <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', color: t.ink }}>Import a course</span>
+                    <span style={{ marginLeft: 'auto', fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.amber, border: `1px solid ${t.amber}`, borderRadius: 999, padding: '2px 8px' }}>premium</span>
+                  </button>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowModal((s) => !s); if (showResources) setShowResources(false); }}
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    border: `1px solid ${resourceFile || showModal ? t.ink : t.ruleFaint}`,
+                    background: 'none', cursor: 'pointer',
+                    color: resourceFile || showModal ? t.ink : t.mute,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 18, lineHeight: 1, flexShrink: 0,
+                  }}
+                >
+                  {showModal ? '×' : '+'}
+                </button>
+                {resourceFile && (
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: t.green, letterSpacing: '0.1em' }}>1 pdf attached</span>
+                )}
               </div>
+
               <button type="submit" disabled={!input.trim() || materialsLoading} style={{
                 background: input.trim() && !materialsLoading ? t.ink : t.ruleFaint,
                 color: input.trim() && !materialsLoading ? t.bg : t.mute,
-                border: 'none', padding: '12px 24px', flexShrink: 0,
+                border: 'none', padding: '10px 22px', flexShrink: 0,
                 fontFamily: MONO, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase',
                 cursor: input.trim() && !materialsLoading ? 'pointer' : 'not-allowed', transition: 'background 0.15s',
               }}>
-                {materialsLoading ? 'loading…' : 'Begin the clock →'}
+                {materialsLoading ? 'loading…' : 'Start course →'}
               </button>
             </div>
           </div>
@@ -419,7 +408,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
           </div>
           <span style={{ color: t.ruleFaint, fontFamily: MONO, fontSize: 14 }}>·</span>
           <div style={{ fontFamily: MONO, fontSize: 11, color: t.mute, letterSpacing: '0.1em' }}>
-            <span style={{ color: t.red }}>†</span> {deleted.toLocaleString()} deleted
+            <span style={{ color: t.amber }}>↺</span> {recommitted.toLocaleString()} recommitted
           </div>
           <span style={{ color: t.ruleFaint, fontFamily: MONO, fontSize: 14 }}>·</span>
           <div style={{ fontFamily: MONO, fontSize: 11, color: t.mute, letterSpacing: '0.1em' }}>no card required</div>
@@ -435,7 +424,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
           )}
         </div>
 
-        <div style={{ marginTop: 24 }}>
+<div style={{ marginTop: 24 }}>
           <button
             onClick={() => navigate('/anything')}
             style={{
@@ -461,13 +450,13 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
 
 // ── Ticker ────────────────────────────────────────────────────────────────────
 const TICKER_ITEMS = [
-  '† conversational french — dani.w — deleted at 00:01',
+  '↺ conversational french — dani.w — expired, new deadline set',
   '✓ docker in anger — mira.k — finished 14d 02h early',
-  '† rust ownership — anon_99 — deleted at 03:47',
+  '↺ rust ownership — anon_99 — recommitted day 2',
   '✓ linear algebra — yael — finished 04d 22h early',
-  '† color theory — nikoj — deleted at 12:00',
+  '↺ color theory — nikoj — missed deadline, back on track',
   '✓ public speaking — aleks — finished 01d 16h early',
-  '† react hooks — pin22 — deleted at 23:59',
+  '↺ react hooks — pin22 — second attempt underway',
   '✓ intro to probability — ojo_22 — finished 11d 19h early',
 ];
 
@@ -483,10 +472,48 @@ function TickerStrip() {
         fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase',
       }}>
         {all.map((s, i) => (
-          <span key={i} style={{ color: s.startsWith('†') ? '#ff6a5f' : t.bg, flexShrink: 0 }}>{s}</span>
+          <span key={i} style={{ color: s.startsWith('↺') ? '#d99b45' : t.bg, flexShrink: 0 }}>{s}</span>
         ))}
       </div>
     </div>
+  );
+}
+
+// ── Comparison strip ─────────────────────────────────────────────────────────
+function ComparisonSection() {
+  const { t } = useTheme();
+  const rows = [
+    { source: 'YouTube', verdict: 'You watch. You forget.' },
+    { source: 'A textbook', verdict: 'You read. You zone out.' },
+    { source: 'Learnor', verdict: 'You explain it back. You keep it.', highlight: true },
+  ];
+  return (
+    <Wrap bg={t.paperAlt} pad="80px 32px" borderBottom>
+      <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        <Kicker>Why it works</Kicker>
+        <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(38px, 5vw, 68px)', margin: '16px 0 40px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
+          Built for understanding,<br /><i>not watching.</i>
+        </h2>
+        <div style={{ borderTop: `2px solid ${t.ink}` }}>
+          {rows.map((row) => (
+            <div key={row.source} style={{
+              display: 'grid', gridTemplateColumns: '200px 1fr', gap: 32,
+              padding: '22px 0', borderBottom: `1px solid ${t.ruleFaint}`, alignItems: 'baseline',
+            }}>
+              <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: row.highlight ? t.red : t.mute }}>
+                {row.source}
+              </div>
+              <div style={{ fontFamily: SERIF, fontSize: 22, color: row.highlight ? t.ink : t.inkSoft, fontStyle: row.highlight ? 'normal' : 'italic', lineHeight: 1.2 }}>
+                {row.verdict}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontFamily: SERIF, fontSize: 17, color: t.mute, lineHeight: 1.65, margin: '28px 0 0', fontStyle: 'italic', maxWidth: 600 }}>
+          If you actually want to understand something — not just watch it — this is for you.
+        </p>
+      </div>
+    </Wrap>
   );
 }
 
@@ -584,8 +611,8 @@ function HowSection() {
       art: <CalendarIllustration />,
     },
     {
-      n: '03', kicker: 'Step three', title: 'Learn or lose it.',
-      body: 'The tutor teaches step by step. Miss the deadline and it is gone.',
+      n: '03', kicker: 'Step three', title: 'Commit. Recommit if needed.',
+      body: 'The tutor teaches step by step. Miss the deadline, set a new one, and keep going.',
       art: <CountdownIllustration />,
     },
   ];
@@ -595,7 +622,7 @@ function HowSection() {
         <div>
           <Kicker>How it works</Kicker>
           <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 0', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-            Three steps.<br /><i>One</i> guillotine.
+            Three steps.<br /><i>One</i> commitment.
           </h2>
         </div>
       </div>
@@ -724,17 +751,15 @@ function TombstoneViz() {
   const { t } = useTheme();
   return (
     <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, opacity: 0.75, background: t.paper }}>
-      <div style={{ fontFamily: MONO, fontSize: 9, color: t.red, letterSpacing: '0.18em' }}>† TOMBSTONE</div>
-      <div style={{ fontFamily: SERIF, fontSize: 22, color: t.ink, marginTop: 6, textDecoration: 'line-through', letterSpacing: '-0.01em' }}>
+      <div style={{ fontFamily: MONO, fontSize: 9, color: t.amber, letterSpacing: '0.18em' }}>↺ EXPIRED</div>
+      <div style={{ fontFamily: SERIF, fontSize: 22, color: t.ink, marginTop: 6, letterSpacing: '-0.01em' }}>
         Conversational French
       </div>
-      <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, marginTop: 4 }}>deleted apr 19 · 61% complete at death</div>
-      <div style={{ marginTop: 12, display: 'flex', alignItems: 'baseline', gap: 4, color: t.red, fontFamily: SERIF }}>
-        <span style={{ fontSize: 42, letterSpacing: '-0.02em' }}>-05</span>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, marginTop: 4 }}>missed apr 19 · 61% saved · recommitting</div>
+      <div style={{ marginTop: 12, display: 'flex', alignItems: 'baseline', gap: 4, color: t.amber, fontFamily: SERIF }}>
+        <span style={{ fontSize: 42, letterSpacing: '-0.02em' }}>+14</span>
         <span style={{ fontFamily: MONO, fontSize: 10, color: t.mute }}>D</span>
-        <span style={{ fontSize: 42, marginLeft: 6, letterSpacing: '-0.02em' }}>17</span>
-        <span style={{ fontFamily: MONO, fontSize: 10, color: t.mute }}>H</span>
-        <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 14, color: t.red, marginLeft: 10 }}>overdue</span>
+        <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 14, color: t.amber, marginLeft: 10 }}>new deadline</span>
       </div>
     </div>
   );
@@ -837,7 +862,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
   const { t } = useTheme();
   const navigate = useNavigate();
   const trio = [
-    { n: '02', title: 'Tombstones.', body: 'Miss it and the course locks as a reminder.', art: <TombstoneViz /> },
+    { n: '02', title: 'Recommit.', body: 'Miss a deadline and set a new one. Progress saves. The clock restarts.', art: <TombstoneViz /> },
     { n: '03', title: 'One pause.', body: 'A single 72-hour save. Spend it carefully.', art: <PauseViz /> },
     { n: '04', title: 'Finishers.', body: 'Beat the clock and show up on the wall.', art: <LeaderboardViz /> },
     { n: '05', title: 'Notes.', body: 'Each lesson leaves clean notes behind.', art: <NotesViz /> },
@@ -889,6 +914,33 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
           </div>
         ))}
       </div>
+
+      {/* Import callout */}
+      <div style={{
+        marginTop: 48, padding: '32px 40px',
+        border: `1.5px solid ${t.ruleDash}`,
+        background: t.paper,
+        display: 'grid', gridTemplateColumns: '1fr auto', gap: 40, alignItems: 'center',
+      }}>
+        <div>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: t.red, letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 10 }}>
+            Already in a course?
+          </div>
+          <h4 style={{ fontFamily: SERIF, fontSize: 30, margin: '0 0 12px', fontWeight: 400, letterSpacing: '-0.01em', color: t.ink }}>
+            Import from anywhere.
+          </h4>
+          <p style={{ fontFamily: SERIF, fontSize: 17, color: t.inkSoft, lineHeight: 1.6, margin: 0, maxWidth: 500 }}>
+            Already watching a Udemy course? Click one bookmark. Learnor reads the full curriculum and teaches you through it — interactively, with a tutor, not just passive video.
+          </p>
+        </div>
+        <a href="/import" style={{
+          background: t.ink, color: t.bg, padding: '14px 24px',
+          fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase',
+          textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-block',
+        }}>
+          Import a course →
+        </a>
+      </div>
     </Wrap>
   );
 }
@@ -906,7 +958,7 @@ const TIERS = [
     name: 'Finisher', price: '$18', unit: '/month', sub: 'Unlimited courses.',
     body: 'More courses. More clocks.',
     list: ['Unlimited courses', '3 concurrent active', 'Priority AI tutor', 'Public profile', 'Export certificates'],
-    cta: 'Begin the clock →', primary: true,
+    cta: 'Start course →', primary: true,
   },
   {
     name: 'Team', price: '$12', unit: '/seat · yearly', sub: 'For study cohorts.',
@@ -923,7 +975,7 @@ function PricingSection({ onNav }: { onNav: (k: string) => void }) {
       <div style={{ maxWidth: 780, marginBottom: 56 }}>
         <Kicker>Pricing</Kicker>
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 20px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-          The only thing we won't <i>delete.</i>
+          The only thing we won't <i>give up on.</i>
         </h2>
         <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
           Start free. Upgrade when the clock starts working.
@@ -972,8 +1024,8 @@ function PricingSection({ onNav }: { onNav: (k: string) => void }) {
 
 // ── FAQ ───────────────────────────────────────────────────────────────────────
 const FAQS: [string, string][] = [
-  ['Is deletion permanent?', 'Yes. The course content disappears. The tombstone stays.'],
-  ['Can I extend a deadline?', 'No. You get one 72-hour pause per course. That is the only flex.'],
+  ['What happens if I miss the deadline?', 'The course expires. Your progress is saved. Set a new deadline and keep going. Nothing is permanently lost.'],
+  ['Can I extend a deadline?', 'Not mid-course. But if you miss it, you can recommit with a fresh deadline. You also get one 72-hour pause per course.'],
   ['What if I finish early?', 'You keep the course, get the certificate, and hit the finisher wall.'],
   ['Does the AI teach well?', 'It teaches in tiny steps, checks understanding, and uses the canvas when useful.'],
 ];
@@ -1102,7 +1154,7 @@ function FinalCTA({ onNav }: { onNav: (k: string) => void }) {
         <button onClick={() => onNav('new')} style={{
           background: t.red, color: '#faf7f0', border: 'none', padding: '20px 40px',
           fontFamily: MONO, fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', cursor: 'pointer', marginTop: 16,
-        }}>Begin the clock →</button>
+        }}>Start course →</button>
         <div style={{ marginTop: 24, fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
           no card required · first course is free
         </div>
@@ -1116,12 +1168,12 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
   const { t } = useTheme();
   const { state } = useStore();
   const finishers = state.courses.filter((c) => c.status === 'completed').length + 247;
-  const deleted   = state.courses.filter((c) => c.status === 'tombstone').length + 1412;
+  const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length + 1412;
   const footerLinks: [string, [string, string][]][] = [
     ['Product', [['how', 'How it works'], ['features', 'Features'], ['instructors', 'Teach here'], ['pricing', 'Pricing'], ['new', 'Start a course']]],
     ['Social proof', [['leaderboard', 'Leaderboard'], ['leaderboard-page', 'Full wall'], ['dashboard', 'Sample dashboard']]],
     ['Company', [['#', 'About'], ['#', 'Manifesto'], ['#', 'Careers'], ['#', 'Press']]],
-    ['Legal', [['#', 'Deletion terms'], ['#', 'Privacy'], ['#', 'Security'], ['#', 'Contact']]],
+    ['Legal', [['#', 'Terms'], ['#', 'Privacy'], ['#', 'Security'], ['#', 'Contact']]],
   ];
   return (
     <footer style={{ background: t.paper, borderTop: `1px solid ${t.ink}`, padding: '64px 32px 32px' }}>
@@ -1133,12 +1185,12 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
               <b style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
             </div>
             <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
-              A learning platform with stakes. Finish — or every byte is permanently deleted.
+              A learning platform with stakes. Commit to a deadline. Miss it? Recommit.
             </p>
             <div style={{ marginTop: 20, padding: '10px 14px', border: `1px solid ${t.ink}`, display: 'inline-flex', gap: 16, alignItems: 'center', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-              <span style={{ color: t.green }}>● {finishers} alive</span>
+              <span style={{ color: t.green }}>● {finishers} finished</span>
               <span style={{ color: t.mute }}>·</span>
-              <span style={{ color: t.red }}>† {deleted.toLocaleString()} gone</span>
+              <span style={{ color: t.amber }}>↺ {recommitted.toLocaleString()} recommitted</span>
             </div>
           </div>
           {footerLinks.map(([heading, links]) => (
@@ -1153,12 +1205,12 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute }}>
-          <span>© 2026 LEARNOR · all progress subject to deletion</span>
+          <span>© 2026 LEARNOR · no progress is permanently lost</span>
           <span>made with stakes</span>
         </div>
         {/* Giant closing wordmark */}
         <div style={{ fontFamily: SERIF, fontSize: 'clamp(80px, 14vw, 220px)', letterSpacing: '-0.05em', lineHeight: 0.85, color: t.ink, marginTop: 40, textAlign: 'center', opacity: 0.9 }}>
-          <i>lose it</i> or <span style={{ color: t.red }}>learn it.</span>
+          <i>commit.</i> or <span style={{ color: t.red }}>recommit.</span>
         </div>
       </div>
     </footer>
@@ -1219,6 +1271,7 @@ export default function Landing() {
         <SiteNav active={active} dark={dark} loggedIn={!!user} avatarUrl={avatarUrl} profileLabel={profileLabel} onToggleDark={toggle} onNav={onNav} />
         <HeroSection onNav={onNav} />
         <TickerStrip />
+        <ComparisonSection />
         <HowSection />
         <FeaturesSection onNav={onNav} />
         <InstructorSection onNav={onNav} />

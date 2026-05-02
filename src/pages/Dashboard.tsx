@@ -4,10 +4,10 @@ import { HC } from '../theme';
 import { useStore } from '../store';
 import { useTheme } from '../lib/theme';
 import type { Course, QuizAttempt } from '../types';
+import AppNav from '../components/AppNav';
 
 type Filter = 'all' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
 type DashboardMode = 'courses' | 'quizzes';
-const DASHBOARD_SUGGESTIONS = ['SQL for analysts', 'Python basics', 'Mandarin tones', 'Design systems', 'Financial modeling'];
 
 const D = {
   bg: 'var(--dash-bg)',
@@ -28,7 +28,7 @@ function courseHasStarted(course: Course) {
 }
 
 function getCourseFilter(course: Course): Exclude<Filter, 'all' | 'urgent'> {
-  if (course.status === 'tombstone') return 'archived';
+  if (course.status === 'tombstone' || course.status === 'expired') return 'archived';
   if (course.status === 'completed') return 'done';
   if (!courseHasStarted(course)) return 'not-started';
   return 'in-progress';
@@ -54,6 +54,7 @@ function countdownParts(deadline: string, now: number) {
 
 function statusFor(course: Course) {
   if (course.status === 'tombstone') return { label: 'Archived', color: D.mute };
+  if (course.status === 'expired') return { label: 'Expired', color: D.amber };
   if (course.status === 'completed') return { label: 'Done', color: D.green };
   if (course.status === 'active-urgent') return { label: 'Urgent', color: D.red };
   if (courseHasStarted(course)) return { label: 'In progress', color: D.ink };
@@ -150,12 +151,17 @@ function CourseCard({
   now,
   onOpen,
   onDelete,
+  onRecommit,
 }: {
   course: Course;
   now: number;
   onOpen: () => void;
   onDelete: () => void;
+  onRecommit: (newDeadline: string) => void;
 }) {
+  const [recommitting, setRecommitting] = useState(false);
+  const [newDeadlineDate, setNewDeadlineDate] = useState('');
+
   const lessons = course.curriculum.modules.flatMap((m) => m.lessons);
   const doneLessons = lessons.filter((l) => l.completed).length;
   const currentLesson = course.curriculum.modules[course.currentModule]?.lessons[course.currentLesson];
@@ -163,19 +169,28 @@ function CourseCard({
   const daysLeft = daysUntil(course.deadline);
   const timeLeft = countdownParts(course.deadline, now);
   const status = statusFor(course);
-  const archived = course.status === 'tombstone';
-  const clockColor = course.paused ? D.amber : timeLeft.expired || archived ? D.mute : timeLeft.urgent ? D.red : D.ink;
+  const isExpired = course.status === 'expired' || course.status === 'tombstone';
+  const clockColor = course.paused ? D.amber : timeLeft.expired || isExpired ? D.amber : timeLeft.urgent ? D.red : D.ink;
+
+  const minDeadline = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  function handleConfirmRecommit() {
+    if (!newDeadlineDate) return;
+    onRecommit(new Date(newDeadlineDate + 'T23:59:59').toISOString());
+    setRecommitting(false);
+    setNewDeadlineDate('');
+  }
 
   return (
     <article
       style={{
         minHeight: 260,
-        border: `1px solid ${D.faint}`,
+        border: `1px solid ${isExpired ? D.amber + '55' : D.faint}`,
         borderRadius: 28,
         padding: 22,
         background: 'linear-gradient(145deg, rgba(255,255,255,0.035), rgba(26,21,16,0.018))',
         boxShadow: '0 24px 80px rgba(26,21,16,0.06)',
-        opacity: archived ? 0.45 : 1,
+        opacity: isExpired ? 0.72 : 1,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -206,7 +221,7 @@ function CourseCard({
           <span>{doneLessons}/{lessons.length}</span>
         </div>
         <div style={{ marginTop: 10, height: 6, borderRadius: 999, background: D.softer, overflow: 'hidden' }}>
-          <div style={{ width: `${progress}%`, height: '100%', borderRadius: 999, background: course.status === 'active-urgent' ? D.red : D.ink }} />
+          <div style={{ width: `${progress}%`, height: '100%', borderRadius: 999, background: isExpired ? D.amber : course.status === 'active-urgent' ? D.red : D.ink }} />
         </div>
       </div>
 
@@ -220,8 +235,8 @@ function CourseCard({
           <div style={{ marginTop: 5, fontFamily: D.mono, fontSize: 13, letterSpacing: '0.04em', color: clockColor }}>
             {course.status === 'completed'
               ? 'finished'
-              : archived
-                ? 'archived'
+              : isExpired
+                ? 'expired'
                 : course.paused
                   ? 'paused'
                   : timeLeft.expired || daysLeft <= 0
@@ -231,13 +246,49 @@ function CourseCard({
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', borderTop: `1px solid ${D.faint}`, paddingTop: 16 }}>
-        <button onClick={onOpen} disabled={archived} style={{ border: `1px solid ${archived ? D.faint : D.ink}`, borderRadius: 999, background: archived ? 'transparent' : D.ink, color: archived ? D.mute : D.bg, cursor: archived ? 'not-allowed' : 'pointer', padding: '10px 16px', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
-          {course.status === 'completed' ? 'Cert' : courseHasStarted(course) ? 'Resume' : 'Start'}
-        </button>
-        <button onClick={onDelete} style={{ border: 'none', background: 'transparent', color: D.red, cursor: 'pointer', padding: '8px 0', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
-          Delete
-        </button>
+      <div style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 16 }}>
+        {isExpired ? (
+          recommitting ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="date"
+                value={newDeadlineDate}
+                min={minDeadline}
+                onChange={(e) => setNewDeadlineDate(e.target.value)}
+                style={{ flex: 1, border: `1px solid ${D.faint}`, borderRadius: 8, background: 'transparent', color: D.ink, padding: '8px 10px', fontFamily: D.mono, fontSize: 10, outline: 'none' }}
+              />
+              <button
+                onClick={handleConfirmRecommit}
+                disabled={!newDeadlineDate}
+                style={{ border: `1px solid ${D.ink}`, borderRadius: 999, background: D.ink, color: D.bg, cursor: newDeadlineDate ? 'pointer' : 'not-allowed', opacity: newDeadlineDate ? 1 : 0.45, padding: '10px 14px', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase', flexShrink: 0 }}
+              >
+                Commit →
+              </button>
+              <button onClick={() => setRecommitting(false)} style={{ border: 'none', background: 'transparent', color: D.mute, cursor: 'pointer', padding: '8px 4px', fontFamily: D.mono, fontSize: 14 }}>×</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+              <button
+                onClick={() => setRecommitting(true)}
+                style={{ border: `1px solid ${D.amber}`, borderRadius: 999, background: 'transparent', color: D.amber, cursor: 'pointer', padding: '10px 16px', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+              >
+                Recommit
+              </button>
+              <button onClick={onDelete} style={{ border: 'none', background: 'transparent', color: D.red, cursor: 'pointer', padding: '8px 0', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
+                Delete
+              </button>
+            </div>
+          )
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+            <button onClick={onOpen} style={{ border: `1px solid ${D.ink}`, borderRadius: 999, background: D.ink, color: D.bg, cursor: 'pointer', padding: '10px 16px', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
+              {course.status === 'completed' ? 'Cert' : courseHasStarted(course) ? 'Resume' : 'Start'}
+            </button>
+            <button onClick={onDelete} style={{ border: 'none', background: 'transparent', color: D.red, cursor: 'pointer', padding: '8px 0', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
+              Delete
+            </button>
+          </div>
+        )}
       </div>
     </article>
   );
@@ -424,7 +475,7 @@ function QuizHub({
 }) {
   const [topic, setTopic] = useState('');
   const quizTargets = courses
-    .filter((course) => course.status !== 'tombstone')
+    .filter((course) => course.status !== 'tombstone' && course.status !== 'expired')
     .flatMap((course) => course.curriculum.modules.flatMap((mod, mi) =>
       mod.lessons.map((lesson, li) => ({ course, mod, lesson, mi, li }))
     ))
@@ -535,11 +586,11 @@ export default function Dashboard() {
   }, []);
 
   const stats = useMemo(() => {
-    const notStarted = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'completed' && !courseHasStarted(c)).length;
-    const inProgress = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'completed' && courseHasStarted(c)).length;
+    const notStarted = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'expired' && c.status !== 'completed' && !courseHasStarted(c)).length;
+    const inProgress = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'expired' && c.status !== 'completed' && courseHasStarted(c)).length;
     const done = state.courses.filter((c) => c.status === 'completed').length;
     const urgent = state.courses.filter((c) => c.status === 'active-urgent').length;
-    const archived = state.courses.filter((c) => c.status === 'tombstone').length;
+    const archived = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length;
     return { notStarted, inProgress, done, urgent, archived };
   }, [state.courses]);
 
@@ -556,7 +607,7 @@ export default function Dashboard() {
 
   const upcoming = useMemo(() => {
     return state.courses
-      .filter((course) => course.status !== 'tombstone')
+      .filter((course) => course.status !== 'tombstone' && course.status !== 'expired')
       .slice()
       .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
       .slice(0, 4);
@@ -581,16 +632,9 @@ export default function Dashboard() {
     { key: 'in-progress', label: 'In progress', count: stats.inProgress },
     { key: 'urgent', label: 'Urgent', count: stats.urgent },
     { key: 'done', label: 'Done', count: stats.done },
-    { key: 'archived', label: 'Archived', count: stats.archived },
+    { key: 'archived', label: 'Expired', count: stats.archived },
   ];
 
-  const navItems = [
-    ['Home', '/'],
-    ['Browse', '/browse'],
-    ['Leaderboard', '/leaderboard'],
-    ['Profile', '/profile'],
-    ['Settings', '/settings'],
-  ] as const;
   const displayName = state.profile?.displayName?.trim() || (state.username === 'you' ? 'learner' : state.username);
   return (
     <div style={{
@@ -616,23 +660,8 @@ export default function Dashboard() {
           : 'radial-gradient(circle at 72% 8%, rgba(196,34,27,0.08), transparent 30%), radial-gradient(circle at 15% 85%, rgba(26,21,16,0.045), transparent 28%)',
       }} />
 
+      <AppNav />
       <main style={{ position: 'relative', maxWidth: 1520, margin: '0 auto', padding: '28px clamp(20px, 4vw, 58px) 64px' }}>
-        <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, paddingBottom: 26 }}>
-          <button onClick={() => navigate('/')} style={{ border: 'none', background: 'transparent', color: D.ink, cursor: 'pointer', padding: 0, fontFamily: D.serif, fontSize: 30, letterSpacing: '-0.055em' }}>
-            Learnor
-          </button>
-          <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {navItems.map(([label, to]) => (
-              <button
-                key={label}
-                onClick={() => navigate(to)}
-                style={{ border: 'none', background: 'transparent', color: D.mute, cursor: 'pointer', padding: 0, fontFamily: D.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase' }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </nav>
 
         <div style={{ minWidth: 0 }}>
         <section
@@ -697,19 +726,7 @@ export default function Dashboard() {
                     }}
                   />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, padding: '12px 20px', borderTop: `1px solid ${D.faint}`, flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {DASHBOARD_SUGGESTIONS.map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        onClick={() => setTopic(`Teach me ${suggestion.toLowerCase()}`)}
-                        style={{ fontFamily: D.mono, fontSize: 10, padding: '5px 10px', letterSpacing: '0.08em', border: `1px solid ${D.faint}`, background: 'transparent', color: D.mute, cursor: 'pointer' }}
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '12px 20px', borderTop: `1px solid ${D.faint}` }}>
                   <button
                     type="submit"
                     disabled={!topic.trim()}
@@ -726,7 +743,7 @@ export default function Dashboard() {
                       cursor: topic.trim() ? 'pointer' : 'not-allowed',
                     }}
                   >
-                    Begin the clock →
+                    Start course →
                   </button>
                 </div>
               </div>
@@ -757,12 +774,6 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => navigate('/profile')}
-            style={{ border: `1px solid ${D.faint}`, borderRadius: 999, background: D.softer, color: D.mute, cursor: 'pointer', padding: '11px 16px', fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
-          >
-            View profile
-          </button>
         </section>
         {mode === 'quizzes' ? (
           <QuizHub
@@ -932,6 +943,7 @@ export default function Dashboard() {
                     if (course.status === 'completed') navigate(`/certificate/${course.id}`);
                     else navigate(`/learn/${course.id}`);
                   }}
+                  onRecommit={(newDeadline) => dispatch({ type: 'RECOMMIT', id: course.id, newDeadline })}
                 />
               ))}
             </div>

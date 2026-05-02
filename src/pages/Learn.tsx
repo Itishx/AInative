@@ -1707,8 +1707,7 @@ function LearnContent({ course }: { course: Course }) {
   }
 
   async function handleSend() {
-    const text = input.trim();
-    if (!text) return;
+    const text = input.trim() || 'Continue.';
     setInput('');
     await sendUserText(text);
   }
@@ -1769,20 +1768,20 @@ function LearnContent({ course }: { course: Course }) {
     ? []
     : phase === 'CHECK'
     ? [
-        { label: 'I\'m not sure', action: () => handleQuickPrompt('I\'m not sure, can you explain the answer?'), primary: false },
-        { label: 'Take quiz', action: handleLessonDone, primary: false },
+        { label: 'Explain more', action: () => handleQuickPrompt("I'm not sure, can you explain the answer?") },
+        { label: 'Okay', action: () => handleQuickPrompt('Okay, got it.') },
       ]
     : phase === 'REINFORCE'
     ? [
-        { label: 'Show example', action: handleShowExample, primary: false },
-        { label: 'Take quiz', action: handleLessonDone, primary: true },
+        { label: 'Okay', action: () => handleQuickPrompt('Okay, got it.') },
+        { label: 'Stop hallucinating', action: () => handleQuickPrompt('Stop. You are repeating yourself. You have already said this. Move forward to something completely new right now.') },
       ]
     : [
-        { label: 'Continue', action: () => handleQuickPrompt('Continue.'), primary: true },
-        { label: 'Show example', action: handleShowExample, primary: false },
-        { label: 'Simpler', action: () => handleQuickPrompt('Explain the current idea more simply, in very plain language.'), primary: false },
-        { label: 'Check me', action: () => handleQuickPrompt(`Ask me one question about "${lesson?.title}".`, 'CHECK'), primary: false },
-        { label: 'Take quiz', action: handleLessonDone, primary: false },
+        { label: 'Continue', action: () => handleQuickPrompt('Continue.') },
+        { label: 'Okay', action: () => handleQuickPrompt('Okay, got it.') },
+        { label: 'Example', action: handleShowExample },
+        { label: 'Simpler', action: () => handleQuickPrompt('Explain more simply.') },
+        { label: 'Stop hallucinating', action: () => handleQuickPrompt('Stop. You are repeating yourself. You have already said this. Move forward to something completely new right now.') },
       ];
 
   return (
@@ -1865,64 +1864,34 @@ function LearnContent({ course }: { course: Course }) {
             <div ref={chatEndRef} />
           </div>
 
-          <div style={{ padding: '12px 18px 14px', borderTop: `1px solid ${theme.ruleFaint}`, background: panelFill }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-              {phase !== 'ASSESS' && (
-                <button
-                  onClick={() => setExampleMode((value) => !value)}
-                  disabled={aiLoading || generatingNotes}
-                  style={{
-                    ...btn.ghost,
-                    padding: '8px 10px',
-                    fontSize: 10,
-                    color: exampleMode ? theme.green : theme.mute,
-                    background: exampleMode ? (dark ? 'rgba(122,208,139,0.10)' : 'rgba(45,106,63,0.08)') : panelFill,
-                    border: `1px solid ${exampleMode ? 'rgba(122,208,139,0.24)' : 'transparent'}`,
-                    opacity: aiLoading || generatingNotes ? 0.5 : 1,
-                  }}
-                >
-                  Example mode {exampleMode ? 'on' : 'off'}
-                </button>
-              )}
-              <button
-                onClick={unlockVoiceMode}
-                disabled={generatingNotes}
-                style={{
-                  ...btn.ghost,
-                  padding: '8px 10px',
-                  fontSize: 10,
-                  color: voiceMode ? theme.green : theme.mute,
-                  background: voiceMode ? (dark ? 'rgba(122,208,139,0.10)' : 'rgba(45,106,63,0.08)') : panelFill,
-                  border: `1px solid ${voiceMode ? 'rgba(122,208,139,0.24)' : 'transparent'}`,
-                  opacity: generatingNotes ? 0.5 : 1,
-                }}
-              >
-                Voice {voiceMode ? 'on' : 'off'}
-              </button>
-              {voiceStatus && (
-                <span style={{ alignSelf: 'center', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.mute }}>
-                  {voiceStatus}
-                </span>
-              )}
-              {quickActions.map((action) => (
-                <button
-                  key={action.label}
-                  onClick={action.action}
-                  disabled={aiLoading || generatingNotes}
-                  style={{
-                    ...(action.primary ? btn.outline : btn.ghost),
-                    padding: action.primary ? '8px 12px' : '8px 10px',
-                    fontSize: 10,
-                    borderColor: action.primary ? theme.ruleFaint : 'transparent',
-                    color: action.primary ? theme.ink : theme.mute,
-                    background: panelFill,
-                    opacity: aiLoading || generatingNotes ? 0.5 : 1,
-                  }}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
+          <div style={{ padding: '10px 16px 14px', borderTop: `1px solid ${theme.ruleFaint}`, background: panelFill }}>
+            {quickActions.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                {quickActions.map((action) => (
+                  <button
+                    key={action.label}
+                    onClick={action.action}
+                    disabled={aiLoading || generatingNotes}
+                    style={{
+                      padding: '5px 11px',
+                      borderRadius: 999,
+                      border: `1px solid ${'primary' in action && action.primary ? theme.ink : theme.ruleFaint}`,
+                      background: 'primary' in action && action.primary ? theme.ink : 'transparent',
+                      color: 'primary' in action && action.primary ? theme.bg : theme.mute,
+                      fontFamily: HC.mono,
+                      fontSize: 10,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      cursor: aiLoading || generatingNotes ? 'not-allowed' : 'pointer',
+                      opacity: aiLoading || generatingNotes ? 0.4 : 1,
+                      transition: 'opacity 120ms',
+                    }}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div
               style={{
@@ -1959,31 +1928,48 @@ function LearnContent({ course }: { course: Course }) {
                   lineHeight: 1.55,
                 }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                <div
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                {voiceStatus && (
+                  <span style={{ flex: 1, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: listening ? theme.red : theme.mute }}>
+                    {voiceStatus}
+                  </span>
+                )}
+                <button
+                  onClick={unlockVoiceMode}
+                  title={voiceMode ? 'Voice on — click to toggle' : 'Voice off'}
                   style={{
-                    fontFamily: HC.mono,
-                    fontSize: 10,
-                    letterSpacing: '0.12em',
-                    textTransform: 'uppercase',
-                    color: listening ? theme.red : voiceMode ? theme.green : faintText,
+                    width: 34, height: 34, borderRadius: '50%',
+                    border: `1px solid ${voiceMode ? 'rgba(122,208,139,0.35)' : theme.ruleFaint}`,
+                    background: voiceMode ? (dark ? 'rgba(122,208,139,0.12)' : 'rgba(45,106,63,0.08)') : 'transparent',
+                    color: voiceMode ? theme.green : theme.mute,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, flexShrink: 0,
                   }}
                 >
-                  {voiceMode ? (listening ? 'recording... release space to send' : 'hold space to talk') : 'take the quiz whenever you feel ready'}
-                </div>
+                  {listening ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="2" width="6" height="13" rx="3"/>
+                      <path d="M5 10a7 7 0 0 0 14 0"/>
+                      <line x1="12" y1="19" x2="12" y2="22"/>
+                      <line x1="9" y1="22" x2="15" y2="22"/>
+                    </svg>
+                  )}
+                </button>
                 <button
                   onClick={handleSend}
-                  disabled={aiLoading || !input.trim() || generatingNotes}
+                  disabled={aiLoading || generatingNotes}
                   style={{
                     ...btn.primary,
-                    padding: '10px 16px',
+                    padding: '8px 16px',
                     fontSize: 10,
                     background: theme.ink,
                     color: theme.bg,
-                    opacity: aiLoading || !input.trim() || generatingNotes ? 0.45 : 1,
+                    opacity: aiLoading || generatingNotes ? 0.45 : 1,
                   }}
                 >
-                  Send ↵
+                  {input.trim() ? 'Send ↵' : 'Continue ↵'}
                 </button>
               </div>
             </div>
@@ -2096,13 +2082,13 @@ export default function Learn() {
     );
   }
 
-  if (course.status === 'tombstone') {
+  if (course.status === 'tombstone' || course.status === 'expired') {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: HC.bg }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 20 }}>
-          <div style={{ fontFamily: HC.serif, fontStyle: 'italic', fontSize: 'clamp(48px, 8vw, 96px)', color: HC.mute, letterSpacing: '-0.03em' }}>deleted.</div>
+          <div style={{ fontFamily: HC.serif, fontStyle: 'italic', fontSize: 'clamp(48px, 8vw, 96px)', color: HC.mute, letterSpacing: '-0.03em' }}>expired.</div>
           <div style={{ fontFamily: HC.mono, fontSize: 12, color: HC.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-            "{course.subject}" — {Math.round(course.progress * 100)}% at deletion
+            "{course.subject}" — {Math.round(course.progress * 100)}% complete · recommit from dashboard
           </div>
           <button onClick={() => navigate('/dashboard')} style={btn.outline}>← Dashboard</button>
         </div>

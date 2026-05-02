@@ -24,6 +24,11 @@ export interface ChatMsg {
   visual?: string;
 }
 
+export interface DeadlineAttempt {
+  deadline: string;
+  missedAt: string;
+}
+
 export interface Curriculum {
   title: string;
   level: string;
@@ -39,7 +44,8 @@ export interface Course {
   progress: number;
   streak: number;
   lastStudiedDate?: string;
-  status: 'active' | 'active-urgent' | 'tombstone' | 'completed';
+  status: 'active' | 'active-urgent' | 'tombstone' | 'expired' | 'completed';
+  deadlineHistory?: DeadlineAttempt[];
   paused: boolean;
   pauseUsed: boolean;
   pausedAt?: string;
