@@ -47,6 +47,57 @@ function trimWords(text, maxWords) {
   return `${words.slice(0, maxWords).join(' ')}...`.trim();
 }
 
+function countWords(text) {
+  return String(text || '').split(/\s+/).filter(Boolean).length;
+}
+
+function trimAtClauseBoundary(text, maxWords) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return String(text || '').trim();
+
+  const candidate = words.slice(0, maxWords).join(' ').trim();
+  const clauseSafe = candidate.replace(/(?:,|;|:)\s+[^,;:]*$/, '').trim();
+  const trimmed = countWords(clauseSafe) >= Math.max(8, maxWords - 18) ? clauseSafe : candidate;
+  return `${trimmed.replace(/[,:;]+$/, '').trim()}.`;
+}
+
+function fitTextToSentenceBoundary(text, preferredMaxWords, absoluteMaxWords = preferredMaxWords + 28) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (countWords(normalized) <= preferredMaxWords) return normalized;
+
+  const sentences = splitSentences(normalized);
+  if (!sentences.length) {
+    return trimAtClauseBoundary(normalized, absoluteMaxWords);
+  }
+
+  const chosen = [];
+  let used = 0;
+
+  for (const sentence of sentences) {
+    const sentenceWords = countWords(sentence);
+    if (!chosen.length) {
+      if (sentenceWords > absoluteMaxWords) {
+        return trimAtClauseBoundary(sentence, absoluteMaxWords);
+      }
+      chosen.push(sentence);
+      used = sentenceWords;
+      if (used >= preferredMaxWords) break;
+      continue;
+    }
+
+    const next = used + sentenceWords;
+    if (next <= preferredMaxWords || (used < Math.min(72, preferredMaxWords) && next <= absoluteMaxWords)) {
+      chosen.push(sentence);
+      used = next;
+      continue;
+    }
+    break;
+  }
+
+  return chosen.join(' ').trim() || trimAtClauseBoundary(normalized, absoluteMaxWords);
+}
+
 function isContinueOnly(text) {
   return /^(continue|next|go on|keep going|proceed|move on|ok|okay|k|got it|cool|nice)$/i.test(String(text || '').trim());
 }
@@ -103,7 +154,7 @@ function buildOpeningTutorReply({ lessonTitle, lessonObjective, conceptDescripti
   const second = descriptionSentences[1] || factSentence || `For now, just focus on the main idea behind ${lessonTitle}; we will build from there one step at a time.`;
 
   return {
-    text: trimWords(`${first} ${second}`, 90),
+    text: fitTextToSentenceBoundary(`${first} ${second}`, 90, 120),
     readyToMoveOn: false,
     askedQuestion: false,
     confidenceSignal: 'medium',
@@ -116,11 +167,11 @@ function normalizeTutorReply(text, { currentPhase, isOpening, allowQuestion }) {
   if (!raw) return '';
 
   if (currentPhase === 'CHECK') {
-    return trimWords(raw.replace(/\n{3,}/g, '\n\n'), 95);
+    return fitTextToSentenceBoundary(raw.replace(/\n{3,}/g, '\n\n'), 95, 120);
   }
 
   const hasStructuredExample = /```|^\s*\|.+\|\s*$/m.test(String(text || ''));
-  if (!isOpening && hasStructuredExample && raw.split(/\s+/).filter(Boolean).length <= 130) {
+  if (!isOpening && hasStructuredExample && countWords(raw) <= 150) {
     return raw;
   }
 
@@ -140,7 +191,7 @@ function normalizeTutorReply(text, { currentPhase, isOpening, allowQuestion }) {
   }
 
   const compacted = paragraphs.filter(Boolean).join('\n\n').trim();
-  return trimWords(compacted || raw.replace(/\?+/g, '.'), isOpening ? 90 : 135);
+  return fitTextToSentenceBoundary(compacted || raw.replace(/\?+/g, '.'), isOpening ? 90 : 135, isOpening ? 120 : 170);
 }
 
 // Strip common Gemini JSON malformations before parsing
@@ -1275,7 +1326,7 @@ You are not a textbook. You are a thinking partner.
 You MUST always reply in this exact JSON format — nothing outside it:
 
 {
-  "text": "string — your teaching message (HARD LIMIT: 100 words maximum. Count them. If you exceed 100 words, cut until you don't. No headings, no bullet dumps)",
+  "text": "string — your teaching message (usually 60-110 words; you may go a little longer only when needed to finish a thought cleanly, but never ramble or end mid-sentence. No headings, no bullet dumps)",
   "visual": "string | null — code/table/diagram goes here only",
   "readyToMoveOn": false,
   "askedQuestion": false,
@@ -1294,6 +1345,7 @@ You MUST always reply in this exact JSON format — nothing outside it:
 - The canvas renders in this priority: markdown table → fenced code block → ambient fallback
 - If your string is neither a table nor a fenced code block, it will be silently dropped and the student sees nothing useful
 - Never put tables or code inside text — always move them to visual
+- Inside markdown table cells, use plain text only — no **bold**, bullets, or nested markdown inside the cells
 - If text references anything visual ("look at this", "here's the structure", "notice that"), visual must not be null
 
 **anchorSentence rules:**
@@ -1418,7 +1470,7 @@ When a student expresses confusion, DO NOT just simplify and repeat. Instead:
 4. **Never use an analogy unless the student asks for one.** Analogies can mislead; precision teaches.
 5. **Stay inside the current lesson scope.** If the student asks about something from a future lesson, say: "That's exactly where we're headed — let's build to it."
 6. **Use only high-confidence facts.** If uncertain, say so briefly and stay with what's solid.
-7. **Hard limit: 100 words in text.** Count before you output. If you're over, cut. Long explanations are a failure mode, not a feature — if it doesn't fit in 100 words, it belongs in visual or a future turn.
+7. **Keep text concise, usually under 110 words.** If the explanation genuinely needs more, stay under roughly 150 and keep it to one interactive block. Never cut yourself off mid-sentence.
 8. **Never ask more than one question per turn.**
 9. **After a student's correct answer, always teach one new thing** — don't just confirm and stop.
 10. **The lesson ends when the student can apply the concept**, not just recite it.
@@ -1469,7 +1521,7 @@ ${materialsSection}${planSection}${alreadyCoveredSection}`;
 
     let rawText;
     try {
-      rawText = await callGemini(systemPrompt, apiMessages, 2600, true);
+      rawText = await callGemini(systemPrompt, apiMessages, 3600, true);
     } catch (err) {
       const msg = String(err?.message || '');
       if (msg.includes('at least one message') || msg.includes('contents') || msg.includes('INVALID_ARGUMENT')) {

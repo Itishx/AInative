@@ -4,6 +4,7 @@ import { HC } from '../theme';
 import { AppNav } from '../components/Chrome';
 import { useStore } from '../store';
 import { useTheme } from '../lib/theme';
+import { useTypingPlaceholder } from '../lib/useTypingPlaceholder';
 import type { Course, QuizAttempt } from '../types';
 
 type Filter = 'all' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
@@ -22,6 +23,13 @@ const D = {
   sans: HC.sans,
   mono: HC.mono,
 };
+
+const HERO_PLACEHOLDER_PHRASES = [
+  'Learn SQL joins for analytics',
+  'Master Python for automation',
+  'Understand AWS from scratch',
+  'Get fluent in spoken French',
+];
 
 function courseHasStarted(course: Course) {
   return course.progress > 0 || Object.values(course.lessonChats ?? {}).some((msgs) => msgs.length > 0);
@@ -579,6 +587,10 @@ export default function Dashboard() {
   const [topic, setTopic] = useState('');
   const [heroFocused, setHeroFocused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const typingPlaceholder = useTypingPlaceholder({
+    phrases: HERO_PLACEHOLDER_PHRASES,
+    enabled: !heroFocused && !topic.trim(),
+  });
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -694,37 +706,62 @@ export default function Dashboard() {
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', padding: '20px 20px 12px' }}>
                   <span style={{ fontFamily: D.mono, fontSize: 13, color: D.red, marginRight: 14, marginTop: 3, flexShrink: 0 }}>$</span>
-                  <textarea
-                    value={topic}
-                    onChange={(event) => {
-                      setTopic(event.target.value);
-                      event.target.style.height = 'auto';
-                      event.target.style.height = `${event.target.scrollHeight}px`;
-                    }}
-                    onFocus={() => setHeroFocused(true)}
-                    onBlur={() => setHeroFocused(false)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
-                        event.preventDefault();
-                        handleStartCourse(event);
-                      }
-                    }}
-                    placeholder="What do you want to learn?"
-                    rows={2}
-                    style={{
-                      flex: 1,
-                      border: 'none',
-                      outline: 'none',
-                      background: 'transparent',
-                      resize: 'none',
-                      fontFamily: D.serif,
-                      fontSize: 22,
-                      lineHeight: 1.4,
-                      color: D.ink,
-                      minHeight: 56,
-                      overflow: 'hidden',
-                    }}
-                  />
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    {typingPlaceholder.show && (
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          pointerEvents: 'none',
+                          fontFamily: D.serif,
+                          fontSize: 22,
+                          lineHeight: 1.4,
+                          color: D.mute,
+                          minHeight: 56,
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {typingPlaceholder.text}
+                        <span style={{ opacity: typingPlaceholder.cursorVisible ? 1 : 0, transition: 'opacity 140ms ease' }}>|</span>
+                      </div>
+                    )}
+                    <textarea
+                      aria-label="What do you want to learn?"
+                      value={topic}
+                      onChange={(event) => {
+                        setTopic(event.target.value);
+                        event.target.style.height = 'auto';
+                        event.target.style.height = `${event.target.scrollHeight}px`;
+                      }}
+                      onFocus={() => setHeroFocused(true)}
+                      onBlur={() => setHeroFocused(false)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                          event.preventDefault();
+                          handleStartCourse(event);
+                        }
+                      }}
+                      placeholder=""
+                      rows={2}
+                      style={{
+                        position: 'relative',
+                        zIndex: 1,
+                        flex: 1,
+                        width: '100%',
+                        border: 'none',
+                        outline: 'none',
+                        background: 'transparent',
+                        resize: 'none',
+                        fontFamily: D.serif,
+                        fontSize: 22,
+                        lineHeight: 1.4,
+                        color: D.ink,
+                        minHeight: 56,
+                        overflow: 'hidden',
+                      }}
+                    />
+                  </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '12px 20px', borderTop: `1px solid ${D.faint}` }}>
                   <button

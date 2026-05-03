@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { useTheme as useAppTheme } from '../lib/theme';
 import { useAuth } from '../lib/auth';
+import { useTypingPlaceholder } from '../lib/useTypingPlaceholder';
 // ── Theme ─────────────────────────────────────────────────────────────────────
 type T = {
   bg: string; paper: string; paperAlt: string;
@@ -18,8 +19,8 @@ const LIGHT: T = {
   red: '#c4221b', green: '#2d6a3f', amber: '#d89430',
 };
 const DARK: T = {
-  bg: '#141210', paper: '#1c1a16', paperAlt: '#252219',
-  ink: '#f1ecdf', inkSoft: '#d8d2c2', mute: '#8a8373',
+  bg: '#050505', paper: '#1c1a16', paperAlt: '#252219',
+  ink: '#f6f0e7', inkSoft: '#d8d2c2', mute: '#8a8373',
   ruleFaint: 'rgba(241,236,223,0.14)', ruleDash: 'rgba(241,236,223,0.22)',
   red: '#e8514a', green: '#6aae7f', amber: '#e3a447',
 };
@@ -27,6 +28,12 @@ const DARK: T = {
 const SERIF = '"Instrument Serif", "EB Garamond", Georgia, serif';
 const SANS = '"Inter", -apple-system, system-ui, sans-serif';
 const MONO  = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace';
+const HERO_PLACEHOLDER_PHRASES = [
+  'Learn SQL joins for analytics',
+  'Master Python for automation',
+  'Understand AWS from scratch',
+  'Get fluent in spoken French',
+];
 
 const ThemeCtx = createContext<{ t: T; dark: boolean }>({ t: LIGHT, dark: false });
 const useTheme = () => useContext(ThemeCtx);
@@ -123,7 +130,7 @@ function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark
               <a key={k} href={`#${k}`} onClick={(e) => { e.preventDefault(); onNav(k); }} style={{
                 padding: '10px 14px', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em',
                 textTransform: 'uppercase', textDecoration: 'none',
-                color: active === k ? (dark ? '#141210' : t.paper) : t.mute, cursor: 'pointer',
+                color: active === k ? t.bg : t.mute, cursor: 'pointer',
                 background: active === k ? t.red : 'transparent',
                 borderRadius: 999,
                 whiteSpace: 'nowrap',
@@ -184,7 +191,7 @@ function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark
                 display: 'grid',
                 placeItems: 'center',
                 background: t.ink,
-                color: dark ? '#141210' : t.paper,
+                color: t.bg,
                 border: `1px solid ${t.ruleFaint}`,
                 fontFamily: MONO,
                 fontSize: 11,
@@ -216,6 +223,10 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [materialsError, setMaterialsError] = useState('');
   const navigate = useNavigate();
+  const typingPlaceholder = useTypingPlaceholder({
+    phrases: HERO_PLACEHOLDER_PHRASES,
+    enabled: !focused && !input.trim(),
+  });
   const finishers = state.courses.filter((c) => c.status === 'completed').length + 247;
   const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length + 1412;
 
@@ -297,20 +308,53 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
           }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', padding: '20px 20px 12px' }}>
               <span style={{ fontFamily: MONO, fontSize: 13, color: t.red, marginRight: 14, marginTop: 3, flexShrink: 0 }}>$</span>
-              <textarea
-                value={input}
-                onChange={(e) => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleStart(e); } }}
-                placeholder="What do you want to learn?"
-                rows={2}
-                style={{
-                  flex: 1, border: 'none', outline: 'none', background: 'transparent', resize: 'none',
-                  fontFamily: SERIF, fontSize: 22, lineHeight: 1.4, color: t.ink,
-                  minHeight: 56, overflow: 'hidden',
-                }}
-              />
+              <div style={{ position: 'relative', flex: 1 }}>
+                {typingPlaceholder.show && (
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      pointerEvents: 'none',
+                      fontFamily: SERIF,
+                      fontSize: 22,
+                      lineHeight: 1.4,
+                      color: t.mute,
+                      minHeight: 56,
+                      whiteSpace: 'pre-wrap',
+                    }}
+                  >
+                    {typingPlaceholder.text}
+                    <span style={{ opacity: typingPlaceholder.cursorVisible ? 1 : 0, transition: 'opacity 140ms ease' }}>|</span>
+                  </div>
+                )}
+                <textarea
+                  aria-label="What do you want to learn?"
+                  value={input}
+                  onChange={(e) => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleStart(e); } }}
+                  placeholder=""
+                  rows={2}
+                  style={{
+                    position: 'relative',
+                    zIndex: 1,
+                    flex: 1,
+                    width: '100%',
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    resize: 'none',
+                    fontFamily: SERIF,
+                    fontSize: 22,
+                    lineHeight: 1.4,
+                    color: t.ink,
+                    minHeight: 56,
+                    overflow: 'hidden',
+                  }}
+                />
+              </div>
             </div>
 
             {/* PDF panel — shown when resources selected */}
@@ -1228,8 +1272,8 @@ export default function Landing() {
 
   useEffect(() => {
     try { localStorage.setItem('ain_dark', String(dark)); } catch {}
-    document.body.style.background = dark ? '#141210' : '#f4f0e8';
-    document.body.style.color = dark ? '#f1ecdf' : '#1a1510';
+    document.body.style.background = dark ? DARK.bg : LIGHT.bg;
+    document.body.style.color = dark ? DARK.ink : LIGHT.ink;
   }, [dark]);
 
   // Scroll-spy

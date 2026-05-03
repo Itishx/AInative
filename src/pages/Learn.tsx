@@ -37,6 +37,10 @@ function renderInlineFormatting(text: string) {
   return nodes.length > 0 ? nodes : text;
 }
 
+function countWords(text: string) {
+  return String(text || '').split(/\s+/).filter(Boolean).length;
+}
+
 function isMarkdownTableLine(line: string) {
   const trimmed = line.trim();
   return trimmed.startsWith('|') && trimmed.endsWith('|');
@@ -198,7 +202,7 @@ function renderChatMessage(text: string, theme: Colors, dark: boolean) {
         lineIndex -= 1;
         rendered.push(
           <div key={key} style={{ overflowX: 'auto', margin: '12px 0 16px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, lineHeight: 1.45, color: 'inherit' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 14, lineHeight: 1.45, color: 'inherit' }}>
               <thead>
                 <tr>
                   {header.map((cell, cellIndex) => (
@@ -213,7 +217,10 @@ function renderChatMessage(text: string, theme: Colors, dark: boolean) {
                         letterSpacing: '0.12em',
                         textTransform: 'uppercase',
                         color: muted,
-                        whiteSpace: 'nowrap',
+                        whiteSpace: 'normal',
+                        overflowWrap: 'anywhere',
+                        wordBreak: 'break-word',
+                        verticalAlign: 'top',
                       }}
                     >
                       {renderInlineFormatting(cell)}
@@ -227,11 +234,14 @@ function renderChatMessage(text: string, theme: Colors, dark: boolean) {
                     {row.map((cell, cellIndex) => (
                       <td
                         key={`${key}-cell-${rowIndex}-${cellIndex}`}
-                      style={{
-                        padding: '10px',
-                        borderBottom: `1px solid ${softerRule}`,
-                        whiteSpace: 'nowrap',
-                      }}
+                        style={{
+                          padding: '10px',
+                          borderBottom: `1px solid ${softerRule}`,
+                          whiteSpace: 'normal',
+                          overflowWrap: 'anywhere',
+                          wordBreak: 'break-word',
+                          verticalAlign: 'top',
+                        }}
                     >
                         {renderInlineFormatting(cell)}
                       </td>
@@ -382,7 +392,7 @@ function renderMarkdown(text: string) {
       i -= 1;
       rendered.push(
         <div key={`table-${i}`} style={{ overflowX: 'auto', margin: '10px 0 12px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, lineHeight: 1.45 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 11, lineHeight: 1.45 }}>
             <thead>
               <tr>
                 {header.map((cell, cellIndex) => (
@@ -397,7 +407,10 @@ function renderMarkdown(text: string) {
                       letterSpacing: '0.10em',
                       textTransform: 'uppercase',
                       color: HC.mute,
-                      whiteSpace: 'nowrap',
+                      whiteSpace: 'normal',
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'break-word',
+                      verticalAlign: 'top',
                     }}
                   >
                     {renderInlineFormatting(cell)}
@@ -414,7 +427,10 @@ function renderMarkdown(text: string) {
                       style={{
                         padding: '7px 8px',
                         borderBottom: `1px solid ${HC.ruleFaint}`,
-                        whiteSpace: 'nowrap',
+                        whiteSpace: 'normal',
+                        overflowWrap: 'anywhere',
+                        wordBreak: 'break-word',
+                        verticalAlign: 'top',
                       }}
                     >
                       {renderInlineFormatting(cell)}
@@ -589,6 +605,57 @@ function trimParagraphs(text: string, maxWords: number) {
   return out.join('\n\n').trim();
 }
 
+function trimAtClauseBoundary(text: string, maxWords: number) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return String(text || '').trim();
+
+  const candidate = words.slice(0, maxWords).join(' ').trim();
+  const clauseSafe = candidate.replace(/(?:,|;|:)\s+[^,;:]*$/, '').trim();
+  const trimmed = countWords(clauseSafe) >= Math.max(8, maxWords - 18) ? clauseSafe : candidate;
+  return `${trimmed.replace(/[,:;]+$/, '').trim()}.`;
+}
+
+function fitTextToSentenceBoundary(text: string, preferredMaxWords: number, absoluteMaxWords = preferredMaxWords + 28) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (countWords(normalized) <= preferredMaxWords) return normalized;
+
+  const sentences = normalized
+    .match(/[^.!?]+[.!?]?/g)
+    ?.map((sentence) => sentence.trim())
+    .filter(Boolean) ?? [];
+
+  if (!sentences.length) {
+    return trimAtClauseBoundary(normalized, absoluteMaxWords);
+  }
+
+  const chosen: string[] = [];
+  let used = 0;
+
+  for (const sentence of sentences) {
+    const sentenceWords = countWords(sentence);
+    if (!chosen.length) {
+      if (sentenceWords > absoluteMaxWords) {
+        return trimAtClauseBoundary(sentence, absoluteMaxWords);
+      }
+      chosen.push(sentence);
+      used = sentenceWords;
+      if (used >= preferredMaxWords) break;
+      continue;
+    }
+
+    const next = used + sentenceWords;
+    if (next <= preferredMaxWords || (used < Math.min(72, preferredMaxWords) && next <= absoluteMaxWords)) {
+      chosen.push(sentence);
+      used = next;
+      continue;
+    }
+    break;
+  }
+
+  return chosen.join(' ').trim() || trimAtClauseBoundary(normalized, absoluteMaxWords);
+}
+
 function firstStatement(text: string) {
   return String(text || '')
     .replace(/\s+/g, ' ')
@@ -597,7 +664,7 @@ function firstStatement(text: string) {
     .find((sentence) => sentence && !sentence.endsWith('?')) ?? '';
 }
 
-function formatInteractiveParagraphs(explainers: string[], question: string, maxWords: number) {
+function formatInteractiveParagraphs(explainers: string[], question: string, maxWords: number, absoluteMaxWords = maxWords + 28) {
   const paragraphs: string[] = [];
   if (explainers.length > 0) {
     paragraphs.push(explainers.slice(0, 2).join(' ').trim());
@@ -608,17 +675,21 @@ function formatInteractiveParagraphs(explainers: string[], question: string, max
   if (question) {
     paragraphs.push(question.trim());
   }
-  return trimParagraphs(paragraphs.filter(Boolean).join('\n\n'), maxWords);
+  return fitTextToSentenceBoundary(paragraphs.filter(Boolean).join('\n\n'), maxWords, absoluteMaxWords);
 }
 
 function compactTutorDump(text: string, lessonTitle: string, isOpening: boolean, allowQuestion: boolean) {
   const raw = String(text || '');
+  const rawWordCount = countWords(raw);
   const hasStructuredExample = /```|^\s*\|.+\|\s*$/m.test(raw);
   const looksDumped =
-    isOpening ||
     /[①②③④⑤⑥⑦⑧⑨⑩]|WHAT IT IS|WHY IT MATTERS|THE ANALOGY|WORKED EXAMPLE|CHECK-IN QUESTION/i.test(raw) ||
-    raw.split(/\s+/).filter(Boolean).length > 170 ||
-    raw.split(/\n/).length > 8;
+    rawWordCount > 210 ||
+    raw.split(/\n/).length > 10;
+
+  if (!looksDumped && rawWordCount <= 160 && /[.!?]["')\]]?\s*$/.test(raw.trim())) {
+    return raw.trim();
+  }
 
   if (!isOpening && hasStructuredExample && raw.split(/\s+/).filter(Boolean).length < 180) {
     return raw;
@@ -641,12 +712,14 @@ function compactTutorDump(text: string, lessonTitle: string, isOpening: boolean,
   const sentences = cleaned.match(/[^.!?]+[.!?]?/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
   const explainers = sentences.filter((sentence) => !sentence.endsWith('?')).slice(0, isOpening ? 3 : 4);
   const question = sentences.find((sentence) => sentence.endsWith('?'));
+  const preferredWords = isOpening ? 90 : 135;
+  const absoluteWords = isOpening ? 120 : 170;
   if (allowQuestion && question && explainers.length > 0) {
-    return formatInteractiveParagraphs(explainers, question, isOpening ? 90 : 135) || cleaned;
+    return formatInteractiveParagraphs(explainers, question, preferredWords, absoluteWords) || cleaned;
   }
   return (
-    formatInteractiveParagraphs(explainers, '', isOpening ? 90 : 135) ||
-    trimParagraphs(cleaned.replace(/\?+/g, '.'), isOpening ? 90 : 135)
+    formatInteractiveParagraphs(explainers, '', preferredWords, absoluteWords) ||
+    fitTextToSentenceBoundary(cleaned.replace(/\?+/g, '.'), preferredWords, absoluteWords)
   );
 }
 
@@ -674,7 +747,7 @@ function buildClientFallbackTutorMessage({
   if (isOpening || currentPhase === 'HOOK') {
     const first = firstStatement(description) || firstStatement(objective) || `${lessonTitle} is the next concept in this lesson.`;
     const second = firstStatement(facts[0]) || `For now, focus on the main idea behind ${lessonTitle}; we will build from there one step at a time.`;
-    return trimParagraphs(`${first} ${second}`, 65);
+    return fitTextToSentenceBoundary(`${first} ${second}`, 65, 90);
   }
 
   const base = [description.trim(), facts[0]?.trim() || objective.trim()]
@@ -687,7 +760,7 @@ function buildClientFallbackTutorMessage({
   }
 
   if (currentPhase === 'REINFORCE') {
-    return trimParagraphs(base, 55);
+    return fitTextToSentenceBoundary(base, 55, 80);
   }
 
   if (!isOpening && allowQuestion) {
@@ -947,17 +1020,17 @@ function LessonCanvas({
 
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 26 }}>
             {table ? (
-              <div style={{ width: '100%', maxWidth: 760, borderRadius: 22, background: 'rgba(16,13,10,0.42)', border: '1px solid rgba(250,247,240,0.12)', backdropFilter: 'blur(10px)', overflow: 'hidden' }}>
+              <div style={{ width: '100%', maxWidth: 920, borderRadius: 22, background: 'rgba(16,13,10,0.42)', border: '1px solid rgba(250,247,240,0.12)', backdropFilter: 'blur(10px)', overflow: 'hidden' }}>
                 <div style={{ padding: '14px 18px', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.68)', borderBottom: '1px solid rgba(250,247,240,0.10)' }}>
                   live structure preview
                 </div>
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', color: HC.paper }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', color: HC.paper, tableLayout: 'fixed' }}>
                     <thead>
                       <tr>
                         {table.header.map((cell, idx) => (
-                          <th key={idx} style={{ padding: '12px 16px', textAlign: 'left', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)', borderBottom: '1px solid rgba(250,247,240,0.08)' }}>
-                            {cell}
+                          <th key={idx} style={{ padding: '12px 16px', textAlign: 'left', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)', borderBottom: '1px solid rgba(250,247,240,0.08)', whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word', verticalAlign: 'top' }}>
+                            {renderInlineFormatting(cell)}
                           </th>
                         ))}
                       </tr>
@@ -966,8 +1039,8 @@ function LessonCanvas({
                       {table.rows.slice(0, 5).map((row, rowIdx) => (
                         <tr key={rowIdx}>
                           {row.map((cell, cellIdx) => (
-                            <td key={cellIdx} style={{ padding: '14px 16px', borderBottom: '1px solid rgba(250,247,240,0.08)', fontSize: 15, whiteSpace: 'nowrap' }}>
-                              {cell}
+                            <td key={cellIdx} style={{ padding: '14px 16px', borderBottom: '1px solid rgba(250,247,240,0.08)', fontSize: 15, lineHeight: 1.5, whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word', verticalAlign: 'top' }}>
+                              {renderInlineFormatting(cell)}
                             </td>
                           ))}
                         </tr>
