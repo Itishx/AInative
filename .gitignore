@@ -6,3 +6,4 @@ server-data/
 npm-debug.log*
 src/pages/Keys.tsx
 keys.html
+.vercel

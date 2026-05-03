@@ -143,12 +143,16 @@ function normalizeTutorReply(text, { currentPhase, isOpening, allowQuestion }) {
   return trimWords(compacted || raw.replace(/\?+/g, '.'), isOpening ? 90 : 135);
 }
 
-function safeParseTutorPayload(raw) {
-  const cleaned = String(raw || '')
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/```$/g, '')
+// Strip common Gemini JSON malformations before parsing
+function cleanJson(s) {
+  return s
+    .replace(/^```json\s*/i, '').replace(/```$/g, '')  // markdown fences
+    .replace(/,(\s*[}\]])/g, '$1')                     // trailing commas
     .trim();
+}
+
+function safeParseTutorPayload(raw) {
+  const cleaned = cleanJson(String(raw || ''));
 
   if (!cleaned) {
     return { text: '', readyToMoveOn: false, askedQuestion: false };
@@ -284,11 +288,7 @@ Did the student demonstrate genuine understanding — answered a question correc
 }
 
 function repairCurriculumJson(raw) {
-  const cleaned = String(raw || '')
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/```$/g, '')
-    .trim();
+  const cleaned = cleanJson(String(raw || ''));
 
   try { return JSON.parse(cleaned); } catch {}
 
@@ -319,6 +319,49 @@ function repairCurriculumJson(raw) {
     // Stack at this point: root{ modules[ module{ lessons[ — close them all
     try { return JSON.parse(cleaned.slice(0, lastLessonClosePos + 1) + ']}]}'); } catch {}
   }
+
+  return null;
+}
+
+// Recovers as many complete MCQ questions as possible from truncated quiz JSON
+function repairQuizJson(raw) {
+  const cleaned = cleanJson(String(raw || ''));
+
+  // 1. Full parse
+  try { return JSON.parse(cleaned); } catch {}
+
+  // 2. Depth-tracking walk: find last complete question object (closes at depth 2)
+  //    Structure: root{=1 questions[=2 question{=3→closes back to 2}
+  {
+    let depth = 0, inString = false, escape = false, lastQuestionClose = -1;
+    for (let i = 0; i < cleaned.length; i++) {
+      const ch = cleaned[i];
+      if (escape) { escape = false; continue; }
+      if (inString) { if (ch === '\\') escape = true; else if (ch === '"') inString = false; continue; }
+      if (ch === '"') { inString = true; continue; }
+      if (ch === '{' || ch === '[') depth++;
+      if (ch === '}' || ch === ']') {
+        depth--;
+        if (depth === 2 && ch === '}') lastQuestionClose = i;
+      }
+    }
+    if (lastQuestionClose > 0) {
+      try { return JSON.parse(cleaned.slice(0, lastQuestionClose + 1) + ']}'); } catch {}
+    }
+  }
+
+  // 3. Parallel field extraction — key-order independent, handles any arrangement
+  const qs = [...cleaned.matchAll(/"q"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1].replace(/\\"/g, '"'));
+  const opts = [...cleaned.matchAll(/"options"\s*:\s*(\[[\s\S]*?\])/g)].map(m => { try { return JSON.parse(m[1]); } catch { return null; } });
+  const corrs = [...cleaned.matchAll(/"correct"\s*:\s*(\d+)/g)].map(m => parseInt(m[1]));
+  const len = Math.min(qs.length, opts.length, corrs.length);
+  const questions = [];
+  for (let i = 0; i < len; i++) {
+    if (Array.isArray(opts[i]) && opts[i].length === 4) {
+      questions.push({ type: 'mcq', q: qs[i], options: opts[i], correct: corrs[i] });
+    }
+  }
+  if (questions.length > 0) return { questions, practicalExercises: [] };
 
   return null;
 }
@@ -393,8 +436,16 @@ function parseUdemyText(rawText) {
     ? parseInt(hoursMatch[1]) + Math.round(parseInt(hoursMatch[2]) / 60)
     : Math.round(filtered.reduce((s, m) => s + m.lessons.reduce((a, l) => a + l.minutes, 0), 0) / 60);
 
+  // Extract course title from the preamble (text before "Course content")
+  let autoTitle = '';
+  if (courseStart > 0) {
+    const preamble = rawText.slice(0, courseStart);
+    const preambleLines = preamble.split('\n').map((l) => l.trim()).filter((l) => l.length > 4 && l.length < 200);
+    if (preambleLines.length > 0) autoTitle = preambleLines[preambleLines.length - 1];
+  }
+
   return {
-    title: 'Udemy Course',
+    title: autoTitle || 'Udemy Course',
     level: 'intermediate',
     estimatedHours: Math.max(1, estimatedHours),
     modules: filtered,
@@ -1148,7 +1199,7 @@ You are not a textbook. You are a thinking partner.
 You MUST always reply in this exact JSON format — nothing outside it:
 
 {
-  "text": "string — your teaching message (max 130 words, no headings, no bullet dumps)",
+  "text": "string — your teaching message (HARD LIMIT: 100 words maximum. Count them. If you exceed 100 words, cut until you don't. No headings, no bullet dumps)",
   "visual": "string | null — code/table/diagram goes here only",
   "readyToMoveOn": false,
   "askedQuestion": false,
@@ -1162,10 +1213,12 @@ You MUST always reply in this exact JSON format — nothing outside it:
 - "high" → student can explain it back or apply it correctly; may set readyToMoveOn: true
 
 **visual rules:**
-- null = nothing to show on canvas this turn — frontend hides or clears the canvas area
-- A string = render this on the canvas (fenced code, markdown table, diagram)
-- Never put code or tables inside text — always move them to visual
-- If text references something visual (e.g. "look at this query"), visual must not be null
+- null = nothing to show on canvas this turn (canvas shows ambient mode)
+- A string = must be EITHER a markdown table OR a fenced code block — nothing else
+- The canvas renders in this priority: markdown table → fenced code block → ambient fallback
+- If your string is neither a table nor a fenced code block, it will be silently dropped and the student sees nothing useful
+- Never put tables or code inside text — always move them to visual
+- If text references anything visual ("look at this", "here's the structure", "notice that"), visual must not be null
 
 **anchorSentence rules:**
 - Always fill this unless it's the very first lesson of the course
@@ -1238,13 +1291,46 @@ When a student expresses confusion, DO NOT just simplify and repeat. Instead:
 
 ## CANVAS / VISUAL RULES
 
-- Code always goes in visual as a fenced code block — NEVER in text
-- Tables, schemas, key-value structures, data examples → visual as markdown table
-- Diagrams / step-by-step flows → visual as structured markdown or ASCII
-- If text references something visual (e.g. "look at this query"), visual must NOT be null
-- If the concept changes significantly, clear the previous visual
-- If student requested canvas example is "yes", visual is required — no exceptions
-- If a previous visual was wrong or incomplete, immediately emit a corrected version with a note in text
+### The two valid visual formats
+
+**1. MARKDOWN TABLE** — use for:
+- Comparisons, tradeoffs, pros/cons
+- Spreadsheet/Excel data or formula breakdowns
+- Schemas, key-value structures, property lists
+- Cloud service comparisons, feature matrices
+- Sample data rows (e.g. what a database table looks like)
+- Format: must have a header row and --- separator row
+
+**2. FENCED CODE BLOCK** — use for:
+- All code (Python, JS, SQL, bash, etc.)
+- Cloud / system architecture diagrams (ASCII art)
+- System flows, component maps, step sequences
+- Terminal commands, config files, JSON examples
+- Any step-by-step process shown spatially
+- Format: \`\`\`lang\n...\n\`\`\` — always specify the language, or use txt for ASCII diagrams
+
+### Subject-specific defaults
+- Excel / spreadsheets       → markdown TABLE showing real cell data or formula structure
+- AWS / cloud architecture   → ASCII diagram in \`\`\`txt block showing component layout
+- Databases / SQL            → \`\`\`sql for queries; markdown TABLE for schema or sample rows
+- Programming                → fenced code block, always, no exceptions
+- Concepts / frameworks      → markdown TABLE for comparisons or property breakdowns
+- Step-by-step process       → numbered ASCII flow inside \`\`\`txt block
+- History / theory / ideas   → TABLE if there are comparisons or timelines; null only if nothing visual adds value
+
+### Hard rules
+- Code ALWAYS goes in visual — NEVER in text
+- Tables ALWAYS go in visual — NEVER in text
+- If text says "look at this", "here's the structure", "see the flow", "notice that" → visual must not be null
+- If the concept changes significantly, emit a new visual — never leave a stale one from a previous turn
+- If student requested a visual example, visual is required — no exceptions, no nulls
+- If a previous visual was wrong or incomplete, immediately emit a corrected version and note it in text
+- When in doubt between null and an imperfect visual — always try for the table or ASCII diagram. The ambient fallback teaches nothing.
+
+### The ambient fallback means you failed that turn
+- If visual is neither a markdown table nor a fenced code block, the canvas drops it entirely
+- The student sees a generic animation instead of something useful
+- A mediocre ASCII diagram is better than null. A simple 2-column table is better than null.
 
 ---
 
@@ -1256,7 +1342,7 @@ When a student expresses confusion, DO NOT just simplify and repeat. Instead:
 4. **Never use an analogy unless the student asks for one.** Analogies can mislead; precision teaches.
 5. **Stay inside the current lesson scope.** If the student asks about something from a future lesson, say: "That's exactly where we're headed — let's build to it."
 6. **Use only high-confidence facts.** If uncertain, say so briefly and stay with what's solid.
-7. **Keep text under 130 words.** Everything else goes in visual.
+7. **Hard limit: 100 words in text.** Count before you output. If you're over, cut. Long explanations are a failure mode, not a feature — if it doesn't fit in 100 words, it belongs in visual or a future turn.
 8. **Never ask more than one question per turn.**
 9. **After a student's correct answer, always teach one new thing** — don't just confirm and stop.
 10. **The lesson ends when the student can apply the concept**, not just recite it.
@@ -1307,7 +1393,7 @@ ${materialsSection}${planSection}${alreadyCoveredSection}`;
 
     let rawText;
     try {
-      rawText = await callGemini(systemPrompt, apiMessages, 1600, true);
+      rawText = await callGemini(systemPrompt, apiMessages, 2600, true);
     } catch (err) {
       const msg = String(err?.message || '');
       if (msg.includes('at least one message') || msg.includes('contents') || msg.includes('INVALID_ARGUMENT')) {
@@ -1356,14 +1442,30 @@ ${materialsSection}${planSection}${alreadyCoveredSection}`;
     let visual = typeof parsed.visual === 'string' && parsed.visual.trim() ? parsed.visual.trim() : null;
     if (visualExampleTurn && !visual) {
       const lowerLesson = String(lessonTitle || '').toLowerCase();
-      if (/\bwhere\b|\bfilter(?:ing)?\b/.test(lowerLesson)) {
+      const lowerCourse = String(courseTitle || '').toLowerCase();
+      const lowerCtx = lowerLesson + ' ' + lowerCourse;
+      // SQL / databases
+      if (/\bwhere\b|\bfilter(?:ing)?\b/.test(lowerCtx)) {
         visual = `\`\`\`sql\nSELECT customer_name, state\nFROM customers\nWHERE state = 'Texas';\n\`\`\``;
-      } else if (/\bselect\b|\bquery\b|\bstatement\b/.test(lowerLesson)) {
+      } else if (/\bselect\b|\bquery\b|\bstatement\b/.test(lowerCtx)) {
         visual = `\`\`\`sql\nSELECT customer_id, total_amount\nFROM orders\nLIMIT 3;\n\`\`\``;
-      } else if (/\b(table|database|row|column|record|primary key|sql)\b/.test(lowerLesson)) {
+      } else if (/\b(table|database|row|column|record|primary key|sql|join)\b/.test(lowerCtx)) {
         visual = `| customer_id | customer_name | state |\n|---|---|---|\n| 42 | Sarah Chen | Texas |\n| 87 | Marcus Webb | New York |\n| 91 | Aisha Khan | Texas |`;
+      // Excel / spreadsheets
+      } else if (/\b(excel|spreadsheet|formula|cell|vlookup|pivot)\b/.test(lowerCtx)) {
+        visual = `| A | B | C |\n|---|---|---|\n| Name | Sales | =SUM(B2:B4) |\n| Alice | 1200 | |\n| Bob | 980 | |\n| Carol | 1540 | |`;
+      // AWS / cloud
+      } else if (/\b(aws|cloud|s3|ec2|lambda|vpc|iam|rds|docker|kubernetes|k8s)\b/.test(lowerCtx)) {
+        visual = `\`\`\`txt\n[User] → [Load Balancer]\n            ↓\n     [EC2 Instance]\n            ↓\n       [RDS Database]\n\`\`\``;
+      // Python / programming
+      } else if (/\b(python|function|loop|class|variable|list|dict|javascript|typescript|code)\b/.test(lowerCtx)) {
+        visual = `\`\`\`python\n# Example\ndef greet(name):\n    return f"Hello, {name}!"\n\nprint(greet("World"))\n\`\`\``;
+      // Comparisons / concepts
+      } else if (/\b(vs|versus|difference|compare|tradeoff|pros|cons|when to use)\b/.test(lowerCtx)) {
+        visual = `| Approach | When to use | Tradeoff |\n|---|---|---|\n| Option A | Situation 1 | Faster, less flexible |\n| Option B | Situation 2 | Slower, more flexible |`;
+      // Generic fallback — step flow
       } else {
-        visual = `\`\`\`txt\n${lessonTitle}\nStep 1 -> concrete example\nStep 2 -> what changes\nStep 3 -> why it matters\n\`\`\``;
+        visual = `\`\`\`txt\n${lessonTitle}\nStep 1 → concrete example\nStep 2 → what changes\nStep 3 → why it matters\n\`\`\``;
       }
     }
 
@@ -1373,10 +1475,12 @@ ${materialsSection}${planSection}${alreadyCoveredSection}`;
     if (!visual) {
       finalText = finalText
         .replace(/[Tt]ake a look at the canvas[^.!?]*[.!?]?\s*/g, '')
-        .replace(/[Ll]ook at the (?:table|canvas|diagram|visual)[^.!?]*[.!?]?\s*/g, '')
+        .replace(/[Ll]ook at the (?:table|canvas|diagram|visual|code)[^.!?]*[.!?]?\s*/g, '')
         .replace(/[Tt]he canvas (?:now )?shows[^.!?]*[.!?]?\s*/g, '')
         .replace(/[Aa]s you can see (?:in|on) the canvas[^.!?]*[.!?]?\s*/g, '')
-        .replace(/[Ss]ee the (?:table|canvas|diagram|visual)[^.!?]*[.!?]?\s*/g, '')
+        .replace(/[Ss]ee the (?:table|canvas|diagram|visual|example)[^.!?]*[.!?]?\s*/g, '')
+        .replace(/[Aa]s shown (?:above|on the canvas|in the diagram)[^.!?]*[.!?]?\s*/g, '')
+        .replace(/[Nn]otice (?:the|that|how) (?:table|canvas|diagram|visual|code)[^.!?]*[.!?]?\s*/g, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
     }
@@ -1431,7 +1535,7 @@ Format the notes in markdown:
 - End with ## Remember (one-sentence summary)
 Be concise. Notes should fit on one screen.` }],
       }],
-      1024,
+      2000,
     );
     res.json({ notes: text });
   } catch (err) {
@@ -1491,9 +1595,10 @@ Return ONLY valid JSON (no markdown fences, no explanation):
   "practicalExercises": []
 }` }],
       }],
-      1800,
+      3200,
     );
-    const parsed = JSON.parse(text.trim().replace(/^```json\n?|```$/g, ''));
+    const parsed = repairQuizJson(text);
+    if (!parsed) throw new Error('Could not parse quiz JSON');
     parsed.questions = (parsed.questions || [])
       .filter((q) => Array.isArray(q.options) && q.options.length === 4)
       .map((q) => ({
@@ -1764,7 +1869,15 @@ app.post('/api/curriculum-from-materials', async (req, res) => {
     // Try direct Udemy text parsing first — preserves exact sections & lectures
     const direct = parseUdemyText(materialsContext || '');
     if (direct && direct.modules.length >= 1) {
-      if (topic && !topic.startsWith('http')) direct.title = topic;
+      if (topic && !topic.startsWith('http')) {
+        direct.title = topic;
+      } else if (topic && topic.startsWith('http') && (!direct.title || direct.title === 'Udemy Course')) {
+        // Fall back to URL slug e.g. /course/the-complete-python-bootcamp → "The Complete Python Bootcamp"
+        const slugMatch = topic.match(/\/course\/([^/?#]+)/);
+        if (slugMatch) {
+          direct.title = slugMatch[1].split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        }
+      }
       const curriculum = normalizeUdemyCurriculum(direct);
       return res.json({ ...curriculum, materialsContext: (materialsContext || '').slice(0, 30000) });
     }
