@@ -13,6 +13,94 @@ const NAV = [
   { to: '/leaderboard', label: 'Leaderboard' },
 ];
 
+export function AppNav() {
+  const navigate = useNavigate();
+  const loc = useLocation();
+  const { dark, toggle, t } = useTheme();
+
+  const onDashboard = loc.pathname === '/dashboard';
+
+  return (
+    <>
+      <button
+        onClick={() => navigate('/')}
+        style={{
+          position: 'fixed',
+          top: 22,
+          left: 28,
+          zIndex: 50,
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: 0,
+        }}
+      >
+        <b style={{ fontFamily: t.serif, fontSize: 26, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
+      </button>
+
+      <div
+        style={{
+          position: 'fixed',
+          top: 20,
+          right: 24,
+          zIndex: 50,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px',
+          borderRadius: 999,
+          border: `1px solid ${dark ? 'rgba(241,236,223,0.10)' : 'rgba(26,21,16,0.12)'}`,
+          background: dark ? 'rgba(28,26,22,0.80)' : 'rgba(250,247,240,0.84)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          boxShadow: dark ? '0 8px 32px rgba(0,0,0,0.28)' : '0 8px 32px rgba(26,21,16,0.09)',
+        }}
+      >
+        <button
+          onClick={toggle}
+          title={dark ? 'Light mode' : 'Dark mode'}
+          style={{
+            width: 38,
+            height: 38,
+            border: `1px solid ${dark ? 'rgba(241,236,223,0.10)' : 'rgba(26,21,16,0.12)'}`,
+            borderRadius: 999,
+            background: 'transparent',
+            color: t.ink,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: t.mono,
+            fontSize: 13,
+          }}
+        >
+          {dark ? '☀' : '☾'}
+        </button>
+
+        <button
+          onClick={() => navigate(onDashboard ? '/profile' : '/dashboard')}
+          style={{
+            border: `1px solid ${dark ? 'rgba(241,236,223,0.10)' : 'rgba(26,21,16,0.12)'}`,
+            borderRadius: 999,
+            background: 'transparent',
+            color: t.ink,
+            cursor: 'pointer',
+            padding: '0 14px',
+            height: 38,
+            fontFamily: t.mono,
+            fontSize: 10,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {onDashboard ? 'Profile' : 'Dashboard'}
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function Chrome({ label, right }: ChromeProps) {
   const loc = useLocation();
   const navigate = useNavigate();

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HC } from '../theme';
+import { AppNav } from '../components/Chrome';
 import { useStore } from '../store';
 import { useTheme } from '../lib/theme';
 import type { Course, QuizAttempt } from '../types';
-import AppNav from '../components/AppNav';
 
 type Filter = 'all' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
 type DashboardMode = 'courses' | 'quizzes';

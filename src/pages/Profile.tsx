@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AppNav } from '../components/Chrome';
 import { useStore } from '../store';
 import { useTheme } from '../lib/theme';
 import { HC } from '../theme';
 import type { Course } from '../types';
-import AppNav from '../components/AppNav';
 
 const P = {
   bg: 'var(--profile-bg)',
