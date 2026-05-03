@@ -408,7 +408,8 @@ function LineField({ label, children }: { label: string; children: React.ReactNo
 }
 
 // ── Billing Tab ────────────────────────────────────────────────────────────────
-const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) || 'http://localhost:3001';
+const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL)
+  || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : '');
 
 const FEATURE_ROWS = [
   { label: 'Messages',         free: '25 / day',   premium: 'Unlimited' },
