@@ -427,10 +427,16 @@ function BillingTab() {
   const isPremium = state.profile?.plan === 'premium';
 
   async function handleUpgrade() {
-    if (!user?.id) return;
+    console.log('[upgrade] user:', user?.id, 'API_BASE:', API_BASE);
+    if (!user?.id) {
+      alert('You must be logged in to upgrade. Please sign in first.');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/create-checkout`, {
+      const url = `${API_BASE}/api/create-checkout`;
+      console.log('[upgrade] POST', url);
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -439,11 +445,14 @@ function BillingTab() {
           successUrl: `${window.location.origin}/settings?upgraded=1`,
         }),
       });
-      const { checkoutUrl, error } = await res.json();
-      if (error) throw new Error(error);
-      window.location.href = checkoutUrl;
-    } catch (err) {
-      alert('Failed to start checkout. Please try again.');
+      console.log('[upgrade] response status:', res.status);
+      const data = await res.json();
+      console.log('[upgrade] response:', data);
+      if (data.error) throw new Error(data.error);
+      window.location.href = data.checkoutUrl;
+    } catch (err: any) {
+      console.error('[upgrade] error:', err);
+      alert(`Checkout failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
