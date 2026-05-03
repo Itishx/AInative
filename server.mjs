@@ -2142,11 +2142,19 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 
 const polar = new Polar({ accessToken: POLAR_ACCESS_TOKEN });
 
-async function supabaseServiceUpdate(userId, patch) {
+async function supabaseServiceUpdate(userId, plan) {
   if (!SUPABASE_SERVICE_KEY) {
     console.warn('[polar] SUPABASE_SERVICE_KEY not set — cannot update plan in DB');
     return;
   }
+  // Fetch current profile so we don't overwrite other fields
+  const getRes = await fetch(`${SUPABASE_URL_ENV}/rest/v1/user_courses?user_id=eq.${userId}&select=profile`, {
+    headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` },
+  });
+  const rows = await getRes.json();
+  const currentProfile = rows?.[0]?.profile || {};
+  const mergedProfile = { ...currentProfile, plan };
+
   const res = await fetch(`${SUPABASE_URL_ENV}/rest/v1/user_courses?user_id=eq.${userId}`, {
     method: 'PATCH',
     headers: {
@@ -2155,7 +2163,7 @@ async function supabaseServiceUpdate(userId, patch) {
       'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
       'Prefer': 'return=minimal',
     },
-    body: JSON.stringify(patch),
+    body: JSON.stringify({ profile: mergedProfile }),
   });
   if (!res.ok) {
     const txt = await res.text();
@@ -2186,13 +2194,14 @@ app.post('/api/polar-webhook', async (req, res) => {
   const signature = req.headers['webhook-signature'] || req.headers['x-polar-signature'] || '';
   const rawBody = req.rawBody || '';
 
-  // Verify signature
+  // Verify signature — Polar sends "v1=hexsig" or "t=ts,v1=hexsig"
   try {
-    const [, sig] = signature.split(',').map(s => s.split('='));
+    const sigMatch = signature.match(/v1=([0-9a-f]+)/i);
+    const hexSig = sigMatch?.[1] || '';
     const expected = createHmac('sha256', POLAR_WEBHOOK_SECRET).update(rawBody).digest('hex');
     const expectedBuf = Buffer.from(expected, 'hex');
-    const sigBuf = Buffer.from(sig?.[1] || sig || '', 'hex');
-    if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+    const sigBuf = Buffer.from(hexSig, 'hex');
+    if (!hexSig || sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
       return res.status(401).json({ error: 'Invalid signature' });
     }
   } catch {
@@ -2212,11 +2221,10 @@ app.post('/api/polar-webhook', async (req, res) => {
   if (type === 'subscription.created' || type === 'subscription.updated') {
     const isActive = data?.status === 'active' || data?.subscription?.status === 'active';
     const plan = isActive ? 'premium' : 'free';
-    // Update profile.plan inside the user_courses JSONB profile column
-    await supabaseServiceUpdate(userId, { profile: { plan } });
+    await supabaseServiceUpdate(userId, plan);
     console.log(`[polar] set userId=${userId} plan=${plan}`);
   } else if (type === 'subscription.canceled' || type === 'subscription.revoked') {
-    await supabaseServiceUpdate(userId, { profile: { plan: 'free' } });
+    await supabaseServiceUpdate(userId, 'free');
     console.log(`[polar] revoked userId=${userId}`);
   }
 
