@@ -44,6 +44,7 @@ export interface Course {
   progress: number;
   streak: number;
   lastStudiedDate?: string;
+  studyLog?: string[];          // deduplicated list of YYYY-MM-DD dates the user opened this course
   status: 'active' | 'active-urgent' | 'tombstone' | 'expired' | 'completed';
   deadlineHistory?: DeadlineAttempt[];
   paused: boolean;
@@ -90,6 +91,7 @@ export interface UserProfile {
   headline?: string;
   bio?: string;
   avatarUrl?: string;
+  plan?: 'free' | 'premium';
 }
 
 export interface QuizAttempt {

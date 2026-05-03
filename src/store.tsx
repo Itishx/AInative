@@ -159,6 +159,7 @@ type Action =
   | { type: 'RECORD_QUIZ_ATTEMPT'; attempt: QuizAttempt }
   | { type: 'CHECK_DEADLINES' }
   | { type: 'RECOMMIT'; id: string; newDeadline: string }
+  | { type: 'MARK_STUDIED'; id: string; dateKey: string }
   | { type: 'ADD_LEADERBOARD'; entry: LeaderboardEntry }
   | { type: 'ENROLL_COURSE'; course: EnrolledCourse }
   | { type: '_LOAD_FROM_DB'; courses: Course[]; username?: string; profile?: UserProfile; quizAttempts?: QuizAttempt[] };
@@ -326,6 +327,16 @@ function reducer(state: AppState, action: Action): AppState {
         return { ...c, status: 'active' as const, deadline: action.newDeadline };
       });
       return checkDeadlines({ ...state, courses });
+    }
+
+    case 'MARK_STUDIED': {
+      const courses = state.courses.map((c) => {
+        if (c.id !== action.id) return c;
+        const log = c.studyLog ?? [];
+        if (log.includes(action.dateKey)) return c;
+        return { ...c, studyLog: [...log, action.dateKey] };
+      });
+      return { ...state, courses };
     }
 
     case 'CHECK_DEADLINES':

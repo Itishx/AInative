@@ -29,59 +29,61 @@ function getActivityKey(date: Date) {
 }
 
 function buildConsistency(courses: Course[]) {
-  const counts = new Map<string, number>();
+  const activeDays = new Set<string>();
+
+  courses.forEach((course) => {
+    (course.studyLog ?? []).forEach((k) => activeDays.add(k));
+    Object.values(course.lessonChats ?? {}).flat().forEach((msg) => {
+      const d = new Date(msg.ts);
+      if (!Number.isNaN(d.getTime())) activeDays.add(getActivityKey(d));
+    });
+  });
+
   const now = new Date();
   const start = new Date(now);
   start.setDate(now.getDate() - 83);
-
-  courses.forEach((course) => {
-    [course.createdAt, course.lastStudiedDate].filter(Boolean).forEach((raw) => {
-      const date = new Date(raw as string);
-      if (!Number.isNaN(date.getTime())) {
-        const key = getActivityKey(date);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-    });
-    Object.values(course.lessonChats ?? {}).flat().forEach((msg) => {
-      const date = new Date(msg.ts);
-      if (!Number.isNaN(date.getTime())) {
-        const key = getActivityKey(date);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-    });
-  });
+  const todayKey = getActivityKey(now);
+  const firstActive = [...activeDays].sort()[0] ?? '';
 
   return Array.from({ length: 84 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
     const key = getActivityKey(date);
-    return { key, count: counts.get(key) ?? 0 };
+    const countable = !!firstActive && key >= firstActive && key <= todayKey;
+    return { key, active: activeDays.has(key), isPast: countable };
   });
 }
 
 function ConsistencyGrid({ courses }: { courses: Course[] }) {
   const days = useMemo(() => buildConsistency(courses), [courses]);
-  const total = days.reduce((sum, d) => sum + d.count, 0);
+  const streak = useMemo(() => {
+    let s = 0;
+    for (let i = days.length - 1; i >= 0; i--) {
+      if (!days[i].isPast) continue;
+      if (days[i].active) s++;
+      else break;
+    }
+    return s;
+  }, [days]);
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-        <span style={{ fontFamily: P.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: P.mute }}>Activity</span>
-        <span style={{ fontFamily: P.mono, fontSize: 9, letterSpacing: '0.10em', color: P.mute }}>{total} signals · 12 wks</span>
+        <span style={{ fontFamily: P.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: P.mute }}>Consistency</span>
+        <span style={{ fontFamily: P.mono, fontSize: 9, letterSpacing: '0.10em', color: P.mute }}>{streak > 0 ? `${streak}d streak` : 'no streak'} · 12 wks</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 6 }}>
         {days.map((day) => {
-          const level = Math.min(4, day.count);
-          const color = level === 0
+          const color = !day.isPast
             ? P.softer
-            : level === 1 ? 'rgba(114,192,137,0.32)'
-            : level === 2 ? 'rgba(114,192,137,0.52)'
-            : level === 3 ? 'rgba(114,192,137,0.74)'
-            : P.green;
+            : day.active
+              ? P.green
+              : 'rgba(255,81,72,0.35)';
           return (
             <div
               key={day.key}
-              title={`${day.key}: ${day.count}`}
-              style={{ aspectRatio: '1 / 1', borderRadius: 4, background: color, boxShadow: level > 0 ? `0 0 12px ${color}` : 'none' }}
+              title={day.key}
+              style={{ aspectRatio: '1 / 1', borderRadius: 4, background: color }}
             />
           );
         })}

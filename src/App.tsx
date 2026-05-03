@@ -17,6 +17,7 @@ import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import Slides from './pages/Slides';
 import Import from './pages/Import';
+import Notes from './pages/Notes';
 import { HC } from './theme';
 import { ThemeProvider } from './lib/theme';
 
@@ -61,6 +62,7 @@ function AppRoutes() {
           <Route path="/anything" element={<RequireAuth><Anything /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+          <Route path="/notes/:courseId" element={<RequireAuth><Notes /></RequireAuth>} />
           <Route path="/import" element={<Import />} />
           <Route path="/udemy-test" element={<Navigate to="/import" replace />} />
 

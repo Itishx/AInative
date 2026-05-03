@@ -1,5 +1,5 @@
 import { HC } from '../theme';
-import { Chrome } from '../components/Chrome';
+import { AppNav } from '../components/Chrome';
 import { useStore } from '../store';
 
 function formatMargin(ms: number): string {
@@ -12,13 +12,13 @@ function formatMargin(ms: number): string {
 export default function Leaderboard() {
   const { state } = useStore();
   const lb = [...state.leaderboard].sort((a, b) => b.marginMs - a.marginMs).map((e, i) => ({ ...e, rank: i + 1 }));
-  const tombCount = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length + 1412;
+  const tombCount = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length;
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: HC.bg }}>
-      <Chrome label="leaderboard · public" right="only finishers show here" />
+    <div style={{ minHeight: '100vh', background: HC.bg }}>
+      <AppNav />
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '40px 60px' }}>
+      <div style={{ padding: '88px 60px 60px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
           <h2 style={{ fontFamily: HC.serif, fontSize: 'clamp(42px, 6vw, 72px)', margin: 0, letterSpacing: '-0.03em', fontWeight: 400 }}>
             The <i>finishers.</i>

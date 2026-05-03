@@ -1303,6 +1303,23 @@ function LearnContent({ course }: { course: Course }) {
   const lessonPlanRef = useRef('');
   const lessonKey = `${course.currentModule}:${course.currentLesson}`;
 
+  const isPremium = state.profile?.plan === 'premium';
+
+  // Daily message count across all courses
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayMsgCount = isPremium ? 0 : Object.values(
+    state.courses.reduce((acc: Record<string, number>, c) => {
+      Object.values(c.lessonChats ?? {}).flat().forEach((m) => {
+        if (m.who === 'user' && new Date(m.ts).toISOString().slice(0, 10) === todayKey) {
+          acc[todayKey] = (acc[todayKey] ?? 0) + 1;
+        }
+      });
+      return acc;
+    }, {})
+  ).reduce((a, b) => a + b, 0);
+  const FREE_MSG_LIMIT = 25;
+  const msgLimitReached = !isPremium && todayMsgCount >= FREE_MSG_LIMIT;
+
   const currentChat = (course.lessonChats?.[lessonKey] ?? []).filter((msg) => !isApiErrorMessage(msg.text));
 
   function stopVoicePlayback() {
@@ -1506,6 +1523,12 @@ function LearnContent({ course }: { course: Course }) {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [currentChat.length]);
+
+  useEffect(() => {
+    if (!course) return;
+    const dateKey = new Date().toISOString().slice(0, 10);
+    dispatch({ type: 'MARK_STUDIED', id: course.id, dateKey });
+  }, [course?.id]);
 
   useEffect(() => {
     const onResize = () => setNarrow(window.innerWidth < 1100);
@@ -1787,15 +1810,17 @@ function LearnContent({ course }: { course: Course }) {
 
   async function handleLessonDone() {
     if (!mod || !lesson) return;
-    setGeneratingNotes(true);
-    try {
-      await generateNotesForLesson();
-    } catch {
-      // Notes failed — still proceed to quiz
-    } finally {
-      setGeneratingNotes(false);
-      navigate(`/quiz/${course.id}/${course.currentModule}/${course.currentLesson}`);
+    if (isPremium) {
+      setGeneratingNotes(true);
+      try {
+        await generateNotesForLesson();
+      } catch {
+        // Notes failed — still proceed to quiz
+      } finally {
+        setGeneratingNotes(false);
+      }
     }
+    navigate(`/quiz/${course.id}/${course.currentModule}/${course.currentLesson}`);
   }
 
   function handleSelectLesson(moduleIndex: number, lessonIndex: number) {
@@ -1815,6 +1840,9 @@ function LearnContent({ course }: { course: Course }) {
         courseTitle: course.subject,
         moduleTitle: mod.title,
         lessonTitle: isLastLessonOfModule ? `Full module: ${mod.title}` : lesson.title,
+        lessonObjective: lesson.objective,
+        lessonDescription: lesson.description,
+        lessonFacts: lesson.facts,
         chatHistory: currentChat,
       }),
     });
@@ -1966,6 +1994,12 @@ function LearnContent({ course }: { course: Course }) {
               </div>
             )}
 
+            {msgLimitReached && (
+              <div style={{ marginBottom: 8, padding: '10px 14px', background: 'rgba(210,34,26,0.08)', border: '1px solid rgba(210,34,26,0.25)', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.red }}>25 messages used today — upgrade for unlimited</span>
+                <a href="/pricing" style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.ink, borderBottom: `1px solid ${theme.ink}`, textDecoration: 'none', whiteSpace: 'nowrap' }}>Get Premium →</a>
+              </div>
+            )}
             <div
               style={{
                 borderRadius: 16,
@@ -2008,15 +2042,15 @@ function LearnContent({ course }: { course: Course }) {
                   </span>
                 )}
                 <button
-                  onClick={unlockVoiceMode}
-                  title={voiceMode ? 'Voice on — click to toggle' : 'Voice off'}
+                  onClick={() => { if (!isPremium) { alert('Voice mode is a Premium feature. Upgrade to unlock.'); return; } unlockVoiceMode(); }}
+                  title={!isPremium ? 'Premium — upgrade to unlock voice' : voiceMode ? 'Voice on — click to toggle' : 'Voice off'}
                   style={{
                     width: 34, height: 34, borderRadius: '50%',
-                    border: `1px solid ${voiceMode ? 'rgba(122,208,139,0.35)' : theme.ruleFaint}`,
-                    background: voiceMode ? (dark ? 'rgba(122,208,139,0.12)' : 'rgba(45,106,63,0.08)') : 'transparent',
-                    color: voiceMode ? theme.green : theme.mute,
+                    border: `1px solid ${!isPremium ? theme.ruleFaint : voiceMode ? 'rgba(122,208,139,0.35)' : theme.ruleFaint}`,
+                    background: voiceMode && isPremium ? (dark ? 'rgba(122,208,139,0.12)' : 'rgba(45,106,63,0.08)') : 'transparent',
+                    color: !isPremium ? theme.mute : voiceMode ? theme.green : theme.mute,
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 14, flexShrink: 0,
+                    fontSize: 14, flexShrink: 0, opacity: !isPremium ? 0.45 : 1,
                   }}
                 >
                   {listening ? (
@@ -2032,14 +2066,14 @@ function LearnContent({ course }: { course: Course }) {
                 </button>
                 <button
                   onClick={handleSend}
-                  disabled={aiLoading || generatingNotes}
+                  disabled={aiLoading || generatingNotes || msgLimitReached}
                   style={{
                     ...btn.primary,
                     padding: '8px 16px',
                     fontSize: 10,
                     background: theme.ink,
                     color: theme.bg,
-                    opacity: aiLoading || generatingNotes ? 0.45 : 1,
+                    opacity: aiLoading || generatingNotes || msgLimitReached ? 0.45 : 1,
                   }}
                 >
                   {input.trim() ? 'Send ↵' : 'Continue ↵'}
@@ -2051,7 +2085,7 @@ function LearnContent({ course }: { course: Course }) {
 
         <section style={{ background: theme.bg, color: theme.ink, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '18px 22px 0', flexShrink: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
                 <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.red }}>
                   Chapter {String(course.currentModule + 1).padStart(2, '0')} · Lesson {String(course.currentLesson + 1).padStart(2, '0')}
@@ -2075,17 +2109,6 @@ function LearnContent({ course }: { course: Course }) {
                   }}
                 >
                   Mark completed →
-                </button>
-                <button
-                  onClick={handleGenerateNotesOnly}
-                  disabled={!canGenerateNotes || generatingNotes || aiLoading}
-                  style={{
-                    ...headerButtonBase,
-                    opacity: !canGenerateNotes || generatingNotes || aiLoading ? 0.45 : 1,
-                    cursor: !canGenerateNotes || generatingNotes || aiLoading ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {lessonHasNotes ? 'Refresh notes' : 'Generate notes'}
                 </button>
                 <div style={{ padding: '10px 12px', borderRadius: 999, background: panelFillStrong, border: `1px solid ${theme.ruleFaint}`, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.ink }}>
                   {Math.round(course.progress * 100)}% done

@@ -1644,26 +1644,61 @@ ${materialsSection}${planSection}${alreadyCoveredSection}`;
 
 // ── Generate lesson notes ────────────────────────────────────────────────────
 app.post('/api/notes', async (req, res) => {
-  const { courseTitle, moduleTitle, lessonTitle, chatHistory } = req.body;
+  const { courseTitle, moduleTitle, lessonTitle, lessonObjective, lessonDescription, lessonFacts, chatHistory } = req.body;
+
   try {
-    const chatSummary = (chatHistory || [])
-      .map((m) => `${m.who === 'user' ? 'Student' : 'Tutor'}: ${m.text}`)
+    const tutorLines = (chatHistory || [])
+      .filter((m) => m.who === 'tutor')
+      .map((m) => m.text)
+      .join('\n\n');
+
+    const studentLines = (chatHistory || [])
+      .filter((m) => m.who === 'user')
+      .map((m) => m.text)
       .join('\n');
 
+    const metaBlock = [
+      lessonObjective ? `Lesson objective: ${lessonObjective}` : '',
+      lessonDescription ? `Concept description: ${lessonDescription}` : '',
+      lessonFacts?.length ? `Verified facts:\n${lessonFacts.map(f => `- ${f}`).join('\n')}` : '',
+    ].filter(Boolean).join('\n');
+
     const text = await callGemini(
-      'You are an expert at creating clear, concise study notes.',
+      `You are a world-class study note writer. You write notes that are thorough, memorable, and genuinely useful for revision — not summaries, but reference material a student will return to days later and immediately understand.`,
       [{
         role: 'user',
-        content: [{ type: 'text', text: `Create structured study notes for the lesson "${lessonTitle}" (Module: "${moduleTitle}", Course: "${courseTitle}").
-${chatSummary ? `\nBased on this tutoring session:\n${chatSummary}\n` : ''}
-Format the notes in markdown:
-- Start with ## Key Concepts (3–5 bullet points)
-- Then ## How It Works (brief explanation, may include a short code example if relevant)
-- Then ## Common Mistakes (2–3 pitfalls)
-- End with ## Remember (one-sentence summary)
-Be concise. Notes should fit on one screen.` }],
+        content: [{ type: 'text', text: `Write comprehensive study notes for the lesson below. These notes will be the student's permanent reference — make them detailed enough to be useful without the original conversation.
+
+LESSON: "${lessonTitle}"
+MODULE: "${moduleTitle}"
+COURSE: "${courseTitle}"
+${metaBlock ? `\n${metaBlock}\n` : ''}
+${tutorLines ? `WHAT WAS TAUGHT (tutor explanation):\n${tutorLines}\n` : ''}
+${studentLines ? `WHAT THE STUDENT ASKED:\n${studentLines}\n` : ''}
+
+Write the notes in this exact markdown structure:
+
+## Definition
+One or two precise sentences defining the core concept. Use plain language. Avoid vague words like "important" or "useful".
+
+## Core concepts
+6–10 bullet points. Each bullet should be a standalone, memorable fact or rule. Include specific details, numbers, and edge cases where relevant. Write as if the student needs to remember each point independently.
+
+## How it works
+2–4 paragraphs explaining the mechanism, process, or logic behind the concept. Go deeper than the bullets — explain the *why*, not just the *what*. Include cause and effect. If it's procedural, explain the steps and what happens at each step.
+
+## Example
+A concrete, realistic worked example. For code: include a real snippet with a brief explanation of each key line. For a process: walk through a real scenario step by step. For a concept: show it applied to something tangible.
+
+## Common mistakes
+4–6 bullet points describing specific mistakes students make, with a brief explanation of *why* it's wrong and what to do instead. Be precise — name the exact mistake, not just "forgetting to X".
+
+## Mental model
+One or two sentences giving a memorable analogy or mental shortcut for this concept. Should be something the student can recall in 3 seconds to orient themselves.
+
+Be thorough. These notes should be the single best reference the student has for this lesson.` }],
       }],
-      2000,
+      4000,
     );
     res.json({ notes: text });
   } catch (err) {

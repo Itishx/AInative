@@ -70,14 +70,16 @@ function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark
   const { t } = useTheme();
   const items: [string, string][] = [
     ['how', 'How it works'], ['features', 'Features'],
-    ['leaderboard', 'Leaderboard'], ['instructors', 'Teach here'],
+    ['leaderboard', 'Leaderboard'], /* ['instructors', 'Teach here'], */
     ['pricing', 'Pricing'], ['browse', 'Browse'], ['faq', 'FAQ'],
   ];
   return (
     <nav style={{
       position: 'sticky', top: 0, zIndex: 50,
       padding: '18px 20px 10px',
-      background: 'transparent',
+      background: t.bg,
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
     }}>
       <div style={{
         maxWidth: 1280,
@@ -227,8 +229,8 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
     phrases: HERO_PLACEHOLDER_PHRASES,
     enabled: !focused && !input.trim(),
   });
-  const finishers = state.courses.filter((c) => c.status === 'completed').length + 247;
-  const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length + 1412;
+  const finishers = state.courses.filter((c) => c.status === 'completed').length;
+  const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length;
 
   async function handleStart(e: React.FormEvent) {
     e.preventDefault();
@@ -849,6 +851,32 @@ function LeaderboardViz() {
   );
 }
 
+function WeeklyRankViz() {
+  const { t } = useTheme();
+  const rows = [
+    { rank: 1, user: 'you', courses: 3, streak: 12, self: true },
+    { rank: 2, user: 'priya.r', courses: 3, streak: 9, self: false },
+    { rank: 3, user: 'lex_m', courses: 2, streak: 7, self: false },
+    { rank: 4, user: 'j.ohno', courses: 2, streak: 5, self: false },
+  ];
+  return (
+    <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>WEEKLY</div>
+        <div style={{ fontFamily: MONO, fontSize: 8, color: t.green, letterSpacing: '0.1em' }}>LIVE</div>
+      </div>
+      {rows.map((r, i) => (
+        <div key={r.rank} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: i < rows.length - 1 ? `1px solid ${t.ruleFaint}` : 'none', background: r.self ? `${t.red}10` : 'transparent', marginLeft: r.self ? -8 : 0, paddingLeft: r.self ? 8 : 0, paddingRight: r.self ? 8 : 0 }}>
+          <span style={{ fontFamily: SERIF, fontSize: 15, color: i === 0 ? t.red : t.mute, width: 20, flexShrink: 0 }}>{r.rank}</span>
+          <span style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: r.self ? t.red : t.ink }}>{r.user}</span>
+          <span style={{ fontFamily: MONO, fontSize: 9, color: t.mute }}>{r.courses} done</span>
+          <span style={{ fontFamily: MONO, fontSize: 9, color: t.amber, letterSpacing: '0.06em' }}>{r.streak}d</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function NotesViz() {
   const { t } = useTheme();
   return (
@@ -883,24 +911,7 @@ function QuizViz() {
   );
 }
 
-function NotionViz() {
-  const { t } = useTheme();
-  return (
-    <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
-      <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>NOTION SYNC</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
-        <div style={{ width: 38, height: 38, border: `1.5px solid ${t.ink}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SERIF, fontSize: 22, color: t.ink }}>N</div>
-        <div>
-          <div style={{ fontFamily: SERIF, fontSize: 18, color: t.ink, letterSpacing: '-0.01em' }}>SQL notes</div>
-          <div style={{ fontFamily: MONO, fontSize: 10, color: t.green, letterSpacing: '0.1em', marginTop: 3 }}>SYNCED JUST NOW</div>
-        </div>
-      </div>
-      <div style={{ marginTop: 14, height: 7, background: t.ruleFaint }}>
-        <div style={{ width: '78%', height: '100%', background: t.green }} />
-      </div>
-    </div>
-  );
-}
+
 
 function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
   const { t } = useTheme();
@@ -911,7 +922,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
     { n: '04', title: 'Finishers.', body: 'Beat the clock and show up on the wall.', art: <LeaderboardViz /> },
     { n: '05', title: 'Notes.', body: 'Each lesson leaves clean notes behind.', art: <NotesViz /> },
     { n: '06', title: 'Quizzes.', body: 'MCQs check recall before you move on.', art: <QuizViz /> },
-    { n: '07', title: 'Notion sync.', body: 'Send your notes to Notion when you want a second brain copy.', art: <NotionViz /> },
+    { n: '07', title: 'Weekly rankings.', body: 'See where you stand against other learners. Streak days, courses finished, live every week.', art: <WeeklyRankViz /> },
   ];
   return (
     <Wrap id="features" pad="120px 32px">
@@ -989,31 +1000,198 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
   );
 }
 
+// ── Notes section ────────────────────────────────────────────────────────────
+function NotesPageMockup() {
+  const { t, dark } = useTheme();
+
+  const sidebarBg  = dark ? '#0e0c0a' : '#f0ece4';
+  const contentBg  = dark ? '#1c1a16' : '#faf7f0';
+  const borderCol  = dark ? 'rgba(241,236,223,0.09)' : 'rgba(26,21,16,0.11)';
+  const muteCol    = dark ? 'rgba(241,236,223,0.40)' : 'rgba(26,21,16,0.45)';
+  const inkCol     = dark ? '#f1ecdf' : '#1a1510';
+  const codeBg     = dark ? 'rgba(241,236,223,0.06)' : 'rgba(26,21,16,0.05)';
+
+  const modules = [
+    {
+      n: '01', title: 'Foundations',
+      lessons: [
+        { title: 'What is SQL?', hasNotes: true, active: false },
+        { title: 'Tables and rows', hasNotes: true, active: true },
+        { title: 'Data types', hasNotes: false, active: false },
+      ],
+    },
+    {
+      n: '02', title: 'Querying data',
+      lessons: [
+        { title: 'SELECT basics', hasNotes: true, active: false },
+        { title: 'WHERE clause', hasNotes: false, active: false },
+      ],
+    },
+  ];
+
+  const noteLines = [
+    { type: 'label', text: 'TABLES AND ROWS' },
+    { type: 'h', text: 'What a table actually is' },
+    { type: 'bullet', text: 'A table is a structured grid — rows are records, columns are fields.' },
+    { type: 'bullet', text: 'Every row in a table should be uniquely identifiable.' },
+    { type: 'bullet', text: 'Column data types enforce what can go in each field.' },
+    { type: 'code', text: 'SELECT * FROM orders\nWHERE customer_id = 42;' },
+    { type: 'bullet', text: 'NULL means "no value" — different from 0 or an empty string.' },
+  ];
+
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '200px 1fr',
+      border: `1px solid ${borderCol}`,
+      boxShadow: dark ? '0 32px 80px rgba(0,0,0,0.36)' : '0 32px 80px rgba(26,21,16,0.12)',
+      overflow: 'hidden',
+      minHeight: 440,
+    }}>
+      {/* Sidebar */}
+      <div style={{ background: sidebarBg, borderRight: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column' }}>
+        {/* back + meta */}
+        <div style={{ padding: '20px 16px 14px', borderBottom: `1px solid ${borderCol}` }}>
+          <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red, marginBottom: 8 }}>
+            Course notes
+          </div>
+          <div style={{ fontFamily: SANS, fontSize: 12, fontWeight: 600, color: inkCol, lineHeight: 1.2 }}>
+            SQL Basics
+          </div>
+          <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 8, color: muteCol, letterSpacing: '0.08em' }}>
+            4/8 lessons with notes
+          </div>
+        </div>
+
+        {/* Module tree */}
+        <div style={{ padding: '10px 0', flex: 1 }}>
+          {modules.map((mod) => (
+            <div key={mod.n} style={{ marginBottom: 2 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 16px' }}>
+                <span style={{ fontFamily: MONO, fontSize: 8, color: muteCol, letterSpacing: '0.1em', flexShrink: 0 }}>{mod.n}</span>
+                <span style={{ fontFamily: SANS, fontSize: 11, fontWeight: 600, color: muteCol }}>{mod.title}</span>
+              </div>
+              {mod.lessons.map((l) => (
+                <div key={l.title} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '5px 16px 5px 32px',
+                  borderLeft: l.active ? `2px solid ${t.red}` : '2px solid transparent',
+                  background: l.active ? (dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.04)') : 'transparent',
+                }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, background: l.hasNotes ? (l.active ? t.red : t.green) : borderCol }} />
+                  <span style={{ fontFamily: SANS, fontSize: 10, color: l.active ? inkCol : muteCol, lineHeight: 1.3 }}>{l.title}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Content pane */}
+      <div style={{ background: contentBg, padding: '24px 28px', overflowY: 'auto' }}>
+        {/* Course heading */}
+        <div style={{ marginBottom: 22, paddingBottom: 16, borderBottom: `2px solid ${inkCol}` }}>
+          <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.18em', textTransform: 'uppercase', color: t.red, marginBottom: 6 }}>Notes</div>
+          <div style={{ fontFamily: SERIF, fontSize: 32, letterSpacing: '-0.055em', lineHeight: 0.92, color: inkCol }}>SQL Basics</div>
+        </div>
+
+        {/* Module heading */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16, paddingBottom: 10, borderBottom: `1px solid ${borderCol}` }}>
+          <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 36, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', flexShrink: 0 }}>01</span>
+          <div>
+            <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: muteCol, marginBottom: 3 }}>Module</div>
+            <div style={{ fontFamily: SERIF, fontSize: 18, letterSpacing: '-0.025em', color: inkCol, lineHeight: 1.1 }}>Foundations</div>
+          </div>
+        </div>
+
+        {/* Lesson header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{ width: 18, height: 18, borderRadius: '50%', background: t.green, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: dark ? '#050505' : '#faf7f0' }}>✓</span>
+          </div>
+          <span style={{ fontFamily: SANS, fontSize: 13, fontWeight: 600, color: inkCol }}>Tables and rows</span>
+        </div>
+
+        {/* Notes body */}
+        <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {noteLines.map((line, i) => {
+            if (line.type === 'label') return (
+              <div key={i} style={{ fontFamily: MONO, fontSize: 7, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red, marginBottom: 2 }}>{line.text}</div>
+            );
+            if (line.type === 'h') return (
+              <div key={i} style={{ fontFamily: SERIF, fontSize: 16, letterSpacing: '-0.02em', color: inkCol, lineHeight: 1.15, marginBottom: 4 }}>{line.text}</div>
+            );
+            if (line.type === 'bullet') return (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ color: t.red, fontFamily: MONO, fontSize: 9, flexShrink: 0, marginTop: 3 }}>·</span>
+                <span style={{ fontFamily: SANS, fontSize: 12, lineHeight: 1.6, color: inkCol }}>{line.text}</span>
+              </div>
+            );
+            if (line.type === 'code') return (
+              <pre key={i} style={{ margin: '4px 0 6px', padding: '9px 12px', background: codeBg, borderLeft: `2px solid ${t.red}`, fontFamily: MONO, fontSize: 10, lineHeight: 1.55, color: inkCol, overflowX: 'auto', whiteSpace: 'pre' }}>
+                {line.text}
+              </pre>
+            );
+            return null;
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotesSectionLanding({ onNav }: { onNav: (k: string) => void }) {
+  const { t } = useTheme();
+  const navigate = useNavigate();
+  return (
+    <Wrap id="notes" bg={t.paper} pad="120px 32px" borderTop borderBottom>
+      <div style={{ display: 'grid', gridTemplateColumns: '0.72fr 1.28fr', gap: 48, alignItems: 'start' }}>
+        {/* Left: copy */}
+        <div>
+          <Kicker>Built-in notes</Kicker>
+          <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(48px, 6vw, 88px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
+            Every lesson,<br /><i>distilled.</i>
+          </h2>
+          <p style={{ fontFamily: SERIF, fontSize: 20, color: t.inkSoft, lineHeight: 1.45, margin: '0 0 20px' }}>
+            After each lesson the tutor writes you a clean set of notes — the key ideas, the gotchas, the examples that stuck. Organised by module and lesson, always there when you need them.
+          </p>
+          <p style={{ fontFamily: SERIF, fontSize: 20, color: t.inkSoft, lineHeight: 1.45, margin: 0 }}>
+            Access from any course card. No hunting through chat history.
+          </p>
+          <div style={{ marginTop: 32, display: 'flex', gap: 12 }}>
+            <button onClick={() => navigate('/auth')} style={{
+              background: t.ink, color: t.bg, border: 'none', padding: '14px 22px',
+              fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer',
+            }}>Start a course →</button>
+          </div>
+        </div>
+
+        {/* Right: mockup */}
+        <NotesPageMockup />
+      </div>
+    </Wrap>
+  );
+}
+
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 // ── Pricing ───────────────────────────────────────────────────────────────────
-const TIERS = [
-  {
-    name: 'Free trial', price: '$0', unit: 'one course', sub: 'Try the deadline.',
-    body: 'One course. Full stakes.',
-    list: ['1 course, up to 14 days', 'AI tutor', 'Leaderboard eligible', 'One emergency pause'],
-    cta: 'Start free', primary: false,
-  },
-  {
-    name: 'Finisher', price: '$18', unit: '/month', sub: 'Unlimited courses.',
-    body: 'More courses. More clocks.',
-    list: ['Unlimited courses', '3 concurrent active', 'Priority AI tutor', 'Public profile', 'Export certificates'],
-    cta: 'Start course →', primary: true,
-  },
-  {
-    name: 'Team', price: '$12', unit: '/seat · yearly', sub: 'For study cohorts.',
-    body: 'Same course. Same deadline.',
-    list: ['Everything in Finisher', 'Cohort deadlines', 'Private leaderboards', 'Manager dashboard', 'SSO + audit logs'],
-    cta: 'Talk to us', primary: false,
-  },
+const PRICING_ROWS: { label: string; free: string | boolean; premium: string | boolean }[] = [
+  { label: 'Messages',        free: '25 / day',    premium: 'Unlimited' },
+  { label: 'Notes',           free: false,         premium: true },
+  { label: 'Import content',  free: false,         premium: 'Anywhere' },
+  { label: 'PDF upload',      free: false,         premium: true },
+  { label: 'Courses & Quizzes', free: 'Basic',     premium: 'Unlimited' },
+  { label: 'Voice mode',      free: false,         premium: true },
 ];
 
 function PricingSection({ onNav }: { onNav: (k: string) => void }) {
   const { t } = useTheme();
+
+  function cell(val: string | boolean, accent?: boolean) {
+    if (val === false) return <span style={{ color: t.mute, fontSize: 16 }}>—</span>;
+    if (val === true)  return <span style={{ color: t.green, fontSize: 14 }}>✓</span>;
+    return <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', color: accent ? t.ink : t.mute }}>{val}</span>;
+  }
+
   return (
     <Wrap id="pricing" pad="120px 32px">
       <div style={{ maxWidth: 780, marginBottom: 56 }}>
@@ -1025,42 +1203,59 @@ function PricingSection({ onNav }: { onNav: (k: string) => void }) {
           Start free. Upgrade when the clock starts working.
         </p>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-        {TIERS.map((tier) => (
-          <div key={tier.name} style={{
-            border: `1.5px solid ${tier.primary ? t.ink : t.ruleFaint}`,
-            background: tier.primary ? t.paper : 'transparent', padding: 32, position: 'relative',
-            boxShadow: tier.primary ? `12px 12px 0 ${t.ink}` : 'none',
-          }}>
-            {tier.primary && (
-              <div style={{
-                position: 'absolute', top: -12, left: 24, background: t.red, color: '#faf7f0',
-                fontFamily: MONO, fontSize: 10, padding: '4px 10px', letterSpacing: '0.16em', textTransform: 'uppercase',
-              }}>most finish here</div>
-            )}
-            <div style={{ fontFamily: MONO, fontSize: 11, color: t.mute, letterSpacing: '0.16em', textTransform: 'uppercase' }}>{tier.name}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 16 }}>
-              <span style={{ fontFamily: SERIF, fontSize: 72, color: t.ink, letterSpacing: '-0.03em', fontWeight: 400, lineHeight: 1 }}>{tier.price}</span>
-              <span style={{ fontFamily: MONO, fontSize: 12, color: t.mute }}>{tier.unit}</span>
-            </div>
-            <div style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 20, color: t.ink, marginTop: 12 }}>{tier.sub}</div>
-            <p style={{ fontFamily: SERIF, fontSize: 16, color: t.inkSoft, lineHeight: 1.5, margin: '12px 0 20px' }}>{tier.body}</p>
-            <div style={{ borderTop: `1px solid ${t.ruleFaint}`, paddingTop: 16 }}>
-              {tier.list.map((l) => (
-                <div key={l} style={{ display: 'flex', gap: 10, fontFamily: MONO, fontSize: 12, color: t.ink, padding: '6px 0' }}>
-                  <span style={{ color: t.red }}>✓</span><span>{l}</span>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => onNav('new')} style={{
-              width: '100%', marginTop: 24, padding: '14px',
-              background: tier.primary ? t.ink : 'transparent',
-              color: tier.primary ? t.bg : t.ink,
-              border: tier.primary ? 'none' : `1px solid ${t.ink}`,
-              fontFamily: MONO, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer',
-            }}>{tier.cta}</button>
+
+      {/* Comparison table */}
+      <div style={{ border: `1.5px solid ${t.ink}`, overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: `1.5px solid ${t.ink}` }}>
+          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }} />
+          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }}>
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute }}>Free</div>
+            <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>₹0</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>forever</div>
+          </div>
+          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper, position: 'relative' }}>
+            <div style={{ position: 'absolute', top: -1, left: 0, right: 0, height: 3, background: t.red }} />
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red }}>Premium</div>
+            <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>₹299</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>$21 / month</div>
+          </div>
+          <div style={{ padding: '20px 24px' }}>
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute }}>Team</div>
+            <div style={{ fontFamily: SERIF, fontSize: 28, color: t.ink, marginTop: 8, letterSpacing: '-0.02em', fontStyle: 'italic' }}>Let's talk.</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>custom pricing</div>
+          </div>
+        </div>
+
+        {/* Feature rows */}
+        {PRICING_ROWS.map((row, i) => (
+          <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: i < PRICING_ROWS.length - 1 ? `1px solid ${t.ruleFaint}` : 'none' }}>
+            <div style={{ padding: '16px 24px', borderRight: `1px solid ${t.ruleFaint}`, fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.mute, display: 'flex', alignItems: 'center' }}>{row.label}</div>
+            <div style={{ padding: '16px 24px', borderRight: `1px solid ${t.ruleFaint}`, display: 'flex', alignItems: 'center' }}>{cell(row.free)}</div>
+            <div style={{ padding: '16px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper, display: 'flex', alignItems: 'center' }}>{cell(row.premium, true)}</div>
+            <div style={{ padding: '16px 24px', display: 'flex', alignItems: 'center' }}><span style={{ color: t.green, fontSize: 14 }}>✓</span></div>
           </div>
         ))}
+
+        {/* CTA row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderTop: `1.5px solid ${t.ink}` }}>
+          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }} />
+          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }}>
+            <button onClick={() => onNav('new')} style={{ background: 'transparent', color: t.ink, border: `1px solid ${t.ink}`, padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              Start free →
+            </button>
+          </div>
+          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper }}>
+            <button onClick={() => onNav('new')} style={{ background: t.ink, color: t.bg, border: 'none', padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              Get premium →
+            </button>
+          </div>
+          <div style={{ padding: '20px 24px' }}>
+            <a href="mailto:ask@learnor.ai" style={{ display: 'inline-block', background: 'transparent', color: t.ink, border: `1px solid ${t.ink}`, padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>
+              Contact us →
+            </a>
+          </div>
+        </div>
       </div>
     </Wrap>
   );
@@ -1182,24 +1377,26 @@ function InstructorSection({ onNav }: { onNav: (k: string) => void }) {
 
 // ── Final CTA ─────────────────────────────────────────────────────────────────
 function FinalCTA({ onNav }: { onNav: (k: string) => void }) {
-  const { t } = useTheme();
+  const { t, dark } = useTheme();
+  const mutedText = dark ? 'rgba(10,8,6,0.55)' : 'rgba(250,247,240,0.6)';
+  const softText  = dark ? 'rgba(10,8,6,0.38)' : 'rgba(250,247,240,0.42)';
   return (
     <section id="start" style={{ background: t.ink, padding: '140px 32px' }}>
-      <div style={{ textAlign: 'center', color: t.bg, maxWidth: 1000, margin: '0 auto' }}>
+      <div style={{ textAlign: 'center', maxWidth: 1000, margin: '0 auto' }}>
         <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.2em', color: t.red, textTransform: 'uppercase' }}>
           One last thing
         </div>
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(72px, 11vw, 160px)', margin: '20px 0', letterSpacing: '-0.035em', fontWeight: 400, color: t.bg, lineHeight: 0.9 }}>
           Pick a thing.<br />Pick a date.<br /><i style={{ color: t.red }}>Or don't.</i>
         </h2>
-        <p style={{ fontFamily: SERIF, fontSize: 24, color: 'rgba(255,255,255,0.7)', fontStyle: 'italic', margin: '32px auto', maxWidth: 600, lineHeight: 1.4 }}>
+        <p style={{ fontFamily: SERIF, fontSize: 24, color: mutedText, fontStyle: 'italic', margin: '32px auto', maxWidth: 600, lineHeight: 1.4 }}>
           The courses you'll never take are already gathering dust. At least this way they go out with a bang.
         </p>
         <button onClick={() => onNav('new')} style={{
           background: t.red, color: '#faf7f0', border: 'none', padding: '20px 40px',
           fontFamily: MONO, fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', cursor: 'pointer', marginTop: 16,
         }}>Start course →</button>
-        <div style={{ marginTop: 24, fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+        <div style={{ marginTop: 24, fontFamily: MONO, fontSize: 11, color: softText, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
           no card required · first course is free
         </div>
       </div>
@@ -1211,10 +1408,10 @@ function FinalCTA({ onNav }: { onNav: (k: string) => void }) {
 function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
   const { t } = useTheme();
   const { state } = useStore();
-  const finishers = state.courses.filter((c) => c.status === 'completed').length + 247;
-  const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length + 1412;
+  const finishers = state.courses.filter((c) => c.status === 'completed').length;
+  const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length;
   const footerLinks: [string, [string, string][]][] = [
-    ['Product', [['how', 'How it works'], ['features', 'Features'], ['instructors', 'Teach here'], ['pricing', 'Pricing'], ['new', 'Start a course']]],
+    ['Product', [['how', 'How it works'], ['features', 'Features'], /* ['instructors', 'Teach here'], */ ['pricing', 'Pricing'], ['new', 'Start a course']]],
     ['Social proof', [['leaderboard', 'Leaderboard'], ['leaderboard-page', 'Full wall'], ['dashboard', 'Sample dashboard']]],
     ['Company', [['#', 'About'], ['#', 'Manifesto'], ['#', 'Careers'], ['#', 'Press']]],
     ['Legal', [['#', 'Terms'], ['#', 'Privacy'], ['#', 'Security'], ['#', 'Contact']]],
@@ -1253,7 +1450,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
           <span>made with stakes</span>
         </div>
         {/* Giant closing wordmark */}
-        <div style={{ fontFamily: SERIF, fontSize: 'clamp(80px, 14vw, 220px)', letterSpacing: '-0.05em', lineHeight: 0.85, color: t.ink, marginTop: 40, textAlign: 'center', opacity: 0.9 }}>
+        <div style={{ fontFamily: SERIF, fontSize: 'clamp(36px, 5vw, 72px)', letterSpacing: '-0.04em', lineHeight: 1, color: t.ink, marginTop: 32, textAlign: 'center', opacity: 0.5 }}>
           <i>commit.</i> or <span style={{ color: t.red }}>recommit.</span>
         </div>
       </div>
@@ -1268,7 +1465,7 @@ export default function Landing() {
   const { dark, toggle } = useAppTheme();
   const [active, setActive] = useState('home');
 
-  const sectionRefs = useRef<string[]>(['home', 'how', 'features', 'leaderboard', 'instructors', 'pricing', 'faq']);
+  const sectionRefs = useRef<string[]>(['home', 'how', 'features', 'notes', 'leaderboard', /* 'instructors', */ 'pricing', 'faq']);
 
   useEffect(() => {
     try { localStorage.setItem('ain_dark', String(dark)); } catch {}
@@ -1296,7 +1493,7 @@ export default function Landing() {
     if (target === 'new') { navigate(user ? '/new' : '/auth'); return; }
     if (target === 'dashboard') { navigate(user ? '/dashboard' : '/auth'); return; }
     if (target === 'profile') { navigate(user ? '/profile' : '/auth'); return; }
-    if (target === 'leaderboard-page') { navigate('/leaderboard'); return; }
+    if (target === 'leaderboard' || target === 'leaderboard-page') { navigate('/leaderboard'); return; }
     if (target === 'browse') { navigate('/browse'); return; }
     if (target === 'create') { navigate('/create'); return; }
     if (target === 'home') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -1318,7 +1515,8 @@ export default function Landing() {
         <ComparisonSection />
         <HowSection />
         <FeaturesSection onNav={onNav} />
-        <InstructorSection onNav={onNav} />
+        <NotesSectionLanding onNav={onNav} />
+        {/* <InstructorSection onNav={onNav} /> */}
         <PricingSection onNav={onNav} />
         <FAQSection />
         <FinalCTA onNav={onNav} />

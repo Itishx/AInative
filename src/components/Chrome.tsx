@@ -17,6 +17,13 @@ export function AppNav() {
   const navigate = useNavigate();
   const loc = useLocation();
   const { dark, toggle, t } = useTheme();
+  const [scrolled, setScrolled] = React.useState(false);
+
+  React.useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const onDashboard = loc.pathname === '/dashboard';
 
@@ -27,12 +34,15 @@ export function AppNav() {
         style={{
           position: 'fixed',
           top: 22,
-          left: 28,
+          left: 48,
           zIndex: 50,
           background: 'none',
           border: 'none',
           cursor: 'pointer',
           padding: 0,
+          opacity: scrolled ? 0 : 1,
+          pointerEvents: scrolled ? 'none' : 'auto',
+          transition: 'opacity 0.2s ease',
         }}
       >
         <b style={{ fontFamily: t.serif, fontSize: 26, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>

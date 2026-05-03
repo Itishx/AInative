@@ -78,40 +78,44 @@ function getActivityKey(date: Date) {
 }
 
 function buildConsistency(courses: Course[]) {
-  const counts = new Map<string, number>();
+  const activeDays = new Set<string>();
+
+  courses.forEach((course) => {
+    // studyLog is the canonical signal; backfill from lessonChats for historical sessions
+    (course.studyLog ?? []).forEach((k) => activeDays.add(k));
+    Object.values(course.lessonChats ?? {}).flat().forEach((msg) => {
+      const d = new Date(msg.ts);
+      if (!Number.isNaN(d.getTime())) activeDays.add(getActivityKey(d));
+    });
+  });
+
   const now = new Date();
   const start = new Date(now);
   start.setDate(now.getDate() - 83);
-
-  courses.forEach((course) => {
-    [course.createdAt, course.lastStudiedDate].filter(Boolean).forEach((raw) => {
-      const date = new Date(raw as string);
-      if (!Number.isNaN(date.getTime())) {
-        const key = getActivityKey(date);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-    });
-
-    Object.values(course.lessonChats ?? {}).flat().forEach((msg) => {
-      const date = new Date(msg.ts);
-      if (!Number.isNaN(date.getTime())) {
-        const key = getActivityKey(date);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-    });
-  });
+  const todayKey = getActivityKey(now);
+  // Only mark missed days from the first day the user ever showed up
+  const firstActive = [...activeDays].sort()[0] ?? '';
 
   return Array.from({ length: 84 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
     const key = getActivityKey(date);
-    return { key, count: counts.get(key) ?? 0 };
+    const countable = !!firstActive && key >= firstActive && key <= todayKey;
+    return { key, active: activeDays.has(key), isPast: countable };
   });
 }
 
 function ConsistencyGrid({ courses }: { courses: Course[] }) {
   const days = useMemo(() => buildConsistency(courses), [courses]);
-  const total = days.reduce((sum, day) => sum + day.count, 0);
+  const streak = useMemo(() => {
+    let s = 0;
+    for (let i = days.length - 1; i >= 0; i--) {
+      if (!days[i].isPast) continue;
+      if (days[i].active) s++;
+      else break;
+    }
+    return s;
+  }, [days]);
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -120,31 +124,25 @@ function ConsistencyGrid({ courses }: { courses: Course[] }) {
           consistency
         </div>
         <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.10em', textTransform: 'uppercase', color: D.mute }}>
-          {total} study signals · last 12 weeks
+          {streak > 0 ? `${streak}d streak` : 'no streak'} · last 12 weeks
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 5 }}>
         {days.map((day) => {
-          const level = Math.min(4, day.count);
-          const color = level === 0
+          const color = !day.isPast
             ? D.softer
-            : level === 1
-              ? 'rgba(114,192,137,0.32)'
-              : level === 2
-                ? 'rgba(114,192,137,0.52)'
-                : level === 3
-                  ? 'rgba(114,192,137,0.74)'
-                  : D.green;
+            : day.active
+              ? D.green
+              : 'rgba(255,81,72,0.35)';
           return (
             <div
               key={day.key}
-              title={`${day.key}: ${day.count} activity`}
+              title={day.key}
               style={{
                 aspectRatio: '1 / 1',
                 minWidth: 8,
                 borderRadius: 3,
                 background: color,
-                boxShadow: level > 0 ? `0 0 18px ${color}` : 'none',
               }}
             />
           );
@@ -160,18 +158,21 @@ function CourseCard({
   onOpen,
   onDelete,
   onRecommit,
+  onNotes,
 }: {
   course: Course;
   now: number;
   onOpen: () => void;
   onDelete: () => void;
   onRecommit: (newDeadline: string) => void;
+  onNotes: () => void;
 }) {
   const [recommitting, setRecommitting] = useState(false);
   const [newDeadlineDate, setNewDeadlineDate] = useState('');
 
   const lessons = course.curriculum.modules.flatMap((m) => m.lessons);
   const doneLessons = lessons.filter((l) => l.completed).length;
+  const hasNotes = lessons.some((l) => l.notes);
   const currentLesson = course.curriculum.modules[course.currentModule]?.lessons[course.currentLesson];
   const progress = Math.round(course.progress * 100);
   const daysLeft = daysUntil(course.deadline);
@@ -278,7 +279,7 @@ function CourseCard({
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
               <button
                 onClick={() => setRecommitting(true)}
-                style={{ border: `1px solid ${D.amber}`, borderRadius: 999, background: 'transparent', color: D.amber, cursor: 'pointer', padding: '10px 16px', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+                style={{ border: 'none', background: 'transparent', color: D.amber, cursor: 'pointer', padding: '6px 0', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase', borderBottom: `1px solid ${D.amber}` }}
               >
                 Recommit
               </button>
@@ -288,10 +289,17 @@ function CourseCard({
             </div>
           )
         ) : (
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-            <button onClick={onOpen} style={{ border: `1px solid ${D.ink}`, borderRadius: 999, background: D.ink, color: D.bg, cursor: 'pointer', padding: '10px 16px', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
-              {course.status === 'completed' ? 'Cert' : courseHasStarted(course) ? 'Resume' : 'Start'}
-            </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={onOpen} style={{ border: `1px solid ${D.ink}`, borderRadius: 999, background: D.ink, color: D.bg, cursor: 'pointer', padding: '10px 16px', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
+                {course.status === 'completed' ? 'Cert' : courseHasStarted(course) ? 'Resume' : 'Start'}
+              </button>
+              {hasNotes && (
+                <button onClick={onNotes} style={{ border: `1px solid ${D.faint}`, borderRadius: 999, background: 'transparent', color: D.mute, cursor: 'pointer', padding: '10px 14px', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
+                  Notes
+                </button>
+              )}
+            </div>
             <button onClick={onDelete} style={{ border: 'none', background: 'transparent', color: D.red, cursor: 'pointer', padding: '8px 0', fontFamily: D.mono, fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
               Delete
             </button>
@@ -539,27 +547,48 @@ function QuizHub({
         </div>
       </section>
 
-      <section style={{ paddingTop: 8 }}>
+      <section style={{ paddingTop: 18 }}>
         {quizTargets.length === 0 ? (
           <div style={{ padding: '44px 0', color: D.mute }}>No course lessons available yet.</div>
-        ) : quizTargets.map(({ course, mod, lesson, mi, li }) => (
-          <article key={`${course.id}-${mi}-${li}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px', gap: 18, alignItems: 'center', padding: '20px 0', borderTop: `1px solid ${D.faint}` }}>
-            <div style={{ minWidth: 0 }}>
-              <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 26, lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 400, color: D.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {lesson.title}
-              </h2>
-              <p style={{ margin: '8px 0 0', fontSize: 13, color: D.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {course.subject} · {mod.title}
-              </p>
-            </div>
-            <button
-              onClick={() => onOpenLessonQuiz(course, mi, li)}
-              style={{ border: 'none', borderBottom: `1px solid ${D.ink}`, background: 'transparent', color: D.ink, cursor: 'pointer', padding: '8px 0', fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
-            >
-              Take quiz
-            </button>
-          </article>
-        ))}
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+            {quizTargets.map(({ course, mod, lesson, mi, li }) => (
+              <article key={`${course.id}-${mi}-${li}`} style={{
+                minHeight: 200,
+                border: `1px solid ${D.faint}`,
+                borderRadius: 28,
+                padding: 22,
+                background: 'linear-gradient(145deg, rgba(255,255,255,0.035), rgba(26,21,16,0.018))',
+                boxShadow: '0 24px 80px rgba(26,21,16,0.06)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: 18,
+              }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                    <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: D.red }}>Quiz</span>
+                    <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: D.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{course.subject}</span>
+                  </div>
+                  <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 'clamp(22px, 2.4vw, 34px)', lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 400, color: D.ink }}>
+                    {lesson.title}
+                  </h2>
+                  <p style={{ margin: '10px 0 0', fontFamily: D.sans, fontSize: 13, lineHeight: 1.4, color: D.mute }}>
+                    {mod.title}
+                  </p>
+                </div>
+                <div style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 14 }}>
+                  <button
+                    onClick={() => onOpenLessonQuiz(course, mi, li)}
+                    style={{ border: 'none', background: 'transparent', color: D.ink, cursor: 'pointer', padding: 0, fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase', borderBottom: `1px solid ${D.ink}`, paddingBottom: 2 }}
+                  >
+                    Take quiz →
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
 
         {attempts.length > 0 && (
           <div style={{ marginTop: 42, borderTop: `1px solid ${D.faint}`, paddingTop: 22 }}>
@@ -981,6 +1010,7 @@ export default function Dashboard() {
                     else navigate(`/learn/${course.id}`);
                   }}
                   onRecommit={(newDeadline) => dispatch({ type: 'RECOMMIT', id: course.id, newDeadline })}
+                  onNotes={() => navigate(`/notes/${course.id}`)}
                 />
               ))}
             </div>
