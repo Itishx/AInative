@@ -2142,6 +2142,24 @@ const SUPABASE_SERVICE_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 
 const polar = new Polar({ accessToken: POLAR_ACCESS_TOKEN });
 
+// Cache price IDs per currency fetched from Polar product
+const priceIdCache = {};
+async function getPriceId(currency) {
+  const key = currency.toLowerCase();
+  if (priceIdCache[key]) return priceIdCache[key];
+  try {
+    const product = await polar.products.get({ id: POLAR_PRODUCT_ID });
+    for (const price of product.prices || []) {
+      const cur = (price.currency || price.priceCurrency || '').toLowerCase();
+      if (cur) priceIdCache[cur] = price.id;
+    }
+    console.log('[polar] price IDs loaded:', priceIdCache);
+  } catch (e) {
+    console.warn('[polar] could not fetch product prices:', e.message);
+  }
+  return priceIdCache[key] || null;
+}
+
 async function supabaseServiceUpdate(userId, plan) {
   if (!SUPABASE_SERVICE_KEY) {
     console.warn('[polar] SUPABASE_SERVICE_KEY not set — cannot update plan in DB');
@@ -2176,12 +2194,20 @@ app.post('/api/create-checkout', async (req, res) => {
   const { userId, userEmail, successUrl } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId required' });
   try {
-    const checkout = await polar.checkouts.create({
+    const country = (req.headers['x-vercel-ip-country'] || '').toUpperCase();
+    const currency = country === 'IN' ? 'inr' : 'usd';
+    const priceId = await getPriceId(currency);
+    console.log('[polar] country:', country, 'currency:', currency, 'priceId:', priceId);
+
+    const checkoutPayload = {
       products: [POLAR_PRODUCT_ID],
       customerEmail: userEmail || undefined,
       successUrl: successUrl || 'https://www.learnor.io/settings?upgraded=1',
       metadata: { userId },
-    });
+    };
+    if (priceId) checkoutPayload.productPriceId = priceId;
+
+    const checkout = await polar.checkouts.create(checkoutPayload);
     res.json({ checkoutUrl: checkout.url });
   } catch (err) {
     const detail = typeof err?.cause === 'object' ? JSON.stringify(err.cause) : (err?.cause ?? '');
