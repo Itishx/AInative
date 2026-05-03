@@ -2134,11 +2134,11 @@ app.post('/api/enroll', (req, res) => {
 });
 
 // ── Polar payments ────────────────────────────────────────────────────────────
-const POLAR_PRODUCT_ID  = process.env.POLAR_PRODUCT_ID  || '273eec79-b6ef-430c-bf19-f10e59ecd947';
-const POLAR_ACCESS_TOKEN = process.env.POLAR_ACCESS_TOKEN || 'polar_oat_Kbxzi2gj3znmDP3wytbo5T9MLlXI7c8QPmQHu4RxNTd';
-const POLAR_WEBHOOK_SECRET = process.env.POLAR_WEBHOOK_SECRET || 'polar_whs_Ec4u2UFpToS9evhNMfqcuufxrt8u7xNrT0tlq2IByDT';
-const SUPABASE_URL_ENV = process.env.SUPABASE_URL || 'https://nxxisxugpfswyvpchexs.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
+const POLAR_PRODUCT_ID  = (process.env.POLAR_PRODUCT_ID  || '273eec79-b6ef-430c-bf19-f10e59ecd947').trim();
+const POLAR_ACCESS_TOKEN = (process.env.POLAR_ACCESS_TOKEN || 'polar_oat_Kbxzi2gj3znmDP3wytbo5T9MLlXI7c8QPmQHu4RxNTd').trim();
+const POLAR_WEBHOOK_SECRET = (process.env.POLAR_WEBHOOK_SECRET || 'polar_whs_Ec4u2UFpToS9evhNMfqcuufxrt8u7xNrT0tlq2IByDT').trim();
+const SUPABASE_URL_ENV = (process.env.SUPABASE_URL || 'https://nxxisxugpfswyvpchexs.supabase.co').trim();
+const SUPABASE_SERVICE_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 
 const polar = new Polar({ accessToken: POLAR_ACCESS_TOKEN });
 
