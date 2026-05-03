@@ -29,7 +29,9 @@ export default function Settings() {
   const { user, signOut } = useAuth();
   const { dark } = useTheme();
 
-  const [tab, setTab] = useState<SettingsTab>('profile');
+  const [tab, setTab] = useState<SettingsTab>(
+    new URLSearchParams(window.location.search).get('tab') === 'billing' ? 'billing' : 'profile'
+  );
   const [username, setUsername] = useState(state.username ?? '');
   const [displayName, setDisplayName] = useState(state.profile?.displayName ?? '');
   const [headline, setHeadline] = useState(state.profile?.headline ?? '');

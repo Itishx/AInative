@@ -190,9 +190,34 @@ export default function Notes() {
   const course = state.courses.find((c) => c.id === courseId);
   const isPremium = state.profile?.plan === 'premium';
 
+  const bg  = dark ? '#050505' : '#f4f0e8';
+  const ink = dark ? '#f6f0e7' : '#1a1510';
+  const mute = dark ? 'rgba(246,240,231,0.50)' : 'rgba(26,21,16,0.52)';
+
   if (!isPremium) {
-    navigate('/settings', { replace: true });
-    return null;
+    return (
+      <div style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, textAlign: 'center', padding: 32 }}>
+        <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: mute }}>Premium feature</div>
+        <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(36px, 6vw, 72px)', fontWeight: 400, letterSpacing: '-0.03em', margin: 0, color: ink }}>
+          Notes are for<br /><i>premium members.</i>
+        </h2>
+        <p style={{ fontFamily: SERIF, fontSize: 18, color: mute, margin: 0, maxWidth: 380 }}>
+          Upgrade to get AI-generated notes after every lesson — saved, searchable, yours.
+        </p>
+        <button
+          onClick={() => navigate('/settings?tab=billing')}
+          style={{ background: ink, color: bg, border: 'none', padding: '14px 28px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer', marginTop: 8 }}
+        >
+          Upgrade to Premium →
+        </button>
+        <button
+          onClick={() => navigate(-1)}
+          style={{ background: 'none', border: 'none', fontFamily: MONO, fontSize: 10, color: mute, letterSpacing: '0.12em', cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          Go back
+        </button>
+      </div>
+    );
   }
 
   const vars = {
