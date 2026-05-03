@@ -2276,6 +2276,12 @@ app.post('/api/polar-webhook', async (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/geo — return country code from Vercel edge header
+app.get('/api/geo', (req, res) => {
+  const country = (req.headers['x-vercel-ip-country'] || '').toUpperCase();
+  res.json({ country });
+});
+
 // GET /api/plan — verify current plan from Polar directly
 app.get('/api/plan', async (req, res) => {
   const { userId } = req.query;

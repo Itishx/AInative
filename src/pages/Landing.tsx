@@ -1183,7 +1183,7 @@ const PRICING_ROWS: { label: string; free: string | boolean; premium: string | b
   { label: 'Voice mode',      free: false,         premium: true },
 ];
 
-function PricingSection({ onNav }: { onNav: (k: string) => void }) {
+function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndia: boolean }) {
   const { t } = useTheme();
 
   function cell(val: string | boolean, accent?: boolean) {
@@ -1217,8 +1217,8 @@ function PricingSection({ onNav }: { onNav: (k: string) => void }) {
           <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper, position: 'relative' }}>
             <div style={{ position: 'absolute', top: -1, left: 0, right: 0, height: 3, background: t.red }} />
             <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red }}>Premium</div>
-            <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>₹299</div>
-            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>$21 / month</div>
+            <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>{isIndia ? '₹299' : '$21'}</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>/ month</div>
           </div>
           <div style={{ padding: '20px 24px' }}>
             <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute }}>Team</div>
@@ -1241,13 +1241,13 @@ function PricingSection({ onNav }: { onNav: (k: string) => void }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderTop: `1.5px solid ${t.ink}` }}>
           <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }} />
           <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }}>
-            <button onClick={() => onNav('new')} style={{ background: 'transparent', color: t.ink, border: `1px solid ${t.ink}`, padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
+            <button onClick={() => onNav('home')} style={{ background: 'transparent', color: t.ink, border: `1px solid ${t.ink}`, padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
               Start free →
             </button>
           </div>
           <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper }}>
-            <button onClick={() => onNav('new')} style={{ background: t.ink, color: t.bg, border: 'none', padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
-              Get premium →
+            <button onClick={() => onNav('premium')} style={{ background: t.ink, color: t.bg, border: 'none', padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              {isIndia ? 'Get premium · ₹299 →' : 'Get premium · $21 →'}
             </button>
           </div>
           <div style={{ padding: '20px 24px' }}>
@@ -1464,6 +1464,13 @@ export default function Landing() {
   const { user } = useAuth();
   const { dark, toggle } = useAppTheme();
   const [active, setActive] = useState('home');
+  const [isIndia, setIsIndia] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/geo').then(r => r.json()).then(({ country }) => {
+      setIsIndia(country === 'IN');
+    }).catch(() => {});
+  }, []);
 
   const sectionRefs = useRef<string[]>(['home', 'how', 'features', 'notes', 'leaderboard', /* 'instructors', */ 'pricing', 'faq']);
 
@@ -1489,8 +1496,25 @@ export default function Landing() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  async function handlePremiumCheckout() {
+    if (!user) { navigate('/auth'); return; }
+    try {
+      const res = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, userEmail: user.email }),
+      });
+      const { checkoutUrl, error } = await res.json();
+      if (error) throw new Error(error);
+      window.location.href = checkoutUrl;
+    } catch (err: any) {
+      alert(`Checkout failed: ${err.message}`);
+    }
+  }
+
   function onNav(target: string) {
     if (target === 'new') { navigate(user ? '/new' : '/auth'); return; }
+    if (target === 'premium') { handlePremiumCheckout(); return; }
     if (target === 'dashboard') { navigate(user ? '/dashboard' : '/auth'); return; }
     if (target === 'profile') { navigate(user ? '/profile' : '/auth'); return; }
     if (target === 'leaderboard' || target === 'leaderboard-page') { navigate('/leaderboard'); return; }
@@ -1517,7 +1541,7 @@ export default function Landing() {
         <FeaturesSection onNav={onNav} />
         <NotesSectionLanding onNav={onNav} />
         {/* <InstructorSection onNav={onNav} /> */}
-        <PricingSection onNav={onNav} />
+        <PricingSection onNav={onNav} isIndia={isIndia} />
         <FAQSection />
         <FinalCTA onNav={onNav} />
         <SiteFooter onNav={onNav} />
