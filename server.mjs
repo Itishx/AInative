@@ -2184,8 +2184,10 @@ app.post('/api/create-checkout', async (req, res) => {
     });
     res.json({ checkoutUrl: checkout.url });
   } catch (err) {
-    console.error('[polar] create-checkout error:', err.message);
-    res.status(500).json({ error: err.message });
+    const detail = typeof err?.cause === 'object' ? JSON.stringify(err.cause) : (err?.cause ?? '');
+    const msg = `${err.message} | ${detail}`;
+    console.error('[polar] create-checkout error:', msg);
+    res.status(500).json({ error: msg });
   }
 });
 
