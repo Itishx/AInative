@@ -366,6 +366,82 @@ function repairQuizJson(raw) {
   return null;
 }
 
+function normalizeQuizCorrectIndex(question, options) {
+  const raw = question?.correct ?? question?.answerIndex ?? question?.correctIndex ?? question?.correct_answer;
+  if (Number.isInteger(raw) && raw >= 0 && raw < options.length) return raw;
+
+  const textAnswer = String(
+    question?.answer ?? question?.correctAnswer ?? question?.correct_option ?? question?.correctOption ?? ''
+  ).trim();
+  if (!textAnswer) return null;
+
+  if (/^[A-D]$/i.test(textAnswer)) {
+    const idx = textAnswer.toUpperCase().charCodeAt(0) - 65;
+    return idx >= 0 && idx < options.length ? idx : null;
+  }
+
+  const matchIdx = options.findIndex((option) => option.toLowerCase() === textAnswer.toLowerCase());
+  return matchIdx >= 0 ? matchIdx : null;
+}
+
+function normalizeQuizQuestion(question, index) {
+  if (!question || typeof question !== 'object') return null;
+
+  const prompt = String(question.q ?? question.question ?? question.prompt ?? '').trim();
+  const options = (Array.isArray(question.options)
+    ? question.options
+    : Array.isArray(question.choices)
+      ? question.choices
+      : []
+  )
+    .map((option) => {
+      if (typeof option === 'string') return option.trim();
+      if (option && typeof option === 'object' && typeof option.text === 'string') return option.text.trim();
+      return '';
+    })
+    .filter(Boolean)
+    .slice(0, 4);
+
+  const correct = normalizeQuizCorrectIndex(question, options);
+  if (!prompt || options.length !== 4 || correct == null) return null;
+
+  return {
+    type: 'mcq',
+    q: prompt,
+    options,
+    correct,
+    id: typeof question.id === 'string' ? question.id : `quiz-q-${index + 1}`,
+  };
+}
+
+function normalizeQuizPayload(payload) {
+  const root = payload && typeof payload === 'object' ? payload : null;
+  const rawQuestions = Array.isArray(root)
+    ? root
+    : Array.isArray(root?.questions)
+      ? root.questions
+      : Array.isArray(root?.mcqs)
+        ? root.mcqs
+        : Array.isArray(root?.quiz)
+          ? root.quiz
+          : Array.isArray(root?.items)
+            ? root.items
+            : [];
+
+  const questions = rawQuestions
+    .map((question, index) => normalizeQuizQuestion(question, index))
+    .filter(Boolean)
+    .slice(0, 8);
+
+  const practicalExercises = Array.isArray(root?.practicalExercises)
+    ? root.practicalExercises
+    : Array.isArray(root?.practical_exercises)
+      ? root.practical_exercises
+      : [];
+
+  return { questions, practicalExercises };
+}
+
 // Parses raw Udemy page innerText into { title, level, estimatedHours, modules }
 // Heuristic: a text line followed by a timestamp (M:SS / MM:SS / H:MM:SS) is a lecture
 function parseUdemyText(rawText) {
@@ -1598,20 +1674,14 @@ Return ONLY valid JSON (no markdown fences, no explanation):
       3200,
     );
     const parsed = repairQuizJson(text);
-    if (!parsed) throw new Error('Could not parse quiz JSON');
-    parsed.questions = (parsed.questions || [])
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
-      .map((q) => ({
-        ...q,
-        type: 'mcq',
-      }))
-      .slice(0, 8);
-    parsed.practicalExercises = Array.isArray(parsed.practicalExercises)
-      ? parsed.practicalExercises
+    const normalized = normalizeQuizPayload(parsed);
+    if (normalized.questions.length === 0) throw new Error('Could not parse quiz JSON');
+    normalized.practicalExercises = Array.isArray(normalized.practicalExercises)
+      ? normalized.practicalExercises
           .filter((exercise) => practicalExerciseIsFair(exercise, taughtContent))
           .slice(0, 2)
       : [];
-    res.json(parsed);
+    res.json(normalized);
   } catch (err) {
     console.error('[quiz]', err.message);
     res.status(500).json({ error: err.message });
