@@ -2142,18 +2142,21 @@ const SUPABASE_SERVICE_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 
 const polar = new Polar({ accessToken: POLAR_ACCESS_TOKEN });
 
-// Cache price IDs per currency fetched from Polar product
+// Cache price IDs per currency — fetched once from Polar REST API
 const priceIdCache = {};
 async function getPriceId(currency) {
   const key = currency.toLowerCase();
   if (priceIdCache[key]) return priceIdCache[key];
   try {
-    const product = await polar.products.get({ id: POLAR_PRODUCT_ID });
+    const r = await fetch(`https://api.polar.sh/v1/products/${POLAR_PRODUCT_ID}`, {
+      headers: { 'Authorization': `Bearer ${POLAR_ACCESS_TOKEN}`, 'Accept': 'application/json' },
+    });
+    const product = await r.json();
     for (const price of product.prices || []) {
-      const cur = (price.currency || price.priceCurrency || '').toLowerCase();
-      if (cur) priceIdCache[cur] = price.id;
+      const cur = (price.price_currency || price.currency || '').toLowerCase();
+      if (cur && price.id) priceIdCache[cur] = price.id;
     }
-    console.log('[polar] price IDs loaded:', priceIdCache);
+    console.log('[polar] price IDs loaded:', JSON.stringify(priceIdCache));
   } catch (e) {
     console.warn('[polar] could not fetch product prices:', e.message);
   }
@@ -2199,15 +2202,29 @@ app.post('/api/create-checkout', async (req, res) => {
     const priceId = await getPriceId(currency);
     console.log('[polar] country:', country, 'currency:', currency, 'priceId:', priceId);
 
-    const checkoutPayload = {
-      products: [POLAR_PRODUCT_ID],
-      customerEmail: userEmail || undefined,
-      successUrl: successUrl || 'https://www.learnor.io/settings?upgraded=1',
+    // Use REST API directly so product_price_id is sent correctly
+    const body = {
+      success_url: successUrl || 'https://www.learnor.io/settings?upgraded=1',
+      customer_email: userEmail || undefined,
       metadata: { userId },
     };
-    if (priceId) checkoutPayload.productPriceId = priceId;
+    if (priceId) {
+      body.product_price_id = priceId;
+    } else {
+      body.products = [POLAR_PRODUCT_ID];
+    }
 
-    const checkout = await polar.checkouts.create(checkoutPayload);
+    const polarRes = await fetch('https://api.polar.sh/v1/checkouts/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${POLAR_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    const checkout = await polarRes.json();
+    if (!polarRes.ok) throw new Error(JSON.stringify(checkout));
     res.json({ checkoutUrl: checkout.url });
   } catch (err) {
     const detail = typeof err?.cause === 'object' ? JSON.stringify(err.cause) : (err?.cause ?? '');
