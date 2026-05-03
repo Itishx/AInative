@@ -733,6 +733,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 dotenv.config();
 
 const ALLOWED_ORIGINS = [
+  'https://www.learnor.io',
+  'https://learnor.io',
   'https://a-inative.vercel.app',
   /\.vercel\.app$/,
   'http://localhost:5173',
@@ -2169,7 +2171,7 @@ app.post('/api/create-checkout', async (req, res) => {
     const checkout = await polar.checkouts.create({
       productId: POLAR_PRODUCT_ID,
       customerEmail: userEmail || undefined,
-      successUrl: successUrl || 'https://a-inative.vercel.app/dashboard?upgraded=1',
+      successUrl: successUrl || 'https://www.learnor.io/settings?upgraded=1',
       metadata: { userId },
     });
     res.json({ checkoutUrl: checkout.url });
