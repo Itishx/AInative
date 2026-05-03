@@ -989,26 +989,26 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
 
       {/* Import callout */}
       <div style={{
-        marginTop: 48, padding: '32px 40px',
+        marginTop: 48, padding: mob ? '24px 20px' : '32px 40px',
         border: `1.5px solid ${t.ruleDash}`,
         background: t.paper,
-        display: 'grid', gridTemplateColumns: '1fr auto', gap: 40, alignItems: 'center',
+        display: 'flex', flexDirection: mob ? 'column' : 'row', gap: mob ? 20 : 40, alignItems: mob ? 'flex-start' : 'center',
       }}>
-        <div>
+        <div style={{ flex: 1 }}>
           <div style={{ fontFamily: MONO, fontSize: 10, color: t.red, letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 10 }}>
             Already in a course?
           </div>
-          <h4 style={{ fontFamily: SERIF, fontSize: 30, margin: '0 0 12px', fontWeight: 400, letterSpacing: '-0.01em', color: t.ink }}>
+          <h4 style={{ fontFamily: SERIF, fontSize: mob ? 22 : 30, margin: '0 0 12px', fontWeight: 400, letterSpacing: '-0.01em', color: t.ink }}>
             Import from anywhere.
           </h4>
-          <p style={{ fontFamily: SERIF, fontSize: 17, color: t.inkSoft, lineHeight: 1.6, margin: 0, maxWidth: 500 }}>
+          <p style={{ fontFamily: SERIF, fontSize: mob ? 15 : 17, color: t.inkSoft, lineHeight: 1.6, margin: 0 }}>
             Already watching a Udemy course? Click one bookmark. Learnor reads the full curriculum and teaches you through it — interactively, with a tutor, not just passive video.
           </p>
         </div>
         <a href="/import" style={{
           background: t.ink, color: t.bg, padding: '14px 24px',
           fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase',
-          textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-block',
+          textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-block', flexShrink: 0,
         }}>
           Import a course →
         </a>
@@ -1221,61 +1221,90 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
         </p>
       </div>
 
-      {/* Comparison table */}
-      <div style={{ overflowX: mob ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-      <div style={{ border: `1.5px solid ${t.ink}`, overflow: 'hidden', minWidth: mob ? 560 : undefined }}>
-        {/* Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: `1.5px solid ${t.ink}` }}>
-          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }} />
-          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }}>
+      {mob ? (
+        /* Mobile: two stacked cards */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Free card */}
+          <div style={{ border: `1.5px solid ${t.ink}`, padding: '24px 20px' }}>
             <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute }}>Free</div>
-            <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>₹0</div>
-            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>forever</div>
-          </div>
-          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper, position: 'relative' }}>
-            <div style={{ position: 'absolute', top: -1, left: 0, right: 0, height: 3, background: t.red }} />
-            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red }}>Premium</div>
-            <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>{isIndia ? '₹299' : '$21'}</div>
-            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>/ month</div>
-          </div>
-          <div style={{ padding: '20px 24px' }}>
-            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute }}>Team</div>
-            <div style={{ fontFamily: SERIF, fontSize: 28, color: t.ink, marginTop: 8, letterSpacing: '-0.02em', fontStyle: 'italic' }}>Let's talk.</div>
-            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>custom pricing</div>
-          </div>
-        </div>
-
-        {/* Feature rows */}
-        {PRICING_ROWS.map((row, i) => (
-          <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: i < PRICING_ROWS.length - 1 ? `1px solid ${t.ruleFaint}` : 'none' }}>
-            <div style={{ padding: '16px 24px', borderRight: `1px solid ${t.ruleFaint}`, fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.mute, display: 'flex', alignItems: 'center' }}>{row.label}</div>
-            <div style={{ padding: '16px 24px', borderRight: `1px solid ${t.ruleFaint}`, display: 'flex', alignItems: 'center' }}>{cell(row.free)}</div>
-            <div style={{ padding: '16px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper, display: 'flex', alignItems: 'center' }}>{cell(row.premium, true)}</div>
-            <div style={{ padding: '16px 24px', display: 'flex', alignItems: 'center' }}><span style={{ color: t.green, fontSize: 14 }}>✓</span></div>
-          </div>
-        ))}
-
-        {/* CTA row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderTop: `1.5px solid ${t.ink}` }}>
-          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }} />
-          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }}>
-            <button onClick={() => onNav('home')} style={{ background: 'transparent', color: t.ink, border: `1px solid ${t.ink}`, padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
+            <div style={{ fontFamily: SERIF, fontSize: 48, color: t.ink, marginTop: 6, letterSpacing: '-0.03em' }}>₹0</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.08em', marginBottom: 20 }}>forever</div>
+            {PRICING_ROWS.map((row) => (
+              <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${t.ruleFaint}` }}>
+                <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: t.mute }}>{row.label}</span>
+                {cell(row.free)}
+              </div>
+            ))}
+            <button onClick={() => onNav('home')} style={{ width: '100%', marginTop: 20, background: 'transparent', color: t.ink, border: `1px solid ${t.ink}`, padding: '12px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
               Start free →
             </button>
           </div>
-          <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper }}>
-            <button onClick={() => onNav('premium')} style={{ background: t.ink, color: t.bg, border: 'none', padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
+          {/* Premium card */}
+          <div style={{ border: `1.5px solid ${t.red}`, padding: '24px 20px', background: t.paper, position: 'relative' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: t.red }} />
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red }}>Premium</div>
+            <div style={{ fontFamily: SERIF, fontSize: 48, color: t.ink, marginTop: 6, letterSpacing: '-0.03em' }}>{isIndia ? '₹299' : '$21'}</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.08em', marginBottom: 20 }}>/ month</div>
+            {PRICING_ROWS.map((row) => (
+              <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${t.ruleFaint}` }}>
+                <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: t.mute }}>{row.label}</span>
+                {cell(row.premium, true)}
+              </div>
+            ))}
+            <button onClick={() => onNav('premium')} style={{ width: '100%', marginTop: 20, background: t.ink, color: t.bg, border: 'none', padding: '12px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
               {isIndia ? 'Get premium · ₹299 →' : 'Get premium · $21 →'}
             </button>
           </div>
-          <div style={{ padding: '20px 24px' }}>
-            <a href="mailto:ask@learnor.ai" style={{ display: 'inline-block', background: 'transparent', color: t.ink, border: `1px solid ${t.ink}`, padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>
-              Contact us →
-            </a>
+          <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.1em' }}>
+            Team plan? <a href="mailto:ask@learnor.ai" style={{ color: t.ink, textDecoration: 'none', borderBottom: `1px solid ${t.ruleFaint}` }}>Contact us →</a>
           </div>
         </div>
-      </div>
-      </div>
+      ) : (
+        /* Desktop: full comparison table */
+        <div style={{ border: `1.5px solid ${t.ink}`, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: `1.5px solid ${t.ink}` }}>
+            <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }} />
+            <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }}>
+              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute }}>Free</div>
+              <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>₹0</div>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>forever</div>
+            </div>
+            <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper, position: 'relative' }}>
+              <div style={{ position: 'absolute', top: -1, left: 0, right: 0, height: 3, background: t.red }} />
+              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red }}>Premium</div>
+              <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>{isIndia ? '₹299' : '$21'}</div>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>/ month</div>
+            </div>
+            <div style={{ padding: '20px 24px' }}>
+              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute }}>Team</div>
+              <div style={{ fontFamily: SERIF, fontSize: 28, color: t.ink, marginTop: 8, letterSpacing: '-0.02em', fontStyle: 'italic' }}>Let's talk.</div>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>custom pricing</div>
+            </div>
+          </div>
+          {PRICING_ROWS.map((row, i) => (
+            <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: i < PRICING_ROWS.length - 1 ? `1px solid ${t.ruleFaint}` : 'none' }}>
+              <div style={{ padding: '16px 24px', borderRight: `1px solid ${t.ruleFaint}`, fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.mute, display: 'flex', alignItems: 'center' }}>{row.label}</div>
+              <div style={{ padding: '16px 24px', borderRight: `1px solid ${t.ruleFaint}`, display: 'flex', alignItems: 'center' }}>{cell(row.free)}</div>
+              <div style={{ padding: '16px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper, display: 'flex', alignItems: 'center' }}>{cell(row.premium, true)}</div>
+              <div style={{ padding: '16px 24px', display: 'flex', alignItems: 'center' }}><span style={{ color: t.green, fontSize: 14 }}>✓</span></div>
+            </div>
+          ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderTop: `1.5px solid ${t.ink}` }}>
+            <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }} />
+            <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }}>
+              <button onClick={() => onNav('home')} style={{ background: 'transparent', color: t.ink, border: `1px solid ${t.ink}`, padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>Start free →</button>
+            </div>
+            <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper }}>
+              <button onClick={() => onNav('premium')} style={{ background: t.ink, color: t.bg, border: 'none', padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
+                {isIndia ? 'Get premium · ₹299 →' : 'Get premium · $21 →'}
+              </button>
+            </div>
+            <div style={{ padding: '20px 24px' }}>
+              <a href="mailto:ask@learnor.ai" style={{ display: 'inline-block', background: 'transparent', color: t.ink, border: `1px solid ${t.ink}`, padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>Contact us →</a>
+            </div>
+          </div>
+        </div>
+      )}
     </Wrap>
   );
 }
@@ -1436,35 +1465,52 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
     ['Legal', [['#', 'Terms'], ['#', 'Privacy'], ['#', 'Security'], ['#', 'Contact']]],
   ];
   return (
-    <footer style={{ background: t.paper, borderTop: `1px solid ${t.ink}`, padding: '64px 32px 32px' }}>
+    <footer style={{ background: t.paper, borderTop: `1px solid ${t.ink}`, padding: mob ? '40px 20px 24px' : '64px 32px 32px' }}>
       <div style={{ maxWidth: 1240, margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : '1.5fr 1fr 1fr 1fr 1fr', gap: mob ? 24 : 32, paddingBottom: 40, borderBottom: `1px solid ${t.ruleFaint}` }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 10, height: 10, background: t.red, display: 'inline-block', borderRadius: 999, transform: 'translateY(-4px)' }} />
-              <b style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
+        {/* Wordmark row — full width on mobile */}
+        <div style={{ marginBottom: mob ? 28 : 0, paddingBottom: mob ? 28 : 0, borderBottom: mob ? `1px solid ${t.ruleFaint}` : 'none' }}>
+          {mob && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 8, height: 8, background: t.red, display: 'inline-block', borderRadius: 999, transform: 'translateY(-3px)' }} />
+                <b style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
+              </div>
+              <p style={{ fontFamily: SERIF, fontSize: 16, lineHeight: 1.4, color: t.mute, marginTop: 10, marginBottom: 0 }}>
+                A learning platform with stakes. Commit to a deadline. Miss it? Recommit.
+              </p>
+            </>
+          )}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : '1.5fr 1fr 1fr 1fr 1fr', gap: mob ? 28 : 32, paddingBottom: 40, borderBottom: `1px solid ${t.ruleFaint}` }}>
+          {!mob && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 10, height: 10, background: t.red, display: 'inline-block', borderRadius: 999, transform: 'translateY(-4px)' }} />
+                <b style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
+              </div>
+              <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
+                A learning platform with stakes. Commit to a deadline. Miss it? Recommit.
+              </p>
+              <div style={{ marginTop: 20, padding: '10px 14px', border: `1px solid ${t.ink}`, display: 'inline-flex', gap: 16, alignItems: 'center', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                <span style={{ color: t.green }}>● {finishers} finished</span>
+                <span style={{ color: t.mute }}>·</span>
+                <span style={{ color: t.amber }}>↺ {recommitted.toLocaleString()} recommitted</span>
+              </div>
             </div>
-            <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
-              A learning platform with stakes. Commit to a deadline. Miss it? Recommit.
-            </p>
-            <div style={{ marginTop: 20, padding: '10px 14px', border: `1px solid ${t.ink}`, display: 'inline-flex', gap: 16, alignItems: 'center', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-              <span style={{ color: t.green }}>● {finishers} finished</span>
-              <span style={{ color: t.mute }}>·</span>
-              <span style={{ color: t.amber }}>↺ {recommitted.toLocaleString()} recommitted</span>
-            </div>
-          </div>
+          )}
           {footerLinks.map(([heading, links]) => (
             <div key={heading}>
-              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute, marginBottom: 14 }}>{heading}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute, marginBottom: 12 }}>{heading}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: mob ? 10 : 8 }}>
                 {links.map(([k, l]) => (
-                  <a key={l} href={`#${k}`} onClick={(e) => { e.preventDefault(); if (k !== '#') onNav(k); }} style={{ fontFamily: SERIF, fontSize: 16, color: t.ink, textDecoration: 'none', cursor: 'pointer' }}>{l}</a>
+                  <a key={l} href={`#${k}`} onClick={(e) => { e.preventDefault(); if (k !== '#') onNav(k); }} style={{ fontFamily: SERIF, fontSize: mob ? 15 : 16, color: t.ink, textDecoration: 'none', cursor: 'pointer' }}>{l}</a>
                 ))}
               </div>
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute }}>
+        <div style={{ display: 'flex', flexDirection: mob ? 'column' : 'row', justifyContent: 'space-between', alignItems: mob ? 'flex-start' : 'center', gap: mob ? 4 : 0, marginTop: 24, fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute }}>
           <span>© 2026 LEARNOR · no progress is permanently lost</span>
           <span>made with stakes</span>
         </div>
