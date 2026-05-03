@@ -188,6 +188,12 @@ export default function Notes() {
   const contentRef = useRef<HTMLDivElement>(null);
 
   const course = state.courses.find((c) => c.id === courseId);
+  const isPremium = state.profile?.plan === 'premium';
+
+  if (!isPremium) {
+    navigate('/settings', { replace: true });
+    return null;
+  }
 
   const vars = {
     '--n-bg':     dark ? '#050505' : '#f4f0e8',

@@ -1136,6 +1136,7 @@ function CurriculumDrawer({
   onSelectLesson,
   notesOpen,
   setNotesOpen,
+  isPremium,
 }: {
   course: Course;
   open: boolean;
@@ -1143,6 +1144,7 @@ function CurriculumDrawer({
   onSelectLesson: (moduleIndex: number, lessonIndex: number) => void;
   notesOpen: number | null;
   setNotesOpen: React.Dispatch<React.SetStateAction<number | null>>;
+  isPremium: boolean;
 }) {
   if (!open) return null;
 
@@ -1220,7 +1222,7 @@ function CurriculumDrawer({
                         <div style={{ textDecoration: isDone ? 'line-through' : 'none' }}>{l.title}</div>
                         <div style={{ fontSize: 12, lineHeight: 1.45, color: HC.mute, marginTop: 3 }}>{l.objective}</div>
                       </div>
-                      {hasNotes && isDone && (
+                      {hasNotes && isDone && isPremium && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1232,7 +1234,7 @@ function CurriculumDrawer({
                         </button>
                       )}
                     </div>
-                    {isOpen && l.notes && (
+                    {isOpen && l.notes && isPremium && (
                       <div style={{ marginLeft: 18, marginTop: 8, padding: '8px 10px', background: HC.paper, border: `1px solid ${HC.ruleFaint}`, fontSize: 11 }}>
                         {renderMarkdown(l.notes)}
                       </div>
@@ -1894,6 +1896,7 @@ function LearnContent({ course }: { course: Course }) {
         onSelectLesson={handleSelectLesson}
         notesOpen={notesOpen}
         setNotesOpen={setNotesOpen}
+        isPremium={isPremium}
       />
 
       <div style={{ height: '100%', display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'minmax(440px, 38vw) minmax(0, 1fr)', overflow: 'hidden' }}>
