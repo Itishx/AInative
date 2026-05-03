@@ -2177,7 +2177,7 @@ app.post('/api/create-checkout', async (req, res) => {
   if (!userId) return res.status(400).json({ error: 'userId required' });
   try {
     const checkout = await polar.checkouts.create({
-      productId: POLAR_PRODUCT_ID,
+      products: [POLAR_PRODUCT_ID],
       customerEmail: userEmail || undefined,
       successUrl: successUrl || 'https://www.learnor.io/settings?upgraded=1',
       metadata: { userId },
