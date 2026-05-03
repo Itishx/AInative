@@ -35,7 +35,7 @@ const HERO_PLACEHOLDER_PHRASES = [
   'Get fluent in spoken French',
 ];
 
-const ThemeCtx = createContext<{ t: T; dark: boolean }>({ t: LIGHT, dark: false });
+const ThemeCtx = createContext<{ t: T; dark: boolean; mob: boolean }>({ t: LIGHT, dark: false, mob: false });
 const useTheme = () => useContext(ThemeCtx);
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
@@ -51,10 +51,11 @@ function Kicker({ children, color }: { children: React.ReactNode; color?: string
 function Wrap({ id, children, bg, pad = '96px 32px', borderTop, borderBottom }: {
   id?: string; children: React.ReactNode; bg?: string; pad?: string; borderTop?: boolean; borderBottom?: boolean;
 }) {
-  const { t } = useTheme();
+  const { t, mob } = useTheme();
+  const mobilePad = pad.replace(/(\d+)px (\d+)px/, (_, v, h) => `${Math.round(parseInt(v) * 0.5)}px ${mob ? '20px' : h + 'px'}`);
   return (
     <section id={id} style={{
-      background: bg ?? t.bg, padding: pad,
+      background: bg ?? t.bg, padding: mob ? mobilePad : pad,
       borderTop: borderTop ? `1px solid ${t.ruleFaint}` : undefined,
       borderBottom: borderBottom ? `1px solid ${t.ruleFaint}` : undefined,
     }}>
@@ -67,12 +68,28 @@ function Wrap({ id, children, bg, pad = '96px 32px', borderTop, borderBottom }: 
 function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark, onNav, onToggleSaas }: {
   active: string; dark: boolean; loggedIn: boolean; avatarUrl?: string; profileLabel: string; onToggleDark: () => void; onNav: (id: string) => void;
 }) {
-  const { t } = useTheme();
+  const { t, mob } = useTheme();
   const items: [string, string][] = [
     ['how', 'How it works'], ['features', 'Features'],
     ['leaderboard', 'Leaderboard'], /* ['instructors', 'Teach here'], */
     ['pricing', 'Pricing'], ['browse', 'Browse'], ['faq', 'FAQ'],
   ];
+
+  if (mob) return (
+    <nav style={{ position: 'sticky', top: 0, zIndex: 50, padding: '12px 16px', background: t.bg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: `1px solid ${t.ruleFaint}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <a href="#home" onClick={(e) => { e.preventDefault(); onNav('home'); }} style={{ textDecoration: 'none' }}>
+        <b style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
+      </a>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <button onClick={onToggleDark} style={{ width: 36, height: 36, border: `1px solid ${t.ruleFaint}`, borderRadius: 999, background: 'none', color: t.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>{dark ? '☀' : '☾'}</button>
+        {loggedIn
+          ? <a href="#dashboard" onClick={(e) => { e.preventDefault(); onNav('dashboard'); }} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.ink, textDecoration: 'none', padding: '9px 12px', border: `1px solid ${t.ruleFaint}`, borderRadius: 999 }}>Dashboard</a>
+          : <button onClick={() => onNav('dashboard')} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.bg, background: t.ink, border: 'none', padding: '9px 14px', borderRadius: 999, cursor: 'pointer' }}>Sign in</button>
+        }
+      </div>
+    </nav>
+  );
+
   return (
     <nav style={{
       position: 'sticky', top: 0, zIndex: 50,
@@ -215,7 +232,7 @@ function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark
 // ── Hero ──────────────────────────────────────────────────────────────────────
 
 function HeroSection({ onNav }: { onNav: (k: string) => void }) {
-  const { t, dark } = useTheme();
+  const { t, dark, mob } = useTheme();
   const { state } = useStore();
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
@@ -273,7 +290,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
   }
 
   return (
-    <section id="home" style={{ background: t.bg, padding: '100px 24px 120px', textAlign: 'center' }}>
+    <section id="home" style={{ background: t.bg, padding: mob ? '60px 20px 72px' : '100px 24px 120px', textAlign: 'center' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
 
         {/* Kicker */}
@@ -527,7 +544,7 @@ function TickerStrip() {
 
 // ── Comparison strip ─────────────────────────────────────────────────────────
 function ComparisonSection() {
-  const { t } = useTheme();
+  const { t, mob } = useTheme();
   const rows = [
     { source: 'YouTube', verdict: 'You watch. You forget.' },
     { source: 'A textbook', verdict: 'You read. You zone out.' },
@@ -543,7 +560,7 @@ function ComparisonSection() {
         <div style={{ borderTop: `2px solid ${t.ink}` }}>
           {rows.map((row) => (
             <div key={row.source} style={{
-              display: 'grid', gridTemplateColumns: '200px 1fr', gap: 32,
+              display: 'grid', gridTemplateColumns: mob ? '1fr' : '200px 1fr', gap: mob ? 4 : 32,
               padding: '22px 0', borderBottom: `1px solid ${t.ruleFaint}`, alignItems: 'baseline',
             }}>
               <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: row.highlight ? t.red : t.mute }}>
@@ -644,7 +661,7 @@ function CountdownIllustration() {
 }
 
 function HowSection() {
-  const { t } = useTheme();
+  const { t, mob } = useTheme();
   const steps = [
     {
       n: '01', kicker: 'Step one', title: 'Say it out loud.',
@@ -674,14 +691,14 @@ function HowSection() {
       </div>
       <div style={{ borderTop: `2px solid ${t.ink}` }}>
         {steps.map((s) => (
-          <div key={s.n} style={{ display: 'grid', gridTemplateColumns: '96px 0.9fr 1.1fr', borderBottom: `1px solid ${t.ruleFaint}`, padding: '34px 0', gap: 40, alignItems: 'start' }}>
-            <div style={{ fontFamily: SERIF, fontSize: 70, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', fontStyle: 'italic' }}>{s.n}</div>
-            <div>
+          <div key={s.n} style={{ display: 'grid', gridTemplateColumns: mob ? '48px 1fr' : '96px 0.9fr 1.1fr', borderBottom: `1px solid ${t.ruleFaint}`, padding: mob ? '24px 0' : '34px 0', gap: mob ? 16 : 40, alignItems: 'start' }}>
+            <div style={{ fontFamily: SERIF, fontSize: mob ? 40 : 70, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', fontStyle: 'italic' }}>{s.n}</div>
+            <div style={{ gridColumn: mob ? undefined : undefined }}>
               <Kicker color={t.mute}>{s.kicker}</Kicker>
-              <h3 style={{ fontFamily: SERIF, fontSize: 38, margin: '10px 0 10px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1.05 }}>{s.title}</h3>
-              <p style={{ fontFamily: SERIF, fontSize: 18, lineHeight: 1.35, color: t.inkSoft, margin: 0 }}>{s.body}</p>
+              <h3 style={{ fontFamily: SERIF, fontSize: mob ? 26 : 38, margin: '10px 0 10px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1.05 }}>{s.title}</h3>
+              <p style={{ fontFamily: SERIF, fontSize: mob ? 16 : 18, lineHeight: 1.35, color: t.inkSoft, margin: 0 }}>{s.body}</p>
             </div>
-            <div>{s.art}</div>
+            {!mob && <div>{s.art}</div>}
           </div>
         ))}
       </div>
@@ -914,7 +931,7 @@ function QuizViz() {
 
 
 function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
-  const { t } = useTheme();
+  const { t, mob } = useTheme();
   const navigate = useNavigate();
   const trio = [
     { n: '02', title: 'Recommit.', body: 'Miss a deadline and set a new one. Progress saves. The clock restarts.', art: <TombstoneViz /> },
@@ -936,7 +953,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
         </p>
       </div>
       {/* Tutor feature */}
-      <div style={{ display: 'grid', gridTemplateColumns: '0.72fr 1.28fr', gap: 48, alignItems: 'start', marginBottom: 96 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '0.72fr 1.28fr', gap: mob ? 32 : 48, alignItems: 'start', marginBottom: mob ? 48 : 96 }}>
         <div>
           <Kicker color={t.mute}>Feature 01</Kicker>
           <h3 style={{ fontFamily: SERIF, fontSize: 54, margin: '12px 0 16px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1 }}>
@@ -955,7 +972,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
         <TutorMockup />
       </div>
       {/* Trio */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, borderTop: `2px solid ${t.ink}`, borderBottom: `1px solid ${t.ink}` }}>
+      <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : 'repeat(3, 1fr)', gap: 0, borderTop: `2px solid ${t.ink}`, borderBottom: `1px solid ${t.ink}` }}>
         {trio.map((f, i) => (
           <div key={f.n} style={{
             padding: '40px 32px',
@@ -1140,11 +1157,11 @@ function NotesPageMockup() {
 }
 
 function NotesSectionLanding({ onNav }: { onNav: (k: string) => void }) {
-  const { t } = useTheme();
+  const { t, mob } = useTheme();
   const navigate = useNavigate();
   return (
     <Wrap id="notes" bg={t.paper} pad="120px 32px" borderTop borderBottom>
-      <div style={{ display: 'grid', gridTemplateColumns: '0.72fr 1.28fr', gap: 48, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '0.72fr 1.28fr', gap: mob ? 32 : 48, alignItems: 'start' }}>
         {/* Left: copy */}
         <div>
           <Kicker>Built-in notes</Kicker>
@@ -1184,7 +1201,7 @@ const PRICING_ROWS: { label: string; free: string | boolean; premium: string | b
 ];
 
 function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndia: boolean }) {
-  const { t } = useTheme();
+  const { t, mob } = useTheme();
 
   function cell(val: string | boolean, accent?: boolean) {
     if (val === false) return <span style={{ color: t.mute, fontSize: 16 }}>—</span>;
@@ -1205,7 +1222,8 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
       </div>
 
       {/* Comparison table */}
-      <div style={{ border: `1.5px solid ${t.ink}`, overflow: 'hidden' }}>
+      <div style={{ overflowX: mob ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+      <div style={{ border: `1.5px solid ${t.ink}`, overflow: 'hidden', minWidth: mob ? 560 : undefined }}>
         {/* Header */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', borderBottom: `1.5px solid ${t.ink}` }}>
           <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}` }} />
@@ -1257,6 +1275,7 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
           </div>
         </div>
       </div>
+      </div>
     </Wrap>
   );
 }
@@ -1270,11 +1289,11 @@ const FAQS: [string, string][] = [
 ];
 
 function FAQSection() {
-  const { t } = useTheme();
+  const { t, mob } = useTheme();
   return (
     <Wrap id="faq" pad="120px 32px">
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 56, alignItems: 'start' }}>
-        <div style={{ position: 'sticky', top: 88 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '300px 1fr', gap: mob ? 28 : 56, alignItems: 'start' }}>
+        <div style={{ position: mob ? 'static' : 'sticky', top: 88 }}>
           <Kicker>Questions</Kicker>
           <h2 style={{ fontFamily: SERIF, fontSize: 64, margin: '16px 0 20px', fontWeight: 400, letterSpacing: '-0.03em', color: t.ink, lineHeight: 0.95 }}>
             The only questions that matter.
@@ -1377,11 +1396,11 @@ function InstructorSection({ onNav }: { onNav: (k: string) => void }) {
 
 // ── Final CTA ─────────────────────────────────────────────────────────────────
 function FinalCTA({ onNav }: { onNav: (k: string) => void }) {
-  const { t, dark } = useTheme();
+  const { t, dark, mob } = useTheme();
   const mutedText = dark ? 'rgba(10,8,6,0.55)' : 'rgba(250,247,240,0.6)';
   const softText  = dark ? 'rgba(10,8,6,0.38)' : 'rgba(250,247,240,0.42)';
   return (
-    <section id="start" style={{ background: t.ink, padding: '140px 32px' }}>
+    <section id="start" style={{ background: t.ink, padding: mob ? '72px 20px' : '140px 32px' }}>
       <div style={{ textAlign: 'center', maxWidth: 1000, margin: '0 auto' }}>
         <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.2em', color: t.red, textTransform: 'uppercase' }}>
           One last thing
@@ -1406,7 +1425,7 @@ function FinalCTA({ onNav }: { onNav: (k: string) => void }) {
 
 // ── Footer ────────────────────────────────────────────────────────────────────
 function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
-  const { t } = useTheme();
+  const { t, mob } = useTheme();
   const { state } = useStore();
   const finishers = state.courses.filter((c) => c.status === 'completed').length;
   const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length;
@@ -1419,7 +1438,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
   return (
     <footer style={{ background: t.paper, borderTop: `1px solid ${t.ink}`, padding: '64px 32px 32px' }}>
       <div style={{ maxWidth: 1240, margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', gap: 32, paddingBottom: 40, borderBottom: `1px solid ${t.ruleFaint}` }}>
+        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : '1.5fr 1fr 1fr 1fr 1fr', gap: mob ? 24 : 32, paddingBottom: 40, borderBottom: `1px solid ${t.ruleFaint}` }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 10, height: 10, background: t.red, display: 'inline-block', borderRadius: 999, transform: 'translateY(-4px)' }} />
@@ -1465,6 +1484,13 @@ export default function Landing() {
   const { dark, toggle } = useAppTheme();
   const [active, setActive] = useState('home');
   const [isIndia, setIsIndia] = useState(false);
+  const [mob, setMob] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handler = () => setMob(window.innerWidth < 768);
+    window.addEventListener('resize', handler, { passive: true });
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   useEffect(() => {
     fetch('/api/geo').then(r => r.json()).then(({ country }) => {
@@ -1531,7 +1557,7 @@ export default function Landing() {
   const avatarUrl = state.profile?.avatarUrl?.trim();
 
   return (
-    <ThemeCtx.Provider value={{ t, dark }}>
+    <ThemeCtx.Provider value={{ t, dark, mob }}>
       <div style={{ minHeight: '100vh', background: t.bg, transition: 'background 0.3s' }}>
         <SiteNav active={active} dark={dark} loggedIn={!!user} avatarUrl={avatarUrl} profileLabel={profileLabel} onToggleDark={toggle} onNav={onNav} />
         <HeroSection onNav={onNav} />
