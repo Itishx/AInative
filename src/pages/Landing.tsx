@@ -48,16 +48,33 @@ function Kicker({ children, color }: { children: React.ReactNode; color?: string
   );
 }
 
+function useFadeIn() {
+  const ref = useRef<HTMLElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } }, { threshold: 0.08 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return { ref, visible };
+}
+
 function Wrap({ id, children, bg, pad = '96px 32px', borderTop, borderBottom }: {
   id?: string; children: React.ReactNode; bg?: string; pad?: string; borderTop?: boolean; borderBottom?: boolean;
 }) {
   const { t, mob } = useTheme();
+  const { ref, visible } = useFadeIn();
   const mobilePad = pad.replace(/(\d+)px (\d+)px/, (_, v, h) => `${Math.round(parseInt(v) * 0.5)}px ${mob ? '20px' : h + 'px'}`);
   return (
-    <section id={id} style={{
+    <section ref={ref as React.RefObject<HTMLElement>} id={id} style={{
       background: bg ?? t.bg, padding: mob ? mobilePad : pad,
       borderTop: borderTop ? `1px solid ${t.ruleFaint}` : undefined,
       borderBottom: borderBottom ? `1px solid ${t.ruleFaint}` : undefined,
+      opacity: mob ? (visible ? 1 : 0) : 1,
+      transform: mob ? (visible ? 'translateY(0)' : 'translateY(28px)') : 'none',
+      transition: mob ? 'opacity 0.55s ease, transform 0.55s ease' : 'none',
     }}>
       <div style={{ maxWidth: 1240, margin: '0 auto' }}>{children}</div>
     </section>
