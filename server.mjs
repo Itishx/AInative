@@ -5,7 +5,8 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
+import { Polar } from '@polar-sh/sdk';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'ainative-server-data') : path.join(__dirname, 'server-data');
@@ -755,6 +756,19 @@ const corsOptions = {
 const app = express();
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+
+// Raw body capture for Polar webhook signature verification
+app.use((req, _res, next) => {
+  if (req.path === '/api/polar-webhook') {
+    let raw = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => { raw += chunk; });
+    req.on('end', () => { req.rawBody = raw; next(); });
+  } else {
+    next();
+  }
+});
+
 app.use(express.json({ limit: '4mb' }));
 
 app.get('/api/health', (_, res) => res.json({
@@ -2115,6 +2129,110 @@ app.post('/api/enroll', (req, res) => {
   const updated = courses.map((c) => c.id === courseId ? { ...c, enrollCount: (c.enrollCount || 0) + 1 } : c);
   writeCourses(updated);
   res.json(found);
+});
+
+// ── Polar payments ────────────────────────────────────────────────────────────
+const POLAR_PRODUCT_ID  = process.env.POLAR_PRODUCT_ID  || '273eec79-b6ef-430c-bf19-f10e59ecd947';
+const POLAR_ACCESS_TOKEN = process.env.POLAR_ACCESS_TOKEN || 'polar_oat_Kbxzi2gj3znmDP3wytbo5T9MLlXI7c8QPmQHu4RxNTd';
+const POLAR_WEBHOOK_SECRET = process.env.POLAR_WEBHOOK_SECRET || 'polar_whs_Ec4u2UFpToS9evhNMfqcuufxrt8u7xNrT0tlq2IByDT';
+const SUPABASE_URL_ENV = process.env.SUPABASE_URL || 'https://nxxisxugpfswyvpchexs.supabase.co';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
+
+const polar = new Polar({ accessToken: POLAR_ACCESS_TOKEN });
+
+async function supabaseServiceUpdate(userId, patch) {
+  if (!SUPABASE_SERVICE_KEY) {
+    console.warn('[polar] SUPABASE_SERVICE_KEY not set — cannot update plan in DB');
+    return;
+  }
+  const res = await fetch(`${SUPABASE_URL_ENV}/rest/v1/user_courses?user_id=eq.${userId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    console.error('[polar] Supabase update failed:', txt);
+  }
+}
+
+// POST /api/create-checkout — creates a Polar checkout session
+app.post('/api/create-checkout', async (req, res) => {
+  const { userId, userEmail, successUrl } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  try {
+    const checkout = await polar.checkouts.create({
+      productId: POLAR_PRODUCT_ID,
+      customerEmail: userEmail || undefined,
+      successUrl: successUrl || 'https://a-inative.vercel.app/dashboard?upgraded=1',
+      metadata: { userId },
+    });
+    res.json({ checkoutUrl: checkout.url });
+  } catch (err) {
+    console.error('[polar] create-checkout error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/polar-webhook — handles Polar subscription lifecycle events
+app.post('/api/polar-webhook', async (req, res) => {
+  const signature = req.headers['webhook-signature'] || req.headers['x-polar-signature'] || '';
+  const rawBody = req.rawBody || '';
+
+  // Verify signature
+  try {
+    const [, sig] = signature.split(',').map(s => s.split('='));
+    const expected = createHmac('sha256', POLAR_WEBHOOK_SECRET).update(rawBody).digest('hex');
+    const expectedBuf = Buffer.from(expected, 'hex');
+    const sigBuf = Buffer.from(sig?.[1] || sig || '', 'hex');
+    if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+  } catch {
+    return res.status(401).json({ error: 'Signature verification failed' });
+  }
+
+  const event = JSON.parse(rawBody);
+  const { type, data } = event;
+  console.log('[polar] webhook event:', type);
+
+  const userId = data?.metadata?.userId || data?.subscription?.metadata?.userId;
+  if (!userId) {
+    console.warn('[polar] webhook: no userId in metadata, skipping DB update');
+    return res.json({ ok: true });
+  }
+
+  if (type === 'subscription.created' || type === 'subscription.updated') {
+    const isActive = data?.status === 'active' || data?.subscription?.status === 'active';
+    const plan = isActive ? 'premium' : 'free';
+    // Update profile.plan inside the user_courses JSONB profile column
+    await supabaseServiceUpdate(userId, { profile: { plan } });
+    console.log(`[polar] set userId=${userId} plan=${plan}`);
+  } else if (type === 'subscription.canceled' || type === 'subscription.revoked') {
+    await supabaseServiceUpdate(userId, { profile: { plan: 'free' } });
+    console.log(`[polar] revoked userId=${userId}`);
+  }
+
+  res.json({ ok: true });
+});
+
+// GET /api/plan — verify current plan from Polar directly
+app.get('/api/plan', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  // Check via Supabase — the webhook keeps it updated, so just read from there
+  if (!SUPABASE_SERVICE_KEY) return res.json({ plan: 'free' });
+  const r = await fetch(`${SUPABASE_URL_ENV}/rest/v1/user_courses?user_id=eq.${userId}&select=profile`, {
+    headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` },
+  });
+  const rows = await r.json();
+  const plan = rows?.[0]?.profile?.plan || 'free';
+  res.json({ plan });
 });
 
 const PORT = Number(process.env.PORT) || 3001;

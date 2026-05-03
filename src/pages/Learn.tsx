@@ -1997,7 +1997,7 @@ function LearnContent({ course }: { course: Course }) {
             {msgLimitReached && (
               <div style={{ marginBottom: 8, padding: '10px 14px', background: 'rgba(210,34,26,0.08)', border: '1px solid rgba(210,34,26,0.25)', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.red }}>25 messages used today — upgrade for unlimited</span>
-                <a href="/pricing" style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.ink, borderBottom: `1px solid ${theme.ink}`, textDecoration: 'none', whiteSpace: 'nowrap' }}>Get Premium →</a>
+                <a href="/settings" style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.ink, borderBottom: `1px solid ${theme.ink}`, textDecoration: 'none', whiteSpace: 'nowrap' }}>Get Premium →</a>
               </div>
             )}
             <div

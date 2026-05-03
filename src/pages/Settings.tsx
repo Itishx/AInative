@@ -408,31 +408,57 @@ function LineField({ label, children }: { label: string; children: React.ReactNo
 }
 
 // ── Billing Tab ────────────────────────────────────────────────────────────────
-const PLANS = [
-  {
-    name: 'Free trial',
-    price: '$0',
-    unit: 'one course',
-    features: ['1 course, up to 14 days', 'AI tutor', 'Leaderboard eligible', 'One emergency pause'],
-    current: true,
-  },
-  {
-    name: 'Finisher',
-    price: '$18',
-    unit: '/month',
-    features: ['Unlimited courses', '3 concurrent active', 'Priority AI tutor', 'Public profile', 'Export certificates'],
-    current: false,
-  },
-  {
-    name: 'Team',
-    price: '$12',
-    unit: '/seat · yearly',
-    features: ['Everything in Finisher', 'Cohort deadlines', 'Private leaderboards', 'Manager dashboard'],
-    current: false,
-  },
+const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) || 'http://localhost:3001';
+
+const FEATURE_ROWS = [
+  { label: 'Messages',         free: '25 / day',   premium: 'Unlimited' },
+  { label: 'Notes',            free: '—',          premium: '✓ Saved' },
+  { label: 'Import content',   free: '—',          premium: '✓ Anywhere' },
+  { label: 'PDF upload',       free: '—',          premium: '✓' },
+  { label: 'Courses & Quizzes',free: 'Basic',      premium: '✓ Unlimited' },
+  { label: 'Voice mode',       free: '—',          premium: '✓' },
 ];
 
 function BillingTab() {
+  const { state, dispatch } = useStore();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const isPremium = state.profile?.plan === 'premium';
+
+  async function handleUpgrade() {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/create-checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          userEmail: user.email,
+          successUrl: `${window.location.origin}/settings?upgraded=1`,
+        }),
+      });
+      const { checkoutUrl, error } = await res.json();
+      if (error) throw new Error(error);
+      window.location.href = checkoutUrl;
+    } catch (err) {
+      alert('Failed to start checkout. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // On mount, if ?upgraded=1 in URL, refresh plan from server
+  useState(() => {
+    if (!window.location.search.includes('upgraded=1') || !user?.id) return;
+    fetch(`${API_BASE}/api/plan?userId=${user.id}`)
+      .then(r => r.json())
+      .then(({ plan }) => {
+        if (plan === 'premium') dispatch({ type: 'SET_PROFILE', profile: { ...state.profile, plan: 'premium' } });
+      })
+      .catch(() => {});
+  });
+
   return (
     <>
       <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: S.red }}>
@@ -447,69 +473,59 @@ function BillingTab() {
         <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: S.mute, marginBottom: 16 }}>Current plan</div>
         <div style={{ padding: '24px 28px', border: `1px solid ${S.ink}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontFamily: SERIF, fontSize: 30, letterSpacing: '-0.03em', color: S.ink, lineHeight: 1 }}>Free trial</div>
-            <div style={{ marginTop: 8, fontFamily: MONO, fontSize: 10, color: S.mute, letterSpacing: '0.1em', textTransform: 'uppercase' }}>1 course · no card required</div>
+            <div style={{ fontFamily: SERIF, fontSize: 30, letterSpacing: '-0.03em', color: S.ink, lineHeight: 1 }}>
+              {isPremium ? 'Premium' : 'Free'}
+            </div>
+            <div style={{ marginTop: 8, fontFamily: MONO, fontSize: 10, color: S.mute, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              {isPremium ? 'Unlimited access · billed monthly' : '25 messages/day · basic features'}
+            </div>
           </div>
-          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: S.green, border: `1px solid ${S.green}`, padding: '6px 14px', flexShrink: 0 }}>
-            Active
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: S.green, border: `1px solid ${S.green}`, padding: '6px 14px', flexShrink: 0 }}>
+              Active
+            </div>
+            {isPremium && (
+              <a href="https://polar.sh/purchases" target="_blank" rel="noreferrer" style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: S.mute, textDecoration: 'none', borderBottom: `1px solid ${S.faint}`, paddingBottom: 1 }}>
+                Manage →
+              </a>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Plan comparison */}
-      <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: S.mute, marginBottom: 16 }}>Available plans</div>
-      <div style={{ display: 'grid', gap: 1, borderTop: `2px solid ${S.ink}` }}>
-        {PLANS.map((plan) => (
-          <div
-            key={plan.name}
-            style={{
-              display: 'grid', gridTemplateColumns: '1fr auto', gap: 24,
-              padding: '24px 0', borderBottom: `1px solid ${S.faint}`,
-              alignItems: 'center',
-              opacity: plan.current ? 1 : 0.65,
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-                <span style={{ fontFamily: SERIF, fontSize: 22, letterSpacing: '-0.02em', color: S.ink }}>{plan.name}</span>
-                <span style={{ fontFamily: MONO, fontSize: 13, color: S.ink }}>{plan.price}</span>
-                <span style={{ fontFamily: MONO, fontSize: 10, color: S.mute }}>{plan.unit}</span>
-                {plan.current && (
-                  <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: S.green, border: `1px solid ${S.green}`, padding: '3px 10px' }}>
-                    current
-                  </span>
-                )}
-              </div>
-              <div style={{ marginTop: 10, display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-                {plan.features.map((f) => (
-                  <span key={f} style={{ fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ color: S.red, fontSize: 10 }}>✓</span> {f}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <button
-              disabled
-              style={{
-                border: `1px solid ${plan.current ? S.faint : S.ink}`,
-                background: 'transparent',
-                color: plan.current ? S.mute : S.ink,
-                padding: '10px 20px',
-                fontFamily: MONO, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase',
-                cursor: plan.current ? 'default' : 'not-allowed',
-                flexShrink: 0,
-                opacity: plan.current ? 0.5 : 0.45,
-              }}
-            >
-              {plan.current ? 'Current' : 'Coming soon'}
-            </button>
+      {/* Feature table */}
+      <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: S.mute, marginBottom: 16 }}>What's included</div>
+      <div style={{ border: `1px solid ${S.faint}`, marginBottom: 36 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: `1px solid ${S.ink}` }}>
+          {['Feature', 'Free', 'Premium'].map((h) => (
+            <div key={h} style={{ padding: '10px 16px', fontFamily: MONO, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: S.mute, borderRight: h !== 'Premium' ? `1px solid ${S.faint}` : 'none' }}>{h}</div>
+          ))}
+        </div>
+        {FEATURE_ROWS.map((row, i) => (
+          <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: i < FEATURE_ROWS.length - 1 ? `1px solid ${S.faint}` : 'none' }}>
+            <div style={{ padding: '12px 16px', fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', color: S.mute, borderRight: `1px solid ${S.faint}`, textTransform: 'uppercase' }}>{row.label}</div>
+            <div style={{ padding: '12px 16px', fontFamily: MONO, fontSize: 10, color: S.mute, borderRight: `1px solid ${S.faint}` }}>{row.free}</div>
+            <div style={{ padding: '12px 16px', fontFamily: MONO, fontSize: 10, color: S.green }}>{row.premium}</div>
           </div>
         ))}
       </div>
 
-      <p style={{ marginTop: 36, fontFamily: SERIF, fontStyle: 'italic', fontSize: 16, color: S.mute, lineHeight: 1.6, maxWidth: 440 }}>
-        Paid plans are coming. When they launch you'll be notified here. For now, the first course is always free.
-      </p>
+      {!isPremium && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+          <button
+            onClick={handleUpgrade}
+            disabled={loading}
+            style={{ background: S.ink, color: S.bg, border: 'none', padding: '14px 28px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.6 : 1 }}
+          >
+            {loading ? 'Redirecting…' : 'Upgrade to Premium →'}
+          </button>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.08em' }}>₹299 / month · $21 / month · cancel anytime</div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 36, fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.1em', lineHeight: 1.7 }}>
+        Team plan? <a href="mailto:ask@learnor.ai" style={{ color: S.ink, textDecoration: 'none', borderBottom: `1px solid ${S.faint}` }}>Contact us →</a>
+      </div>
     </>
   );
 }
