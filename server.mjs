@@ -1660,7 +1660,7 @@ ${materialsSection}${planSection}${alreadyCoveredSection}`;
 
 // ── Generate lesson notes ────────────────────────────────────────────────────
 app.post('/api/notes', async (req, res) => {
-  const { courseTitle, moduleTitle, lessonTitle, lessonObjective, lessonDescription, lessonFacts, chatHistory } = req.body;
+  const { courseTitle, moduleTitle, lessonTitle, lessonObjective, lessonDescription, lessonFacts, chatHistory, premium } = req.body;
 
   try {
     const tutorLines = (chatHistory || [])
@@ -1668,54 +1668,74 @@ app.post('/api/notes', async (req, res) => {
       .map((m) => m.text)
       .join('\n\n');
 
-    const studentLines = (chatHistory || [])
-      .filter((m) => m.who === 'user')
-      .map((m) => m.text)
-      .join('\n');
-
     const metaBlock = [
       lessonObjective ? `Lesson objective: ${lessonObjective}` : '',
       lessonDescription ? `Concept description: ${lessonDescription}` : '',
-      lessonFacts?.length ? `Verified facts:\n${lessonFacts.map(f => `- ${f}`).join('\n')}` : '',
+      lessonFacts?.length ? `Key facts:\n${lessonFacts.map(f => `- ${f}`).join('\n')}` : '',
     ].filter(Boolean).join('\n');
 
-    const text = await callGemini(
-      `You are a world-class study note writer. You write notes that are thorough, memorable, and genuinely useful for revision — not summaries, but reference material a student will return to days later and immediately understand.`,
-      [{
-        role: 'user',
-        content: [{ type: 'text', text: `Write comprehensive study notes for the lesson below. These notes will be the student's permanent reference — make them detailed enough to be useful without the original conversation.
+    const systemPrompt = premium
+      ? `You are a world-class study note writer. You write notes that are thorough, memorable, and genuinely useful for revision — not summaries, but reference material a student will return to days later and immediately understand.`
+      : `You are a study note writer. Write clear, concise notes covering only what was taught.`;
+
+    const userPrompt = premium
+      ? `Write comprehensive study notes for the lesson below. These notes will be the student's permanent reference — make them detailed enough to be useful without the original conversation.
 
 LESSON: "${lessonTitle}"
 MODULE: "${moduleTitle}"
 COURSE: "${courseTitle}"
 ${metaBlock ? `\n${metaBlock}\n` : ''}
 ${tutorLines ? `WHAT WAS TAUGHT (tutor explanation):\n${tutorLines}\n` : ''}
-${studentLines ? `WHAT THE STUDENT ASKED:\n${studentLines}\n` : ''}
 
 Write the notes in this exact markdown structure:
 
 ## Definition
-One or two precise sentences defining the core concept. Use plain language. Avoid vague words like "important" or "useful".
+One or two precise sentences defining the core concept. Plain language only.
 
 ## Core concepts
-6–10 bullet points. Each bullet should be a standalone, memorable fact or rule. Include specific details, numbers, and edge cases where relevant. Write as if the student needs to remember each point independently.
+6–10 bullet points. Each bullet is a standalone, memorable fact or rule. Include specific details, numbers, and edge cases.
 
 ## How it works
-2–4 paragraphs explaining the mechanism, process, or logic behind the concept. Go deeper than the bullets — explain the *why*, not just the *what*. Include cause and effect. If it's procedural, explain the steps and what happens at each step.
+2–4 paragraphs explaining the mechanism, process, or logic. Explain the *why*, not just the *what*. Include cause and effect.
 
 ## Example
-A concrete, realistic worked example. For code: include a real snippet with a brief explanation of each key line. For a process: walk through a real scenario step by step. For a concept: show it applied to something tangible.
+A concrete, realistic worked example. For code: include a real snippet with explanation. For a process: walk through a real scenario step by step.
 
 ## Common mistakes
-4–6 bullet points describing specific mistakes students make, with a brief explanation of *why* it's wrong and what to do instead. Be precise — name the exact mistake, not just "forgetting to X".
+4–6 bullet points. Name the exact mistake, why it's wrong, and what to do instead.
 
 ## Mental model
-One or two sentences giving a memorable analogy or mental shortcut for this concept. Should be something the student can recall in 3 seconds to orient themselves.
+One or two sentences — a memorable analogy or shortcut the student can recall in 3 seconds.
 
-Be thorough. These notes should be the single best reference the student has for this lesson.` }],
-      }],
-      4000,
-    );
+Be thorough. These are premium notes.`
+      : `Write short study notes covering ONLY what was taught in this lesson. Keep it concise.
+
+LESSON: "${lessonTitle}"
+MODULE: "${moduleTitle}"
+COURSE: "${courseTitle}"
+${metaBlock ? `\n${metaBlock}\n` : ''}
+${tutorLines ? `WHAT WAS TAUGHT:\n${tutorLines}\n` : ''}
+
+Write in this structure:
+
+## Key points
+3–5 bullet points. Only facts that were actually taught. One sentence each.
+
+## Summary
+2–3 sentences summarising the lesson in plain language.
+
+## Quick example
+One short example illustrating the main concept.
+
+Keep it brief — this is a quick reference, not a full breakdown.`;
+
+    const maxTokens = premium ? 4000 : 1200;
+
+    const text = await callGemini(systemPrompt, [{
+      role: 'user',
+      content: [{ type: 'text', text: userPrompt }],
+    }], maxTokens);
+
     res.json({ notes: text });
   } catch (err) {
     console.error('[notes]', err.message);
@@ -1821,6 +1841,143 @@ Return ONLY valid JSON:
     res.json(JSON.parse(text.trim().replace(/^```json\n?|```$/g, '')));
   } catch (err) {
     console.error('[grade]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Hands-on mode: generate 5 open-ended questions ───────────────────────────
+const CODING_TOPICS = /\b(sql|query|queries|join|select|python|javascript|typescript|java|c\+\+|golang|rust|code|coding|programming|function|algorithm|data structure|api|react|html|css|bash|shell|regex|database|schema|orm|git|docker|kubernetes|recursion|sorting|linked list|tree|graph|dynamic programming)\b/i;
+
+app.post('/api/handson', async (req, res) => {
+  const { courseTitle, moduleTitle, lessonTitle, chatHistory } = req.body;
+  const taughtContent = (chatHistory || [])
+    .filter((m) => m.who === 'tutor')
+    .map((m) => m.text)
+    .join('\n\n');
+
+  const isCoding = CODING_TOPICS.test(`${courseTitle} ${moduleTitle} ${lessonTitle}`);
+
+  try {
+    const text = await callGemini(
+      'You are a practice question writer. Respond ONLY with valid JSON, no markdown fences.',
+      [{
+        role: 'user',
+        content: [{ type: 'text', text: `Generate exactly 5 hands-on practice questions for lesson "${lessonTitle}" (module "${moduleTitle}", course "${courseTitle}").
+
+${taughtContent
+  ? `====== WHAT WAS TAUGHT ======\n${taughtContent.slice(0, 3000)}\n============================\n\nAll questions MUST be based on what was actually taught above.`
+  : `Base questions on what a student would have learned in "${lessonTitle}".`}
+
+${isCoding ? `THIS IS A CODING LESSON. Rules:
+- At least 3 of the 5 must be write-the-code problems with a specific scenario.
+- Example: "Write a SQL query that returns all customers from the 'customers' table sorted by signup date descending."
+- 1-2 can be conceptual (explain X, difference between X and Y).
+- Base problems only on syntax/concepts that were actually taught.
+- Vary difficulty: 2 easy, 2 medium, 1 hard.
+- Keep each question SHORT — one sentence max.` : `Rules:
+- Free-text answers only (not MCQ).
+- Vary difficulty: 2 easy, 2 application, 1 synthesis.
+- One sentence per question.`}
+
+IMPORTANT: Keep each question under 25 words. Return ONLY this JSON with no extra text:
+{"questions": ["q1", "q2", "q3", "q4", "q5"]}` }],
+      }],
+      2500,
+    );
+    const clean = text.replace(/```json[\s\S]*?```|```/g, '').trim();
+    let parsed;
+    try {
+      parsed = JSON.parse(clean);
+    } catch {
+      // Try to extract the array from partial JSON
+      const match = clean.match(/"questions"\s*:\s*(\[[\s\S]*)/);
+      if (match) {
+        const raw = match[1];
+        // Close the array if truncated
+        const closed = raw.replace(/,?\s*"[^"]*$/, '').replace(/,\s*$/, '') + (raw.trimEnd().endsWith(']') ? '' : ']');
+        parsed = { questions: JSON.parse(`{"questions":${closed}}`).questions };
+      } else {
+        throw new Error('Could not parse questions from response');
+      }
+    }
+    if (!Array.isArray(parsed.questions) || parsed.questions.length === 0) throw new Error('No questions returned');
+    res.json({ questions: parsed.questions.slice(0, 5), isCoding });
+  } catch (err) {
+    console.error('[handson]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Hands-on mode: check a single typed answer ───────────────────────────────
+app.post('/api/handson-check', async (req, res) => {
+  const { question, userAnswer, courseTitle, lessonTitle, isCoding } = req.body;
+  try {
+    const text = await callGemini(
+      'You are a tutor checking a student\'s answer. Be encouraging but precise. Respond ONLY with valid JSON, no markdown fences.',
+      [{
+        role: 'user',
+        content: [{ type: 'text', text: `Course: "${courseTitle}" · Lesson: "${lessonTitle}"
+
+Question: ${question}
+
+Student's answer:
+${userAnswer}
+
+${isCoding ? `This is a coding/query question. Evaluate:
+- Is the logic correct? Would it produce the right result?
+- Is the syntax valid for the language/query language being used?
+- Are there edge cases or improvements worth mentioning?
+- Give a correct model answer as actual code/query in your betterAnswer field.` : `Evaluate whether the student demonstrates genuine understanding of the concept.`}
+
+Return ONLY valid JSON (no markdown fences):
+{
+  "score": <0-100>,
+  "correct": <true if score >= 65>,
+  "whatWasRight": "What the student got right (1-2 sentences)",
+  "whatWasMissing": "What was wrong or missing, if anything (1-2 sentences, or empty string if nothing)",
+  "betterAnswer": "${isCoding ? 'The correct solution as actual code/query, with a brief explanation' : 'A model answer in 2-4 sentences'}"
+}` }],
+      }],
+      800,
+    );
+    const clean = text.replace(/```json\n?|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    res.json(parsed);
+  } catch (err) {
+    console.error('[handson-check]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Hands-on mode: hint for a single question ────────────────────────────────
+app.post('/api/handson-hint', async (req, res) => {
+  const { question, courseTitle, lessonTitle, isCoding } = req.body;
+  try {
+    const hint = await callGemini(
+      'You are a tutor giving a genuinely useful hint. Be specific and direct — this is not a riddle, it is help.',
+      [{
+        role: 'user',
+        content: [{ type: 'text', text: `Course: "${courseTitle}" · Lesson: "${lessonTitle}"
+
+Question: ${question}
+
+Write a hint that is specific and actionable — 2-4 sentences. The hint should:
+${isCoding
+  ? `- Name the exact SQL clause, keyword, or function they need (e.g. "You'll need a JOIN here — specifically think about which table is the 'left' side and which columns to match on.")
+- Describe the structure or shape of the answer without writing the full query
+- Mention any common mistake to avoid for this type of problem`
+  : `- Name the specific concept, term, or mechanism they need to recall
+- Give a concrete clue about how to frame the answer (e.g. "Think about what happens BEFORE step X, not after")
+- If there's an analogy or example that makes it click, use it`}
+
+Do NOT just restate the question. Do NOT say "think about" without saying what to think about. Be useful.
+Reply with ONLY the hint text, no labels, no JSON.` }],
+      }],
+      400,
+    );
+    res.json({ hint: hint.trim() });
+  } catch (err) {
+    console.error('[handson-hint]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

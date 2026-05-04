@@ -178,7 +178,7 @@ function renderMarkdown(text: string, theme: Colors, dark = false) {
       continue;
     }
 
-    if (trimmed.startsWith('- ')) {
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
       rendered.push(<div key={`bullet-${i}`} style={{ display: 'flex', gap: 10, marginBottom: 8, color: theme.ink }}><span style={{ color: theme.red, fontFamily: HC.mono, fontSize: 14 }}>·</span><span style={{ fontSize: 17, lineHeight: 1.72 }}>{renderInlineFormatting(trimmed.slice(2))}</span></div>);
       continue;
     }
@@ -228,7 +228,143 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
   const [results, setResults] = useState<Array<GradeResult | null>>([]);
   const [overallPreferredMet, setOverallPreferredMet] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'notes' | 'quiz'>(lesson.notes ? 'notes' : 'quiz');
+  const [activeTab, setActiveTab] = useState<'notes' | 'quiz' | 'handson'>('notes');
+  const [generatingNotes, setGeneratingNotes] = useState(false);
+  const [notesGenError, setNotesGenError] = useState('');
+
+  useEffect(() => {
+    if (!lesson.notes && !generatingNotes) handleGenerateNotes();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleGenerateNotes() {
+    setGeneratingNotes(true);
+    setNotesGenError('');
+    try {
+      const lessonChatHistory = course.lessonChats?.[lessonKey] ?? [];
+      const isLastLessonOfModule = li === mod.lessons.length - 1;
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseTitle: course.subject,
+          moduleTitle: mod.title,
+          lessonTitle: isLastLessonOfModule ? `Full module: ${mod.title}` : lesson.title,
+          lessonObjective: lesson.objective,
+          lessonDescription: (lesson as any).description,
+          lessonFacts: (lesson as any).facts,
+          chatHistory: lessonChatHistory,
+          premium: isPremium,
+        }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      dispatch({ type: 'SAVE_LESSON_NOTES', id: courseId, moduleIndex: mi, lessonIndex: li, notes: data.notes });
+      if (isLastLessonOfModule) {
+        dispatch({ type: 'SAVE_MODULE_NOTES', id: courseId, moduleIndex: mi, notes: data.notes });
+      }
+    } catch (e) {
+      setNotesGenError((e as Error).message);
+    } finally {
+      setGeneratingNotes(false);
+    }
+  }
+
+  const isPremium = state.profile?.plan === 'premium';
+  const [hoQuestions, setHoQuestions] = useState<string[]>([]);
+  const [hoAnswers, setHoAnswers] = useState<string[]>([]);
+  const [hoResults, setHoResults] = useState<Array<{ score: number; correct: boolean; whatWasRight: string; whatWasMissing: string; betterAnswer: string } | null>>([]);
+  const [hoLoading, setHoLoading] = useState(false);
+  const [hoChecking, setHoChecking] = useState<number | null>(null);
+  const [hoHintLoading, setHoHintLoading] = useState<number | null>(null);
+  const [hoHints, setHoHints] = useState<(string | null)[]>([]);
+  const [hoHintError, setHoHintError] = useState('');
+  const [hoIsCoding, setHoIsCoding] = useState(false);
+  const [hoError, setHoError] = useState('');
+
+  async function handleGetHint(idx: number) {
+    if (hoHintLoading !== null) return;
+    setHoHintLoading(idx);
+    setHoHintError('');
+    try {
+      const res = await fetch('/api/handson-hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: hoQuestions[idx],
+          courseTitle: course.subject,
+          lessonTitle: lesson.title,
+          isCoding: hoIsCoding,
+        }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status} — try restarting the server`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setHoHints((prev) => { const n = [...prev]; n[idx] = data.hint; return n; });
+    } catch (e) {
+      setHoHintError((e as Error).message);
+    } finally {
+      setHoHintLoading(null);
+    }
+  }
+
+  async function handleGenerateHo() {
+    setHoLoading(true);
+    setHoError('');
+    setHoQuestions([]);
+    setHoAnswers([]);
+    setHoResults([]);
+    setHoHints([]);
+    try {
+      const res = await fetch('/api/handson', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseTitle: course.subject,
+          moduleTitle: mod.title,
+          lessonTitle: lesson.title,
+          chatHistory: course.lessonChats?.[lessonKey] ?? [],
+        }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status} — restart the server to pick up new endpoints`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (!Array.isArray(data.questions) || data.questions.length === 0) throw new Error('No questions returned from API');
+      setHoQuestions(data.questions);
+      setHoAnswers(data.questions.map(() => ''));
+      setHoResults(data.questions.map(() => null));
+      setHoHints(data.questions.map(() => null));
+      setHoIsCoding(!!data.isCoding);
+    } catch (e) {
+      setHoError((e as Error).message);
+    } finally {
+      setHoLoading(false);
+    }
+  }
+
+  async function handleCheckHo(idx: number) {
+    if (hoChecking !== null) return;
+    const answer = hoAnswers[idx]?.trim();
+    if (!answer) return;
+    setHoChecking(idx);
+    try {
+      const res = await fetch('/api/handson-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: hoQuestions[idx],
+          userAnswer: answer,
+          courseTitle: course.subject,
+          lessonTitle: lesson.title,
+          isCoding: hoIsCoding,
+        }),
+      });
+      const data = await res.json();
+      if (!data.error) setHoResults((prev) => { const n = [...prev]; n[idx] = data; return n; });
+    } catch { /* silent */ }
+    finally { setHoChecking(null); }
+  }
   async function loadQuizPayload() {
     setLoading(true);
     setError('');
@@ -342,73 +478,327 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
         <h1 style={{ fontFamily: HC.serif, fontSize: 'clamp(30px, 4vw, 54px)', fontWeight: 400, letterSpacing: '-0.035em', margin: '8px 0 6px', color: theme.ink }}>
           {lesson.title}
         </h1>
-        <div style={{ fontFamily: HC.sans, fontSize: 15, color: theme.mute, lineHeight: 1.55, maxWidth: 620 }}>
-          Read the important notes first, then take the 8-question MCQ check when you feel ready. 70% is preferred, not a wall.
+        <div style={{ fontFamily: HC.sans, fontSize: 15, color: theme.mute, lineHeight: 1.55, maxWidth: 580, marginBottom: 4 }}>
+          {activeTab === 'notes' && 'Read through the notes first — they cover exactly what was taught in this lesson.'}
+          {activeTab === 'quiz' && '8 multiple choice questions. 70% is the target, but it\'s not a blocker — you can continue either way.'}
+          {activeTab === 'handson' && 'Write your answers. For coding lessons, type the actual query or code. The AI checks your logic and gives detailed feedback.'}
         </div>
-
-        <div style={{ marginTop: 30, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setActiveTab('notes')}
-            style={{
-              ...tabBase,
-              background: activeTab === 'notes' ? theme.ink : panelFill,
-              color: activeTab === 'notes' ? theme.bg : theme.mute,
-              borderColor: activeTab === 'notes' ? theme.ink : theme.ruleFaint,
-            }}
-          >
-            Notes
-          </button>
-          <button
-            onClick={() => setActiveTab('quiz')}
-            style={{
-              ...tabBase,
-              background: activeTab === 'quiz' ? theme.ink : panelFill,
-              color: activeTab === 'quiz' ? theme.bg : theme.mute,
-              borderColor: activeTab === 'quiz' ? theme.ink : theme.ruleFaint,
-            }}
-          >
-            Quiz · 8 questions
-          </button>
-        </div>
+        {(() => {
+          const stepOrder: ('notes' | 'quiz' | 'handson')[] = ['notes', 'quiz', 'handson'];
+          const currentIdx = stepOrder.indexOf(activeTab);
+          const steps = [
+            { id: 'notes' as const, label: 'Notes', sub: 'Read first' },
+            { id: 'quiz' as const, label: 'Quiz', sub: '8 questions' },
+            { id: 'handson' as const, label: 'Hands-on', sub: 'Optional' },
+          ];
+          return (
+            <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', gap: 0 }}>
+              {steps.map((step, si) => {
+                const isActive = activeTab === step.id;
+                const isDone = stepOrder.indexOf(step.id) < currentIdx;
+                const isFuture = stepOrder.indexOf(step.id) > currentIdx;
+                return (
+                  <div key={step.id} style={{ display: 'flex', alignItems: 'center', flex: si < steps.length - 1 ? 1 : 'none' }}>
+                    <button
+                      disabled={step.id === 'handson' && !submitted}
+                      title={step.id === 'handson' && !submitted ? 'Complete the quiz first' : undefined}
+                      onClick={() => {
+                        if (step.id === 'handson') {
+                          if (!submitted) return;
+                          setActiveTab('handson');
+                          if (hoQuestions.length === 0 && !hoLoading) handleGenerateHo();
+                        } else {
+                          setActiveTab(step.id);
+                        }
+                      }}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                        background: 'none', border: 'none', cursor: step.id === 'handson' && !submitted ? 'not-allowed' : 'pointer',
+                        padding: 0, flexShrink: 0, opacity: step.id === 'handson' && !submitted ? 0.45 : 1,
+                      }}
+                    >
+                      <div style={{
+                        width: 36, height: 36, borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: `2px solid ${isActive ? theme.ink : isDone ? theme.green : theme.ruleFaint}`,
+                        background: isActive ? theme.ink : isDone ? (dark ? 'rgba(106,174,127,0.15)' : 'rgba(45,106,63,0.1)') : 'transparent',
+                        transition: 'all 180ms ease',
+                      }}>
+                        {isDone ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.green as string} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        ) : (
+                          <span style={{ fontFamily: HC.mono, fontSize: 11, fontWeight: 700, color: isActive ? theme.bg : isFuture ? theme.mute : theme.ink }}>
+                            {String(si + 1).padStart(2, '0')}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: isActive ? theme.ink : isDone ? theme.green : theme.mute, fontWeight: isActive ? 700 : 400 }}>
+                          {step.label}
+                        </div>
+                        <div style={{ fontFamily: HC.mono, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: theme.mute, marginTop: 1, opacity: 0.7 }}>
+                          {step.sub}
+                        </div>
+                      </div>
+                    </button>
+                    {si < steps.length - 1 && (
+                      <div style={{ flex: 1, height: 2, margin: '0 10px', marginBottom: 28, background: isDone ? theme.green : theme.ruleFaint, transition: 'background 300ms ease' }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {activeTab === 'notes' && (
           <div style={{ marginTop: 34, maxWidth: 760 }}>
-            <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.red, marginBottom: 14 }}>
-              important notes
-            </div>
-            {lesson.notes ? (
-              <article
-                style={{
-                  borderTop: `1px solid ${theme.ruleFaint}`,
-                  paddingTop: 22,
-                  color: theme.ink,
-                }}
-              >
-                {renderMarkdown(lesson.notes, theme, dark)}
-              </article>
-            ) : (
-              <div style={{ padding: 22, border: `1px solid ${theme.ruleFaint}`, background: panelFill, color: theme.mute, fontFamily: HC.sans, lineHeight: 1.6 }}>
-                No notes were generated yet. Go back to the lesson and hit Mark completed again to generate notes before the quiz.
+            {!isPremium && lesson.notes && (
+              <div style={{ marginBottom: 20, padding: '14px 18px', borderRadius: 12, border: `1px solid ${dark ? 'rgba(241,236,223,0.10)' : 'rgba(26,21,16,0.08)'}`, background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.025)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                <div>
+                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.amber, marginBottom: 4 }}>Basic notes</div>
+                  <div style={{ fontFamily: HC.sans, fontSize: 13, lineHeight: 1.5, color: theme.mute }}>Upgrade to Premium for deeper notes — structured breakdowns, worked examples, common mistakes, and a mental model.</div>
+                </div>
+                <a href="/settings?tab=billing" style={{ flexShrink: 0, padding: '9px 16px', border: `1px solid ${theme.ink}`, background: 'transparent', color: theme.ink, fontFamily: HC.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', textDecoration: 'none', whiteSpace: 'nowrap', cursor: 'pointer' }}>Upgrade →</a>
               </div>
             )}
-            <button
-              onClick={() => setActiveTab('quiz')}
-              style={{
-                marginTop: 22,
-                border: `1px solid ${theme.ink}`,
-                background: theme.ink,
-                color: theme.bg,
-                fontFamily: HC.mono,
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
-                padding: '13px 20px',
-                cursor: 'pointer',
-              }}
-            >
-              Start quiz →
-            </button>
+
+            {generatingNotes && (
+              <div style={{ padding: '32px 0', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.mute }}>Generating your notes…</div>
+                <div style={{ width: 160, height: 2, background: theme.ruleFaint, borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
+                  <div style={{ position: 'absolute', inset: 0, background: theme.ink, animation: 'notesProgress 1.4s ease-in-out infinite', transformOrigin: 'left' }} />
+                </div>
+                <style>{`@keyframes notesProgress { 0%{transform:scaleX(0) translateX(0)} 50%{transform:scaleX(0.7) translateX(40%)} 100%{transform:scaleX(0) translateX(200%)} }`}</style>
+              </div>
+            )}
+
+            {notesGenError && !generatingNotes && (
+              <div style={{ marginBottom: 14, padding: '12px 16px', border: `1px solid ${theme.red}`, background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ fontSize: 13, color: theme.red }}>{notesGenError}</div>
+                <button onClick={handleGenerateNotes} style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.ink, background: 'none', border: `1px solid ${theme.ink}`, padding: '6px 12px', cursor: 'pointer', flexShrink: 0 }}>Retry</button>
+              </div>
+            )}
+
+            {lesson.notes && (
+              <>
+                <article style={{ borderTop: `1px solid ${theme.ruleFaint}`, paddingTop: 22, color: theme.ink }}>
+                  {renderMarkdown(lesson.notes, theme, dark)}
+                </article>
+                <button
+                  onClick={() => setActiveTab('quiz')}
+                  style={{ marginTop: 28, border: `1px solid ${theme.ink}`, background: theme.ink, color: theme.bg, fontFamily: HC.mono, fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '13px 20px', cursor: 'pointer' }}
+                >
+                  Take the quiz →
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'handson' && (
+          <div style={{ marginTop: 34, maxWidth: 760 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+              <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.red }}>
+                hands-on practice
+              </div>
+              <button
+                onClick={handleGenerateHo}
+                disabled={hoLoading}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: 999,
+                  border: `1px solid ${theme.ruleFaint}`,
+                  background: 'transparent',
+                  color: theme.mute,
+                  fontFamily: HC.mono,
+                  fontSize: 9,
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
+                  cursor: hoLoading ? 'not-allowed' : 'pointer',
+                  opacity: hoLoading ? 0.4 : 1,
+                }}
+              >
+                {hoQuestions.length > 0 ? 'Regenerate' : 'Generate →'}
+              </button>
+            </div>
+
+            {hoLoading && (
+              <div style={{ fontFamily: HC.serif, fontStyle: 'italic', fontSize: 18, color: theme.mute }}>
+                Generating practice questions…
+              </div>
+            )}
+
+            {hoError && (
+              <div style={{ padding: '12px 16px', border: `1px solid ${theme.red}`, background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.05)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <span style={{ color: theme.red, fontFamily: HC.mono, fontWeight: 700, flexShrink: 0 }}>!</span>
+                <div style={{ fontSize: 13, color: theme.ink }}>{hoError}</div>
+              </div>
+            )}
+
+            {!hoLoading && hoQuestions.length === 0 && !hoError && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ fontFamily: HC.sans, fontSize: 15, lineHeight: 1.65, color: theme.mute }}>
+                  5 typed questions based on what was taught. For coding lessons, you'll write actual queries and code — the AI checks correctness and gives detailed feedback.
+                </div>
+                <button
+                  onClick={handleGenerateHo}
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '13px 20px',
+                    border: `1px solid ${theme.ink}`,
+                    background: theme.ink,
+                    color: theme.bg,
+                    fontFamily: HC.mono,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: '0.14em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Generate questions →
+                </button>
+              </div>
+            )}
+
+            {hoQuestions.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 30, borderTop: `1px solid ${theme.ruleFaint}`, paddingTop: 22 }}>
+                {hoQuestions.map((q, idx) => {
+                  const result = hoResults[idx];
+                  const isChecking = hoChecking === idx;
+                  return (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                        <span style={{ fontFamily: HC.mono, fontSize: 11, color: theme.red, flexShrink: 0, marginTop: 3 }}>
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <div style={{ fontFamily: HC.serif, fontSize: 20, letterSpacing: '-0.01em', lineHeight: 1.4 }}>{q}</div>
+                      </div>
+
+                      <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <textarea
+                          value={hoAnswers[idx] || ''}
+                          onChange={(e) => { if (!result) setHoAnswers((prev) => { const n = [...prev]; n[idx] = e.target.value; return n; }); }}
+                          placeholder={hoIsCoding ? 'Write your code / query here…' : 'Type your answer here…'}
+                          rows={hoIsCoding ? 6 : 3}
+                          disabled={isChecking || !!result}
+                          style={{
+                            width: '100%',
+                            resize: 'vertical',
+                            padding: '12px 14px',
+                            border: `1px solid ${result ? (result.correct ? (dark ? 'rgba(106,174,127,0.4)' : 'rgba(45,106,63,0.3)') : 'rgba(196,34,27,0.3)') : theme.ruleFaint}`,
+                            background: result
+                              ? (result.correct ? (dark ? 'rgba(106,174,127,0.06)' : 'rgba(45,106,63,0.04)') : (dark ? 'rgba(232,81,74,0.06)' : 'rgba(196,34,27,0.03)'))
+                              : hoIsCoding ? (dark ? 'rgba(0,0,0,0.3)' : '#16120f') : panelFill,
+                            color: hoIsCoding && !result ? (dark ? theme.ink : HC.paper) : theme.ink,
+                            fontFamily: hoIsCoding ? HC.mono : HC.sans,
+                            fontSize: hoIsCoding ? 13 : 15,
+                            lineHeight: 1.6,
+                            outline: 'none',
+                            boxSizing: 'border-box',
+                            whiteSpace: 'pre',
+                            overflowWrap: 'normal',
+                            overflowX: 'auto',
+                            opacity: result ? 0.75 : 1,
+                          }}
+                        />
+
+                        {!result && (
+                          <>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
+                              <button
+                                onClick={() => handleGetHint(idx)}
+                                disabled={hoHintLoading === idx}
+                                style={{
+                                  padding: '10px 16px',
+                                  border: `1px solid ${theme.ruleFaint}`,
+                                  background: 'transparent',
+                                  color: theme.mute,
+                                  fontFamily: HC.mono,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  letterSpacing: '0.14em',
+                                  textTransform: 'uppercase',
+                                  cursor: hoHintLoading === idx ? 'not-allowed' : 'pointer',
+                                  opacity: hoHintLoading === idx ? 0.4 : 1,
+                                }}
+                              >
+                                {hoHintLoading === idx ? 'Loading…' : hoHints[idx] ? 'Hint again' : 'Show hint'}
+                              </button>
+                              <button
+                                onClick={() => handleCheckHo(idx)}
+                                disabled={isChecking || !hoAnswers[idx]?.trim()}
+                                style={{
+                                  padding: '10px 18px',
+                                  border: `1px solid ${theme.ink}`,
+                                  background: 'transparent',
+                                  color: theme.ink,
+                                  fontFamily: HC.mono,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  letterSpacing: '0.14em',
+                                  textTransform: 'uppercase',
+                                  cursor: isChecking || !hoAnswers[idx]?.trim() ? 'not-allowed' : 'pointer',
+                                  opacity: isChecking || !hoAnswers[idx]?.trim() ? 0.4 : 1,
+                                }}
+                              >
+                                {isChecking ? 'Checking…' : 'Check answer →'}
+                              </button>
+                            </div>
+                            {hoHintError && (
+                              <div style={{ fontSize: 12, color: theme.red, fontFamily: HC.mono }}>{hoHintError}</div>
+                            )}
+                            {hoHints[idx] && (
+                              <div style={{ padding: '10px 14px', border: `1px solid ${dark ? 'rgba(241,236,223,0.12)' : 'rgba(26,21,16,0.1)'}`, background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.03)' }}>
+                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.amber, marginBottom: 6 }}>Hint</div>
+                                <div style={{ fontSize: 14, lineHeight: 1.65, color: theme.ink }}>{hoHints[idx]}</div>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {result && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: result.correct ? theme.green : theme.red }}>
+                                {result.correct ? '✓ Correct' : '✗ Needs work'} · {result.score}/100
+                              </span>
+                              <button
+                                onClick={() => setHoResults((prev) => { const n = [...prev]; n[idx] = null; return n; })}
+                                style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: theme.mute, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                              >
+                                retry
+                              </button>
+                            </div>
+                            {result.whatWasRight && (
+                              <div style={{ padding: '12px 16px', border: `1px solid ${dark ? 'rgba(106,174,127,0.25)' : 'rgba(45,106,63,0.18)'}`, background: dark ? 'rgba(106,174,127,0.08)' : 'rgba(45,106,63,0.05)' }}>
+                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.green, marginBottom: 6 }}>What you got right</div>
+                                <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink }}>{result.whatWasRight}</div>
+                              </div>
+                            )}
+                            {result.whatWasMissing && (
+                              <div style={{ padding: '12px 16px', border: `1px solid rgba(196,34,27,0.22)`, background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.04)' }}>
+                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.red, marginBottom: 6 }}>What was missing</div>
+                                <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink }}>{result.whatWasMissing}</div>
+                              </div>
+                            )}
+                            {result.betterAnswer && (
+                              <div style={{ padding: '12px 16px', border: `1px solid ${theme.ruleFaint}`, background: panelFill }}>
+                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.mute, marginBottom: 6 }}>Model answer</div>
+                                <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink }}>{result.betterAnswer}</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

@@ -1812,15 +1812,13 @@ function LearnContent({ course }: { course: Course }) {
 
   async function handleLessonDone() {
     if (!mod || !lesson) return;
-    if (isPremium) {
-      setGeneratingNotes(true);
-      try {
-        await generateNotesForLesson();
-      } catch {
-        // Notes failed — still proceed to quiz
-      } finally {
-        setGeneratingNotes(false);
-      }
+    setGeneratingNotes(true);
+    try {
+      await generateNotesForLesson();
+    } catch (err) {
+      console.error('[notes generation failed]', (err as Error).message);
+    } finally {
+      setGeneratingNotes(false);
     }
     navigate(`/quiz/${course.id}/${course.currentModule}/${course.currentLesson}`);
   }
@@ -1846,6 +1844,7 @@ function LearnContent({ course }: { course: Course }) {
         lessonDescription: lesson.description,
         lessonFacts: lesson.facts,
         chatHistory: currentChat,
+        premium: isPremium,
       }),
     });
     const data = await res.json();

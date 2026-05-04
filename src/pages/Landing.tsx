@@ -82,7 +82,7 @@ function Wrap({ id, children, bg, pad = '96px 32px', borderTop, borderBottom }: 
 }
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
-function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark, onNav, onToggleSaas }: {
+function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark, onNav }: {
   active: string; dark: boolean; loggedIn: boolean; avatarUrl?: string; profileLabel: string; onToggleDark: () => void; onNav: (id: string) => void;
 }) {
   const { t, mob } = useTheme();
@@ -322,8 +322,8 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
           letterSpacing: '-0.035em', margin: '0 0 32px', color: t.ink,
         }}>
           Learn whatever<br />
-          the f*ck{' '}
-          <span style={{ fontStyle: 'italic', color: t.red }}>you want.</span>
+          you want —{' '}
+          <span style={{ fontStyle: 'italic', color: t.red }}>for real.</span>
         </h1>
 
         {/* Sub */}
@@ -1034,6 +1034,84 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
   );
 }
 
+// ── After Lesson section ──────────────────────────────────────────────────────
+function HandsOnViz() {
+  const { t } = useTheme();
+  return (
+    <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
+      <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>HANDS-ON</div>
+      <div style={{ fontFamily: SERIF, fontSize: 15, color: t.ink, marginTop: 10, lineHeight: 1.3 }}>
+        Write the SQL query that returns all orders placed after Jan 1st.
+      </div>
+      <div style={{ marginTop: 10, padding: '8px 10px', border: `1px dashed ${t.ruleFaint}`, fontFamily: MONO, fontSize: 11, color: t.mute, lineHeight: 1.6 }}>
+        SELECT * FROM orders<br />WHERE …
+      </div>
+      <div style={{ marginTop: 10, padding: '8px 10px', border: `1px solid ${t.green}`, background: t.green + '10', fontFamily: MONO, fontSize: 9, color: t.green, letterSpacing: '0.1em' }}>
+        ✓ 92% · Good — WHERE clause correct. Add ORDER BY for clarity.
+      </div>
+    </div>
+  );
+}
+
+function AfterLessonSection() {
+  const { t, mob } = useTheme();
+  const steps = [
+    {
+      n: '01', label: 'Notes', title: 'Read what stuck.',
+      body: 'The AI generates clean structured notes from every tutor session — key concepts, examples, and mental models. Two minutes to read. Yours to keep.',
+      art: <NotesViz />,
+    },
+    {
+      n: '02', label: 'Quiz', title: 'Test the recall.',
+      body: '8 multiple choice questions. 70% is the goal — not a wall. You move forward either way, but you don\'t skip it.',
+      art: <QuizViz />,
+    },
+    {
+      n: '03', label: 'Hands-on', title: 'Write it yourself.',
+      body: 'Typed open questions — or real queries for coding lessons. Explain it back. The AI checks logic, flags gaps, shows a better answer.',
+      art: <HandsOnViz />,
+    },
+  ];
+  return (
+    <Wrap id="loop" pad="120px 32px" borderTop>
+      <div style={{ display: 'flex', flexDirection: mob ? 'column' : 'row', justifyContent: 'space-between', alignItems: mob ? 'flex-start' : 'baseline', gap: mob ? 16 : 0, marginBottom: 44 }}>
+        <div>
+          <Kicker>The learning loop</Kicker>
+          <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(48px, 6vw, 88px)', margin: '16px 0 0', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
+            After every lesson.
+          </h2>
+        </div>
+        <p style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: mob ? 16 : 19, color: t.mute, maxWidth: 340, lineHeight: 1.45, margin: 0 }}>
+          Not passive. You read, you answer, you write.<br />That's how it sticks.
+        </p>
+      </div>
+      <div style={{ borderTop: `2px solid ${t.ink}`, display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr 1fr' }}>
+        {steps.map((s, i) => (
+          <div key={s.n} style={{
+            padding: mob ? '32px 0' : '40px 0',
+            paddingLeft: !mob && i > 0 ? 36 : 0,
+            paddingRight: !mob && i < steps.length - 1 ? 36 : 0,
+            borderBottom: mob && i < steps.length - 1 ? `1px solid ${t.ruleFaint}` : 'none',
+            borderRight: !mob && i < steps.length - 1 ? `1px solid ${t.ruleFaint}` : 'none',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
+              <span style={{ fontFamily: SERIF, fontSize: mob ? 40 : 52, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', fontStyle: 'italic' }}>{s.n}</span>
+              <Kicker color={t.mute}>{s.label}</Kicker>
+            </div>
+            <h3 style={{ fontFamily: SERIF, fontSize: mob ? 26 : 32, margin: '0 0 10px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1.05 }}>
+              {s.title}
+            </h3>
+            <p style={{ fontFamily: SERIF, fontSize: mob ? 15 : 17, lineHeight: 1.5, color: t.inkSoft, margin: '0 0 20px' }}>
+              {s.body}
+            </p>
+            {s.art}
+          </div>
+        ))}
+      </div>
+    </Wrap>
+  );
+}
+
 // ── Notes section ────────────────────────────────────────────────────────────
 function NotesPageMockup() {
   const { t, dark } = useTheme();
@@ -1628,6 +1706,7 @@ export default function Landing() {
         <ComparisonSection />
         <HowSection />
         <FeaturesSection onNav={onNav} />
+        <AfterLessonSection />
         <NotesSectionLanding onNav={onNav} />
         {/* <InstructorSection onNav={onNav} /> */}
         <PricingSection onNav={onNav} isIndia={isIndia} />
