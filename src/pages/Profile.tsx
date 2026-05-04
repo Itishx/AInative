@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { AppNav } from '../components/Chrome';
 import { useStore } from '../store';
 import { useTheme } from '../lib/theme';
@@ -180,6 +180,7 @@ export default function Profile() {
   const { state } = useStore();
   const { dark } = useTheme();
   const navigate = useNavigate();
+  const [copied, setCopied] = useState(false);
 
   const displayName = state.profile?.displayName?.trim() || (state.username === 'you' ? 'Learner' : state.username);
   const handle = makeHandle(state.username);
@@ -239,9 +240,20 @@ export default function Profile() {
               {joined && <span style={{ fontFamily: P.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: P.mute }}>· joined {joined}</span>}
             </div>
             <p style={{ margin: '0 0 22px', fontFamily: P.sans, fontSize: 16, lineHeight: 1.6, color: P.mute }}>{bio}</p>
-            <button onClick={() => navigate('/settings')} style={{ alignSelf: 'flex-start', border: `1px solid ${P.faint}`, borderRadius: 999, background: 'transparent', color: P.ink, cursor: 'pointer', padding: '11px 20px', fontFamily: P.mono, fontSize: 10, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
-              Edit profile
-            </button>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button onClick={() => navigate('/settings')} style={{ border: `1px solid ${P.faint}`, borderRadius: 999, background: 'transparent', color: P.ink, cursor: 'pointer', padding: '11px 20px', fontFamily: P.mono, fontSize: 10, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
+                Edit profile
+              </button>
+              <Link to={`/profile/${handle}`} style={{ display: 'inline-block', border: `1px solid ${P.faint}`, borderRadius: 999, background: 'transparent', color: P.mute, padding: '11px 20px', fontFamily: P.mono, fontSize: 10, letterSpacing: '0.13em', textTransform: 'uppercase', textDecoration: 'none' }}>
+                Public view →
+              </Link>
+              <button
+                onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/profile/${handle}`).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
+                style={{ border: `1px solid ${P.faint}`, borderRadius: 999, background: 'transparent', color: copied ? P.green : P.mute, cursor: 'pointer', padding: '11px 20px', fontFamily: P.mono, fontSize: 10, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+              >
+                {copied ? 'Link copied ✓' : 'Copy link'}
+              </button>
+            </div>
           </div>
 
           {/* Right: consistency grid */}

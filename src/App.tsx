@@ -15,6 +15,8 @@ import Anything from './pages/Anything';
 import Logos from './pages/Logos';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+import PublicProfile from './pages/PublicProfile';
+import Learners from './pages/Learners';
 import Slides from './pages/Slides';
 import Import from './pages/Import';
 import Notes from './pages/Notes';
@@ -47,6 +49,8 @@ function AppRoutes() {
           <Route path="/" element={<Landing />} />
           <Route path="/browse" element={<Browse />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/learners" element={<Learners />} />
+          <Route path="/profile/:username" element={<PublicProfile />} />
           <Route path="/certificate/:id" element={<Certificate />} />
           <Route path="/logos" element={<Logos />} />
           <Route path="/slides" element={<Slides />} />

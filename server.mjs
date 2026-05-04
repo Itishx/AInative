@@ -2453,6 +2453,73 @@ app.get('/api/plan', async (req, res) => {
   res.json({ plan });
 });
 
+// ── Public profiles ───────────────────────────────────────────────────────────
+app.get('/api/profile/:username', async (req, res) => {
+  const { username } = req.params;
+  if (!username) return res.status(400).json({ error: 'username required' });
+  if (!SUPABASE_SERVICE_KEY) return res.status(503).json({ error: 'service unavailable' });
+
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL_ENV}/rest/v1/user_courses?username=ilike.${encodeURIComponent(username)}&select=username,profile,courses,quiz_attempts&limit=1`,
+      { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } },
+    );
+    const rows = await r.json();
+    if (!Array.isArray(rows) || rows.length === 0) return res.status(404).json({ error: 'not found' });
+
+    const row = rows[0];
+    const courses = Array.isArray(row.courses) ? row.courses : [];
+    const quizAttempts = Array.isArray(row.quiz_attempts) ? row.quiz_attempts : [];
+    const finished = courses.filter(c => c.status === 'completed');
+
+    res.json({
+      username: row.username,
+      displayName: row.profile?.displayName || row.username,
+      headline: row.profile?.headline || '',
+      bio: row.profile?.bio || '',
+      avatarUrl: row.profile?.avatarUrl || '',
+      plan: row.profile?.plan || 'free',
+      totalCourses: courses.length,
+      finishedCourses: finished.length,
+      quizAttempts: quizAttempts.length,
+      finishedTitles: finished.map(c => ({ subject: c.subject, certId: c.certId })).slice(0, 8),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/search-learners', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!SUPABASE_SERVICE_KEY) return res.json([]);
+
+  try {
+    const url = q
+      ? `${SUPABASE_URL_ENV}/rest/v1/user_courses?username=ilike.${encodeURIComponent(`*${q}*`)}&select=username,profile&limit=20`
+      : `${SUPABASE_URL_ENV}/rest/v1/user_courses?select=username,profile&limit=24&order=updated_at.desc`;
+
+    const r = await fetch(url, {
+      headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` },
+    });
+    const rows = await r.json();
+    if (!Array.isArray(rows)) return res.json([]);
+
+    res.json(
+      rows
+        .filter(row => row.username && row.username !== 'you')
+        .map(row => ({
+          username: row.username,
+          displayName: row.profile?.displayName || row.username,
+          headline: row.profile?.headline || '',
+          avatarUrl: row.profile?.avatarUrl || '',
+          plan: row.profile?.plan || 'free',
+        })),
+    );
+  } catch (e) {
+    res.json([]);
+  }
+});
+
 const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || (process.env.RAILWAY_ENVIRONMENT ? '0.0.0.0' : '127.0.0.1');
 

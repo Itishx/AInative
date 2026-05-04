@@ -11,6 +11,7 @@ interface ChromeProps {
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/leaderboard', label: 'Leaderboard' },
+  { to: '/learners', label: 'Learners' },
 ];
 
 export function AppNav() {
