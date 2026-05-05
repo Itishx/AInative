@@ -480,7 +480,7 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
         </h1>
         <div style={{ fontFamily: HC.sans, fontSize: 15, color: theme.mute, lineHeight: 1.55, maxWidth: 580, marginBottom: 4 }}>
           {activeTab === 'notes' && 'Read through the notes first — they cover exactly what was taught in this lesson.'}
-          {activeTab === 'quiz' && '8 multiple choice questions. 70% is the target, but it\'s not a blocker — you can continue either way.'}
+          {activeTab === 'quiz' && '8 questions. Score 33% or above to continue. 90%+ and you feel the aura.'}
           {activeTab === 'handson' && 'Write your answers. For coding lessons, type the actual query or code. The AI checks your logic and gives detailed feedback.'}
         </div>
         {(() => {
@@ -903,27 +903,51 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
             ) : (
               <div>
                 {/* Score banner */}
-                <div style={{
-                  padding: '20px 24px',
-                  border: `1.5px solid ${overallPreferredMet ? theme.green : theme.amber}`,
-                  background: overallPreferredMet ? (dark ? 'rgba(106,174,127,0.10)' : 'rgba(45,106,63,0.07)') : (dark ? 'rgba(227,164,71,0.10)' : 'rgba(216,148,48,0.10)'),
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                }}>
-                  <div>
-                    <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: overallPreferredMet ? theme.green : theme.amber }}>
-                      {overallPreferredMet ? 'Preferred score met' : 'Below preferred'}
+                {(() => {
+                  const isBlocked = totalScore < 33;
+                  const displayName = state.profile?.displayName?.trim() || state.username || 'learner';
+                  const tier = totalScore >= 90 ? 'aura' : totalScore >= 80 ? 'good' : totalScore >= 33 ? 'passed' : 'blocked';
+                  const bannerColor = tier === 'aura' ? theme.ink : tier === 'good' ? theme.green : tier === 'passed' ? theme.amber : theme.red;
+                  const bannerBg = tier === 'aura'
+                    ? (dark ? 'rgba(246,240,231,0.05)' : 'rgba(26,21,16,0.04)')
+                    : tier === 'good'
+                    ? (dark ? 'rgba(106,174,127,0.10)' : 'rgba(45,106,63,0.07)')
+                    : tier === 'passed'
+                    ? (dark ? 'rgba(227,164,71,0.10)' : 'rgba(216,148,48,0.10)')
+                    : (dark ? 'rgba(232,81,74,0.12)' : 'rgba(196,34,27,0.07)');
+                  return (
+                    <div style={{ padding: '24px 28px', border: `1.5px solid ${bannerColor}`, background: bannerBg }}>
+                      <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: bannerColor, marginBottom: 10 }}>
+                        {totalScore}%
+                      </div>
+                      {tier === 'blocked' && (
+                        <div style={{ fontFamily: HC.serif, fontSize: 'clamp(22px, 3vw, 38px)', fontWeight: 400, letterSpacing: '-0.02em', color: theme.red, lineHeight: 1.1 }}>
+                          pay attention in class, {displayName}
+                        </div>
+                      )}
+                      {tier === 'passed' && (
+                        <div style={{ fontFamily: HC.serif, fontSize: 'clamp(22px, 3vw, 38px)', fontWeight: 400, letterSpacing: '-0.02em', color: theme.ink, lineHeight: 1.1 }}>
+                          you passed, but we know you can do better
+                        </div>
+                      )}
+                      {tier === 'good' && (
+                        <div style={{ fontFamily: HC.serif, fontSize: 'clamp(22px, 3vw, 38px)', fontWeight: 400, letterSpacing: '-0.02em', color: theme.ink, lineHeight: 1.1 }}>
+                          good going, {displayName}
+                        </div>
+                      )}
+                      {tier === 'aura' && (
+                        <div style={{ fontFamily: HC.serif, fontSize: 'clamp(22px, 3vw, 38px)', fontWeight: 400, letterSpacing: '-0.02em', color: theme.ink, lineHeight: 1.1, fontStyle: 'italic' }}>
+                          <strong>feels the aura</strong>
+                        </div>
+                      )}
+                      {isBlocked && (
+                        <div style={{ fontFamily: HC.mono, fontSize: 11, color: theme.red, marginTop: 10, letterSpacing: '0.08em' }}>
+                          You need 33% to continue. Try again.
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontFamily: HC.serif, fontSize: 36, fontWeight: 400, letterSpacing: '-0.02em', marginTop: 4 }}>
-                      {totalScore}% — {overallPreferredMet ? 'you can continue.' : 'still okay to continue.'}
-                    </div>
-                    <div style={{ fontSize: 13, lineHeight: 1.5, color: theme.mute, marginTop: 8 }}>
-                      70% is the target. This quiz is not a blocker anymore.
-                    </div>
-                  </div>
-                  <div style={{ fontFamily: HC.serif, fontSize: 56, color: overallPreferredMet ? theme.green : theme.amber }}>
-                    {overallPreferredMet ? '✓' : '→'}
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {practicalExercises.length > 0 && (
                   <div style={{ marginTop: 28 }}>
@@ -981,22 +1005,22 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-                  <button onClick={handleContinue} style={{ ...btn.primary, padding: '14px 28px', background: theme.ink, color: theme.bg }}>
-                    Continue →
-                  </button>
-                  {!overallPreferredMet && (
-                    <button onClick={() => {
-                      setSubmitted(false);
-                      setResults([]);
-                      setMcqAnswers({});
-                      setUploads({});
-                      setPracticalExercises([]);
-                      loadQuizPayload();
-                    }} style={{ ...btn.danger, padding: '14px 28px', background: theme.red }}>
-                      Try for 70% →
+                <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
+                  {totalScore >= 33 && (
+                    <button onClick={handleContinue} style={{ ...btn.primary, padding: '14px 28px', background: theme.ink, color: theme.bg }}>
+                      Continue →
                     </button>
                   )}
+                  <button onClick={() => {
+                    setSubmitted(false);
+                    setResults([]);
+                    setMcqAnswers({});
+                    setUploads({});
+                    setPracticalExercises([]);
+                    loadQuizPayload();
+                  }} style={{ ...btn.outline, padding: '14px 28px', borderColor: totalScore < 33 ? theme.red : theme.ink, color: totalScore < 33 ? theme.red : theme.ink }}>
+                    {totalScore < 33 ? 'Retake →' : 'Try again'}
+                  </button>
                   <button onClick={() => navigate(`/learn/${course.id}`)} style={{ ...btn.outline, borderColor: theme.ink, color: theme.ink }}>
                     ← Back to lesson
                   </button>
