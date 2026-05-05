@@ -799,6 +799,18 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                 })}
               </div>
             )}
+
+            {/* Done button — always visible in hands-on tab after quiz was submitted */}
+            {submitted && (
+              <div style={{ marginTop: 40, paddingTop: 28, borderTop: `1px solid ${theme.ruleFaint}`, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <button onClick={handleContinue} style={{ ...btn.primary, padding: '13px 24px', background: theme.ink, color: theme.bg }}>
+                  Done, continue →
+                </button>
+                <button onClick={() => navigate(`/learn/${course.id}`)} style={{ ...btn.outline, padding: '13px 24px', borderColor: theme.ink, color: theme.ink }}>
+                  ← Back to lesson
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1005,26 +1017,49 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
-                  {totalScore >= 33 && (
-                    <button onClick={handleContinue} style={{ ...btn.primary, padding: '14px 28px', background: theme.ink, color: theme.bg }}>
-                      Continue →
+                {totalScore >= 33 ? (
+                  <div style={{ marginTop: 28, padding: '24px 28px', border: `1px solid ${theme.ruleFaint}`, background: dark ? 'rgba(246,240,231,0.03)' : 'rgba(26,21,16,0.02)' }}>
+                    <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.mute, marginBottom: 10 }}>
+                      Up next
+                    </div>
+                    <div style={{ fontFamily: HC.serif, fontSize: 'clamp(18px, 2.5vw, 26px)', fontWeight: 400, letterSpacing: '-0.02em', color: theme.ink, marginBottom: 20 }}>
+                      Want to try hands-on practice?
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => {
+                          setActiveTab('handson');
+                          if (hoQuestions.length === 0 && !hoLoading) handleGenerateHo();
+                        }}
+                        style={{ ...btn.primary, padding: '13px 24px', background: theme.ink, color: theme.bg }}
+                      >
+                        Yes →
+                      </button>
+                      <button
+                        onClick={handleContinue}
+                        style={{ ...btn.outline, padding: '13px 24px', borderColor: theme.ink, color: theme.ink }}
+                      >
+                        No, continue to next lesson
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
+                    <button onClick={() => {
+                      setSubmitted(false);
+                      setResults([]);
+                      setMcqAnswers({});
+                      setUploads({});
+                      setPracticalExercises([]);
+                      loadQuizPayload();
+                    }} style={{ ...btn.outline, padding: '14px 28px', borderColor: theme.red, color: theme.red }}>
+                      Retake →
                     </button>
-                  )}
-                  <button onClick={() => {
-                    setSubmitted(false);
-                    setResults([]);
-                    setMcqAnswers({});
-                    setUploads({});
-                    setPracticalExercises([]);
-                    loadQuizPayload();
-                  }} style={{ ...btn.outline, padding: '14px 28px', borderColor: totalScore < 33 ? theme.red : theme.ink, color: totalScore < 33 ? theme.red : theme.ink }}>
-                    {totalScore < 33 ? 'Retake →' : 'Try again'}
-                  </button>
-                  <button onClick={() => navigate(`/learn/${course.id}`)} style={{ ...btn.outline, borderColor: theme.ink, color: theme.ink }}>
-                    ← Back to lesson
-                  </button>
-                </div>
+                    <button onClick={() => navigate(`/learn/${course.id}`)} style={{ ...btn.outline, borderColor: theme.ink, color: theme.ink }}>
+                      ← Back to lesson
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
