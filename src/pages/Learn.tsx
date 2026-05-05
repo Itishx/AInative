@@ -6,6 +6,7 @@ import { useStore } from '../store';
 import { apiUrl } from '../api';
 import type { Course, ChatMsg, EnrolledCourse } from '../types';
 import { useTheme } from '../lib/theme';
+import { useAuth } from '../lib/auth';
 
 function renderInlineFormatting(text: string) {
   const nodes: React.ReactNode[] = [];
@@ -1253,6 +1254,7 @@ function CurriculumDrawer({
 function LearnContent({ course }: { course: Course }) {
   const navigate = useNavigate();
   const { state, dispatch } = useStore();
+  const { user } = useAuth();
   const { dark } = useTheme();
   const theme = dark ? HCDark : HC;
   const panelFill = dark ? 'rgba(241,236,223,0.06)' : 'rgba(26,21,16,0.045)';
@@ -1671,6 +1673,7 @@ function LearnContent({ course }: { course: Course }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          userId: user?.id,
           messages: safeMessages,
           courseTitle, moduleTitle, lessonTitle,
           lessonObjective: safeObjective,
@@ -1686,6 +1689,7 @@ function LearnContent({ course }: { course: Course }) {
         }),
       });
       const data = await res.json();
+      if (res.status === 429 || data.limitReached) throw new Error(data.error);
       if (data.error) throw new Error(data.error);
       const normalizedText = compactTutorDump(String(data.text ?? ''), lessonTitle, openingTurn, allowQuestion);
       const responseVisual = typeof data.visual === 'string' && data.visual.trim() ? data.visual.trim() : undefined;

@@ -759,6 +759,50 @@ const app = express();
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
+// ── Usage helpers ─────────────────────────────────────────────────────────────
+const FREE_MSG_LIMIT = 25;
+
+async function getProfile(userId) {
+  const sKey = (process.env.SUPABASE_SERVICE_KEY || '').trim();
+  const sUrl = (process.env.SUPABASE_URL || 'https://nxxisxugpfswyvpchexs.supabase.co').trim();
+  if (!sKey || !userId) return null;
+  const r = await fetch(`${sUrl}/rest/v1/user_courses?user_id=eq.${userId}&select=profile&limit=1`, {
+    headers: { 'apikey': sKey, 'Authorization': `Bearer ${sKey}` },
+  });
+  const rows = await r.json();
+  return rows?.[0]?.profile || {};
+}
+
+async function patchProfile(userId, profile) {
+  const sKey = (process.env.SUPABASE_SERVICE_KEY || '').trim();
+  const sUrl = (process.env.SUPABASE_URL || 'https://nxxisxugpfswyvpchexs.supabase.co').trim();
+  if (!sKey || !userId) return;
+  await fetch(`${sUrl}/rest/v1/user_courses?user_id=eq.${userId}`, {
+    method: 'PATCH',
+    headers: { 'apikey': sKey, 'Authorization': `Bearer ${sKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ profile }),
+  });
+}
+
+// Returns { allowed, count } and increments if allowed
+async function checkAndIncrementUsage(userId) {
+  const profile = await getProfile(userId);
+  if (!profile) return { allowed: true, count: 0 };  // no key — dev mode, allow
+  if (profile.plan === 'premium') return { allowed: true, count: 0 };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const usage = profile.usage || {};
+  const count = usage[today] ?? 0;
+
+  if (count >= FREE_MSG_LIMIT) return { allowed: false, count };
+
+  // Increment in background (don't await to keep response fast)
+  const newProfile = { ...profile, usage: { ...usage, [today]: count + 1 } };
+  patchProfile(userId, newProfile).catch(() => {});
+
+  return { allowed: true, count: count + 1 };
+}
+
 // Raw body capture for Polar webhook signature verification
 app.use((req, _res, next) => {
   if (req.path === '/api/polar-webhook') {
@@ -1246,6 +1290,7 @@ White background. Simple labels. Textbook-quality technical diagram style — ar
 
 app.post('/api/chat', async (req, res) => {
   const {
+    userId,
     messages,
     courseTitle,
     moduleTitle,
@@ -1261,6 +1306,20 @@ app.post('/api/chat', async (req, res) => {
     allowQuestion,
     wantsVisualExample,
   } = req.body;
+
+  // Server-side daily message cap for free users
+  if (userId) {
+    try {
+      const { allowed, count } = await checkAndIncrementUsage(userId);
+      if (!allowed) {
+        return res.status(429).json({
+          error: `You've used all ${FREE_MSG_LIMIT} messages for today. Upgrade to premium for unlimited access.`,
+          limitReached: true,
+          count,
+        });
+      }
+    } catch { /* if usage check fails, allow through */ }
+  }
 
   try {
     let currentPhase = phase || 'HOOK';
@@ -2517,6 +2576,22 @@ app.get('/api/search-learners', async (req, res) => {
     );
   } catch (e) {
     res.json([]);
+  }
+});
+
+// GET /api/usage — live message count for the settings page
+app.get('/api/usage', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.json({ count: 0, limit: FREE_MSG_LIMIT, isPremium: false });
+  try {
+    const profile = await getProfile(userId);
+    if (!profile) return res.json({ count: 0, limit: FREE_MSG_LIMIT, isPremium: false });
+    const isPremium = profile.plan === 'premium';
+    const today = new Date().toISOString().slice(0, 10);
+    const count = isPremium ? 0 : (profile.usage?.[today] ?? 0);
+    res.json({ count, limit: FREE_MSG_LIMIT, isPremium });
+  } catch (e) {
+    res.json({ count: 0, limit: FREE_MSG_LIMIT, isPremium: false });
   }
 });
 

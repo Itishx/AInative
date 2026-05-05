@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { useAuth } from '../lib/auth';
@@ -427,6 +427,15 @@ function BillingTab() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const isPremium = state.profile?.plan === 'premium';
+  const [usage, setUsage] = useState<{ count: number; limit: number; isPremium: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`/api/usage?userId=${user.id}`)
+      .then(r => r.json())
+      .then(setUsage)
+      .catch(() => {});
+  }, [user?.id]);
 
   async function handleUpgrade() {
     console.log('[upgrade] user:', user?.id, 'API_BASE:', API_BASE);
@@ -502,6 +511,48 @@ function BillingTab() {
               </a>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Daily usage meter */}
+      <div style={{ marginBottom: 48 }}>
+        <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: S.mute, marginBottom: 16 }}>Today's usage</div>
+        <div style={{ padding: '24px 28px', border: `1px solid ${S.faint}` }}>
+          {isPremium ? (
+            <div>
+              <div style={{ fontFamily: SERIF, fontSize: 22, letterSpacing: '-0.02em', color: S.ink }}>Unlimited</div>
+              <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                Premium · no daily cap
+              </div>
+            </div>
+          ) : usage ? (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                <div style={{ fontFamily: SERIF, fontSize: 28, letterSpacing: '-0.03em', color: usage.count >= usage.limit ? S.red : S.ink }}>
+                  {usage.count} <span style={{ fontFamily: MONO, fontSize: 12, color: S.mute }}>/ {usage.limit} messages</span>
+                </div>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  resets at midnight
+                </div>
+              </div>
+              <div style={{ height: 4, background: S.softer, borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${Math.min((usage.count / usage.limit) * 100, 100)}%`,
+                  background: usage.count >= usage.limit ? S.red : usage.count >= usage.limit * 0.8 ? S.amber : S.green,
+                  borderRadius: 2,
+                  transition: 'width 0.4s ease',
+                }} />
+              </div>
+              {usage.count >= usage.limit && (
+                <div style={{ marginTop: 10, fontFamily: MONO, fontSize: 9, color: S.red, letterSpacing: '0.1em' }}>
+                  Limit reached · upgrade for unlimited access
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.1em' }}>Loading…</div>
+          )}
         </div>
       </div>
 
