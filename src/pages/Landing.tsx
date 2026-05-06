@@ -1112,6 +1112,198 @@ function AfterLessonSection() {
   );
 }
 
+// ── Study Mode section ────────────────────────────────────────────────────────
+function StudyMockup() {
+  // Faithfully recreates the actual Study page in light mode.
+  // bg = #faf7f0 paper, ink = #1a1510, step bar matches the real StepBar component,
+  // notes are single-column, canvas slide is embedded inline with SLIDE_BG gradient.
+  const BG   = '#faf7f0';
+  const INK  = '#1a1510';
+  const MUTE = '#6b6458';
+  const RED  = '#c4221b';
+  const GRN  = '#2d6a3f';
+  const RULE = 'rgba(26,21,16,0.12)';
+  const SLIDE_BG = 'linear-gradient(145deg,#1a1510 0%,#2d2218 55%,#1a1208 100%)';
+
+  const steps = [
+    { label: 'Notes', sub: 'Read first', active: true, done: false },
+    { label: 'Quiz', sub: '10 questions', active: false, done: false },
+    { label: 'Hands-on', sub: 'Optional', active: false, done: false },
+  ];
+
+  const tableRows = [
+    ['Stage', 'Products'],
+    ['Glycolysis', '2 ATP · 2 NADH'],
+    ['Pyruvate oxidation', '2 NADH · 2 CO₂'],
+    ['Krebs cycle (×2)', '2 ATP · 6 NADH · 2 FADH₂'],
+    ['Oxidative phosphorylation', '~32 ATP'],
+  ];
+
+  return (
+    <div style={{
+      background: BG,
+      border: `1px solid ${RULE}`,
+      boxShadow: '0 26px 80px rgba(26,21,16,0.13)',
+      overflow: 'hidden',
+    }}>
+      {/* ← Dashboard back link */}
+      <div style={{ padding: '20px 24px 0' }}>
+        <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: MUTE, marginBottom: 16 }}>
+          ← Dashboard
+        </div>
+
+        {/* kicker */}
+        <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.20em', textTransform: 'uppercase', color: RED, marginBottom: 6 }}>
+          — study session
+        </div>
+
+        {/* topic title */}
+        <div style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 400, letterSpacing: '-0.035em', color: INK, lineHeight: 1, marginBottom: 6 }}>
+          Cellular Respiration
+        </div>
+
+        {/* subtitle */}
+        <div style={{ fontFamily: SANS, fontSize: 13, color: MUTE, lineHeight: 1.5, marginBottom: 2 }}>
+          Read through the notes first — generated just for this topic.
+        </div>
+
+        {/* Step bar — exact sizing from actual StepBar component */}
+        <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20 }}>
+          {steps.map((s, si) => (
+            <div key={s.label} style={{ display: 'flex', alignItems: 'center', flex: si < steps.length - 1 ? 1 : 'none' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                <div style={{
+                  width: 30, height: 30, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: `2px solid ${s.active ? INK : s.done ? GRN : RULE}`,
+                  background: s.active ? INK : 'transparent',
+                }}>
+                  {s.done
+                    ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GRN} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    : <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, color: s.active ? BG : MUTE }}>{String(si + 1).padStart(2, '0')}</span>
+                  }
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: s.active ? INK : s.done ? GRN : MUTE, fontWeight: s.active ? 700 : 400 }}>{s.label}</div>
+                  <div style={{ fontFamily: MONO, fontSize: 7, letterSpacing: '0.10em', textTransform: 'uppercase', color: MUTE, marginTop: 1, opacity: 0.7 }}>{s.sub}</div>
+                </div>
+              </div>
+              {si < steps.length - 1 && (
+                <div style={{ flex: 1, height: 2, margin: '0 8px', marginBottom: 26, background: s.done ? GRN : RULE }} />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Notes content — single column, borderTop like the real page */}
+      <div style={{ borderTop: `1px solid ${RULE}`, padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* h2 */}
+        <div style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 400, color: INK, letterSpacing: '-0.02em', borderBottom: `1px solid ${RULE}`, paddingBottom: 6, marginBottom: 4 }}>
+          Overview
+        </div>
+
+        {/* bullets */}
+        {[
+          'ATP is produced through glycolysis, the Krebs cycle, and oxidative phosphorylation.',
+          'Oxygen is the final electron acceptor in the electron transport chain.',
+          'A net of ~36–38 ATP molecules are generated per glucose molecule.',
+        ].map((b, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <span style={{ color: INK, fontSize: 5, marginTop: 6, flexShrink: 0 }}>●</span>
+            <span style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.6, color: INK }}>{b}</span>
+          </div>
+        ))}
+
+        {/* canvas slide — dark gradient card embedded inline, same as real StudySlide */}
+        <div style={{ margin: '14px 0 6px', borderRadius: 14, overflow: 'hidden', background: SLIDE_BG, border: '1px solid rgba(250,247,240,0.10)', boxShadow: '0 16px 48px rgba(0,0,0,0.26)' }}>
+          <div style={{ padding: '8px 16px', fontFamily: MONO, fontSize: 8, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.38)', borderBottom: '1px solid rgba(250,247,240,0.08)' }}>
+            visual · table
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {tableRows[0].map((h, i) => (
+                  <th key={i} style={{ padding: '8px 16px', textAlign: 'left', fontFamily: MONO, fontSize: 8, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.45)', borderBottom: '1px solid rgba(250,247,240,0.10)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.slice(1).map((row, ri) => (
+                <tr key={ri} style={{ borderBottom: '1px solid rgba(250,247,240,0.06)' }}>
+                  {row.map((cell, ci) => (
+                    <td key={ci} style={{ padding: '8px 16px', color: ci === 0 ? 'rgba(250,247,240,0.75)' : 'rgba(250,247,240,0.90)', fontFamily: ci === 0 ? SANS : MONO, fontSize: ci === 0 ? 12 : 11, lineHeight: 1.4 }}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* one more bullet after slide */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <span style={{ color: INK, fontSize: 5, marginTop: 6, flexShrink: 0 }}>●</span>
+          <span style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.6, color: INK }}>Each stage feeds directly into the next — disrupting any one step halts the entire chain.</span>
+        </div>
+
+        {/* CTA button — same as real page */}
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'inline-block', background: INK, color: BG, padding: '11px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+            Take the quiz →
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StudyModeSection() {
+  const { t, mob } = useTheme();
+  const navigate = useNavigate();
+  return (
+    <Wrap id="study" pad="120px 32px" borderTop>
+      <div style={{ maxWidth: 720, marginBottom: 48 }}>
+        <Kicker>Study Mode</Kicker>
+        <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
+          Type a topic.<br />Get the <span style={{ color: t.red }}>notes.</span>
+        </h2>
+        <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
+          Or upload a PDF and skip the highlights. Learnor reads it, writes structured notes — with visual slides embedded where they help — then tests you on it.
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '0.72fr 1.28fr', gap: mob ? 32 : 48, alignItems: 'start' }}>
+        <div>
+          <Kicker color={t.mute}>How it works</Kicker>
+          <h3 style={{ fontFamily: SERIF, fontSize: 48, margin: '12px 0 16px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1 }}>
+            Three steps.<br />Nothing passive.
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginBottom: 28 }}>
+            {[
+              ['01', 'Notes', 'Generated from your topic or PDF. Visual slides appear inline — tables, code, comparisons — right where the concept lives.'],
+              ['02', 'Quiz', '10 questions on what was in the notes. Color-coded right/wrong per question.'],
+              ['03', 'Hands-on', 'Open-answer questions. Write the answer, get it graded, see what was missing and a model answer.'],
+            ].map(([n, title, body]) => (
+              <div key={n} style={{ display: 'flex', gap: 16, alignItems: 'flex-start', paddingBottom: 18, borderBottom: `1px solid ${t.ruleFaint}` }}>
+                <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 38, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', flexShrink: 0 }}>{n}</span>
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.ink, marginBottom: 5 }}>{title}</div>
+                  <p style={{ fontFamily: SERIF, fontSize: 17, lineHeight: 1.5, color: t.inkSoft, margin: 0 }}>{body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => navigate('/auth')} style={{
+            background: t.ink, color: t.bg, border: 'none', padding: '14px 22px',
+            fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer',
+          }}>Try Study Mode →</button>
+        </div>
+        {!mob && <StudyMockup />}
+      </div>
+    </Wrap>
+  );
+}
+
 // ── Notes section ────────────────────────────────────────────────────────────
 function NotesPageMockup() {
   const { t, dark } = useTheme();
@@ -1706,8 +1898,9 @@ export default function Landing() {
         <ComparisonSection />
         <HowSection />
         <FeaturesSection onNav={onNav} />
-        <AfterLessonSection />
         <NotesSectionLanding onNav={onNav} />
+        <AfterLessonSection />
+        <StudyModeSection />
         {/* <InstructorSection onNav={onNav} /> */}
         <PricingSection onNav={onNav} isIndia={isIndia} />
         <FAQSection />
