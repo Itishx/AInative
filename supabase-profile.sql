@@ -11,6 +11,9 @@ where profile is null or not (profile ? 'headline');
 alter table public.user_courses
 add column if not exists quiz_attempts jsonb not null default '[]'::jsonb;
 
+alter table public.user_courses
+add column if not exists study_sessions jsonb not null default '[]'::jsonb;
+
 -- Required for Supabase upsert(..., { onConflict: 'user_id' }) to update
 -- the existing profile row instead of creating duplicate user rows.
 create unique index if not exists user_courses_user_id_key

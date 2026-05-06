@@ -431,7 +431,7 @@ function BillingTab() {
 
   useEffect(() => {
     if (!user?.id) return;
-    fetch(`/api/usage?userId=${user.id}`)
+    fetch(`${API_BASE}/api/usage?userId=${user.id}`)
       .then(r => r.json())
       .then(setUsage)
       .catch(() => {});

@@ -3,6 +3,47 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 
+function SettingsCorner() {
+  const navigate = useNavigate();
+  const loc = useLocation();
+  const { dark, t } = useTheme();
+  const isActive = loc.pathname === '/settings';
+  return (
+    <button
+      onClick={() => navigate('/settings')}
+      title="Settings"
+      style={{
+        position: 'fixed',
+        bottom: 28,
+        left: 28,
+        zIndex: 50,
+        width: 36,
+        height: 36,
+        borderRadius: 999,
+        border: `1px solid ${isActive ? t.ink : (dark ? 'rgba(241,236,223,0.12)' : 'rgba(26,21,16,0.12)')}`,
+        background: isActive ? t.ink : (dark ? 'rgba(28,26,22,0.80)' : 'rgba(250,247,240,0.84)'),
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        boxShadow: dark ? '0 4px 16px rgba(0,0,0,0.24)' : '0 4px 16px rgba(26,21,16,0.09)',
+        cursor: 'pointer',
+        color: isActive ? (dark ? t.bg : '#faf7f0') : t.mute,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'all 160ms ease',
+        padding: 0,
+      }}
+      onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLButtonElement).style.color = t.ink as string; (e.currentTarget as HTMLButtonElement).style.borderColor = t.ink as string; } }}
+      onMouseLeave={e => { if (!isActive) { (e.currentTarget as HTMLButtonElement).style.color = t.mute as string; (e.currentTarget as HTMLButtonElement).style.borderColor = dark ? 'rgba(241,236,223,0.12)' : 'rgba(26,21,16,0.12)'; } }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    </button>
+  );
+}
+
 interface ChromeProps {
   label?: string;
   right?: React.ReactNode;
@@ -30,6 +71,7 @@ export function AppNav() {
 
   return (
     <>
+      <SettingsCorner />
       <button
         onClick={() => navigate('/')}
         style={{
@@ -123,6 +165,8 @@ export function Chrome({ label, right }: ChromeProps) {
     : '?';
 
   return (
+    <>
+    <SettingsCorner />
     <div style={{
       position: 'sticky',
       top: 0,
@@ -259,5 +303,6 @@ export function Chrome({ label, right }: ChromeProps) {
         </div>
       </div>
     </div>
+    </>
   );
 }

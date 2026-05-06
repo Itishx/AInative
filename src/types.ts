@@ -106,12 +106,20 @@ export interface QuizAttempt {
   createdAt: string;
 }
 
+export interface StudySession {
+  id: string;
+  topic: string;
+  notes: string;
+  createdAt: string;
+}
+
 export interface AppState {
   courses: Course[];
   leaderboard: LeaderboardEntry[];
   username: string;
   profile: UserProfile;
   quizAttempts: QuizAttempt[];
+  studySessions: StudySession[];
 }
 
 // ── Instructor / Marketplace types ──────────────────────────────────────────

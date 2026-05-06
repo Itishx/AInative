@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
-import type { AppState, Course, LeaderboardEntry, EnrolledCourse, UserProfile, QuizAttempt } from './types';
+import type { AppState, Course, LeaderboardEntry, EnrolledCourse, UserProfile, QuizAttempt, StudySession } from './types';
 import { supabase } from './lib/supabase';
 
 const BASE_KEY = 'ainative_v3';
@@ -105,6 +105,7 @@ function normalizeState(state: Partial<AppState> | null | undefined): AppState {
     username,
     profile: { ...defaultProfile(username), ...(state?.profile ?? {}) },
     quizAttempts: state?.quizAttempts ?? [],
+    studySessions: state?.studySessions ?? [],
   };
 }
 
@@ -162,7 +163,9 @@ type Action =
   | { type: 'MARK_STUDIED'; id: string; dateKey: string }
   | { type: 'ADD_LEADERBOARD'; entry: LeaderboardEntry }
   | { type: 'ENROLL_COURSE'; course: EnrolledCourse }
-  | { type: '_LOAD_FROM_DB'; courses: Course[]; username?: string; profile?: UserProfile; quizAttempts?: QuizAttempt[] };
+  | { type: 'ADD_STUDY_SESSION'; session: StudySession }
+  | { type: 'DELETE_STUDY_SESSION'; id: string }
+  | { type: '_LOAD_FROM_DB'; courses: Course[]; username?: string; profile?: UserProfile; quizAttempts?: QuizAttempt[]; studySessions?: StudySession[] };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -181,6 +184,9 @@ function reducer(state: AppState, action: Action): AppState {
 
     case '_LOAD_FROM_DB': {
       const courses = migrateCourses(action.courses ?? []);
+      const mergedSessions = [...(action.studySessions ?? []), ...(state.studySessions ?? [])]
+        .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
+        .slice(0, 50);
       return checkDeadlines({
         ...state,
         // Local state may contain newer chat/progress than a stale DB row.
@@ -189,6 +195,7 @@ function reducer(state: AppState, action: Action): AppState {
         username: action.username && action.username !== 'you' ? action.username : state.username,
         profile: mergeProfileFromDb(state.profile, action.profile),
         quizAttempts: mergeQuizAttempts(state.quizAttempts, action.quizAttempts ?? []),
+        studySessions: mergedSessions,
       });
     }
 
@@ -352,6 +359,12 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, leaderboard: merged.map((e, i) => ({ ...e, rank: i + 1 })) };
     }
 
+    case 'ADD_STUDY_SESSION':
+      return { ...state, studySessions: [action.session, ...(state.studySessions ?? [])].slice(0, 50) };
+
+    case 'DELETE_STUDY_SESSION':
+      return { ...state, studySessions: (state.studySessions ?? []).filter(s => s.id !== action.id) };
+
     default:
       return state;
   }
@@ -396,7 +409,7 @@ export function StoreProvider({
     if (!userId) return;
     supabase
       .from('user_courses')
-      .select('courses, username, profile, quiz_attempts')
+      .select('courses, username, profile, quiz_attempts, study_sessions')
       .eq('user_id', userId)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -434,13 +447,14 @@ export function StoreProvider({
           dbLoadedRef.current = true;
           return;
         }
-        const row = data as { profile?: UserProfile; quiz_attempts?: QuizAttempt[] };
+        const row = data as { profile?: UserProfile; quiz_attempts?: QuizAttempt[]; study_sessions?: StudySession[] };
         dispatch({
           type: '_LOAD_FROM_DB',
           courses: Array.isArray(data.courses) ? data.courses : [],
           username: data.username ?? undefined,
           profile: row.profile,
           quizAttempts: Array.isArray(row.quiz_attempts) ? row.quiz_attempts : [],
+          studySessions: Array.isArray(row.study_sessions) ? row.study_sessions : [],
         });
         setTimeout(() => { dbLoadedRef.current = true; }, 0);
       });
@@ -464,6 +478,7 @@ export function StoreProvider({
           username: state.username,
           profile: state.profile,
           quiz_attempts: state.quizAttempts,
+          study_sessions: state.studySessions,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' })
         .then(({ error }) => {
@@ -477,6 +492,7 @@ export function StoreProvider({
               user_id: userId,
               courses: state.courses,
               username: state.username,
+              study_sessions: state.studySessions,
               updated_at: new Date().toISOString(),
             }, { onConflict: 'user_id' })
             .then(() => {

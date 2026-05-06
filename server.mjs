@@ -784,23 +784,38 @@ async function patchProfile(userId, profile) {
   });
 }
 
-// Returns { allowed, count } and increments if allowed
+// In-memory counter — avoids DB read-write race on rapid messages
+const _usageCache = {}; // `${userId}_${date}` -> count
+
 async function checkAndIncrementUsage(userId) {
-  const profile = await getProfile(userId);
-  if (!profile) return { allowed: true, count: 0 };  // no key — dev mode, allow
-  if (profile.plan === 'premium') return { allowed: true, count: 0 };
-
   const today = new Date().toISOString().slice(0, 10);
-  const usage = profile.usage || {};
-  const count = usage[today] ?? 0;
+  const cacheKey = `${userId}_${today}`;
 
+  // Warm cache from DB on first message of the day/session
+  if (_usageCache[cacheKey] === undefined) {
+    const profile = await getProfile(userId);
+    if (!profile) return { allowed: true, count: 0 };
+    if (profile.plan === 'premium') return { allowed: true, count: 0 };
+    // Use max in case a concurrent request already set it
+    _usageCache[cacheKey] = Math.max(_usageCache[cacheKey] ?? 0, profile.usage?.[today] ?? 0);
+  }
+
+  const count = _usageCache[cacheKey];
   if (count >= FREE_MSG_LIMIT) return { allowed: false, count };
 
-  // Increment in background (don't await to keep response fast)
-  const newProfile = { ...profile, usage: { ...usage, [today]: count + 1 } };
-  patchProfile(userId, newProfile).catch(() => {});
+  // Synchronous increment — no race possible after this line (Node.js single-threaded)
+  _usageCache[cacheKey] = count + 1;
+  const newCount = _usageCache[cacheKey];
 
-  return { allowed: true, count: count + 1 };
+  // Persist to DB in background
+  (async () => {
+    try {
+      const p = await getProfile(userId);
+      if (p) await patchProfile(userId, { ...p, usage: { ...(p.usage || {}), [today]: newCount } });
+    } catch {}
+  })();
+
+  return { allowed: true, count: newCount };
 }
 
 // Raw body capture for Polar webhook signature verification
@@ -2010,24 +2025,24 @@ Return ONLY valid JSON (no markdown fences):
 
 // ── Hands-on mode: hint for a single question ────────────────────────────────
 app.post('/api/handson-hint', async (req, res) => {
-  const { question, courseTitle, lessonTitle, isCoding } = req.body;
+  const { question, courseTitle, lessonTitle, isCoding, notesContext } = req.body;
   try {
     const hint = await callGemini(
       'You are a tutor giving a genuinely useful hint. Be specific and direct — this is not a riddle, it is help.',
       [{
         role: 'user',
-        content: [{ type: 'text', text: `Course: "${courseTitle}" · Lesson: "${lessonTitle}"
+        content: [{ type: 'text', text: `${notesContext
+  ? `====== STUDY NOTES (what the student just read) ======\n${notesContext.slice(0, 3000)}\n======================================================\n\n`
+  : `Course: "${courseTitle}" · Lesson: "${lessonTitle}"\n\n`}Question: ${question}
 
-Question: ${question}
-
-Write a hint that is specific and actionable — 2-4 sentences. The hint should:
+Write a hint that is specific and actionable — 2-4 sentences. The hint MUST be grounded in the notes above if provided. The hint should:
 ${isCoding
-  ? `- Name the exact SQL clause, keyword, or function they need (e.g. "You'll need a JOIN here — specifically think about which table is the 'left' side and which columns to match on.")
-- Describe the structure or shape of the answer without writing the full query
-- Mention any common mistake to avoid for this type of problem`
-  : `- Name the specific concept, term, or mechanism they need to recall
-- Give a concrete clue about how to frame the answer (e.g. "Think about what happens BEFORE step X, not after")
-- If there's an analogy or example that makes it click, use it`}
+  ? `- Name the exact clause, keyword, or function they need
+- Describe the structure of the answer without writing it in full
+- Mention any common mistake to avoid`
+  : `- Name the specific concept, term, or mechanism they need to recall (pull it from the notes if relevant)
+- Give a concrete clue about how to frame the answer
+- If there's an analogy or example from the notes that makes it click, use it`}
 
 Do NOT just restate the question. Do NOT say "think about" without saying what to think about. Be useful.
 Reply with ONLY the hint text, no labels, no JSON.` }],
@@ -2054,10 +2069,29 @@ async function extractPdfText(buffer) {
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
-    pages.push(content.items.map((item) => item.str).join(' '));
+    let text = '';
+    let prevY = null;
+    for (const item of content.items) {
+      if (!item.str) continue;
+      const y = item.transform?.[5] ?? 0;
+      // New line when Y position shifts noticeably
+      if (prevY !== null && Math.abs(y - prevY) > 4) {
+        text += '\n';
+      }
+      text += item.str;
+      // Preserve word spacing if item doesn't already end with space
+      if (!item.str.endsWith(' ')) text += ' ';
+      prevY = y;
+    }
+    pages.push(text.trim());
   }
   await doc.destroy();
-  return pages.join('\n').replace(/\s+/g, ' ').trim().slice(0, 15000);
+  // Collapse runs of spaces but keep newlines, then cap at 20k chars
+  return pages.join('\n\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 20000);
 }
 
 app.post('/api/upload-materials', upload.array('files', 10), async (req, res) => {
@@ -2588,10 +2622,133 @@ app.get('/api/usage', async (req, res) => {
     if (!profile) return res.json({ count: 0, limit: FREE_MSG_LIMIT, isPremium: false });
     const isPremium = profile.plan === 'premium';
     const today = new Date().toISOString().slice(0, 10);
-    const count = isPremium ? 0 : (profile.usage?.[today] ?? 0);
+    const cacheKey = `${userId}_${today}`;
+    // Prefer in-memory count (more accurate during active session) over DB
+    const dbCount = profile.usage?.[today] ?? 0;
+    const count = isPremium ? 0 : Math.max(_usageCache[cacheKey] ?? 0, dbCount);
     res.json({ count, limit: FREE_MSG_LIMIT, isPremium });
   } catch (e) {
     res.json({ count: 0, limit: FREE_MSG_LIMIT, isPremium: false });
+  }
+});
+
+// ── Study Mode ───────────────────────────────────────────────────────────────
+
+app.post('/api/study-notes', async (req, res) => {
+  const { topic, notesContext } = req.body;
+  if (!topic && !notesContext) return res.status(400).json({ error: 'topic or notesContext required' });
+
+  const systemPrompt = `You are a study guide writer. Produce clear, well-structured study notes in markdown.
+Use ## headings, bullet points, and **bold** for key terms. Be dense with information — this is for revision, not discovery.
+
+You must include exactly 1-2 visual slides embedded in the notes using this format:
+
+### Slide
+\`\`\`language
+...code or example here...
+\`\`\`
+
+OR for data/concepts:
+
+### Slide
+| col1 | col2 | col3 |
+|------|------|------|
+| val  | val  | val  |
+
+Rules for slides:
+- Place each slide right after the section it illustrates
+- Use a code block for process flows, syntax examples, algorithms, or formulas
+- Use a table for comparisons, data structures, timelines, or reference lists
+- Keep slides tight — max 8 rows or 12 lines of code
+- Pick the format that most clearly shows the concept visually
+
+Respond ONLY with the markdown content, no preamble.`;
+
+  const structure = `
+## Overview
+(2-3 sentence summary)
+
+## Key Concepts
+(bulleted list — add a ### Slide here if a table or code example would clarify)
+
+## How It Works / Core Mechanics
+(the meat — add a ### Slide here if a diagram, flow, or example helps)
+
+## Important Details & Gotchas
+(things people often get wrong or forget)
+
+## Quick Reference
+(definitions, formulas, or key facts in scannable format)`;
+
+  const userPrompt = notesContext
+    ? `The student uploaded a document. Extract and restructure it into clear study notes.
+
+Document content:
+---
+${notesContext.slice(0, 18000)}
+---
+
+Rules:
+- Follow the document's own topics and sections — do NOT impose a generic structure
+- Use ## for each major topic/section found in the document
+- Distill each section to its key points as bullet points under the heading
+- Bold (**term**) every important term, name, or formula
+- Include 1-2 ### Slide blocks for the most comparison-heavy or formula-heavy section
+- If the document has examples, keep the most important one per section
+- Do not invent content that isn't in the document
+
+Respond ONLY with the markdown study notes.`
+    : `Create comprehensive study notes on: "${topic}".
+
+Structure:${structure}`;
+
+  try {
+    const notes = await callGemini(systemPrompt, [{ role: 'user', content: [{ type: 'text', text: userPrompt }] }], 2400);
+    res.json({ notes });
+  } catch (err) {
+    console.error('[study-notes]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/study-quiz', async (req, res) => {
+  const { topic, notes } = req.body;
+  if (!notes) return res.status(400).json({ error: 'notes required' });
+
+  try {
+    const text = await callGemini(
+      'You are a quiz writer. Respond ONLY with valid JSON, no markdown fences.',
+      [{
+        role: 'user',
+        content: [{ type: 'text', text: `Write a 10-question multiple-choice quiz based strictly on these study notes about "${topic}".
+
+====== STUDY NOTES ======
+${notes.slice(0, 8000)}
+=========================
+
+Rules:
+1. Every question must be answerable from the notes above.
+2. Wrong options must be plausible but clearly wrong to someone who read the notes.
+3. Mix conceptual understanding and specific recall.
+4. Do NOT invent facts not in the notes.
+
+Return ONLY valid JSON:
+{
+  "questions": [
+    { "type": "mcq", "q": "...", "options": ["...", "...", "...", "..."], "correct": 0 }
+  ],
+  "practicalExercises": []
+}` }],
+      }],
+      3000,
+    );
+    const parsed = repairQuizJson(text);
+    const normalized = normalizeQuizPayload(parsed);
+    if (normalized.questions.length === 0) throw new Error('Could not parse quiz JSON');
+    res.json(normalized);
+  } catch (err) {
+    console.error('[study-quiz]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

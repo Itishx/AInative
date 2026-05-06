@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiUrl } from '../api';
 import { HC } from '../theme';
 import { AppNav } from '../components/Chrome';
 import { useStore } from '../store';
@@ -606,18 +607,106 @@ function QuizHub({
   );
 }
 
+function FilterTabs({ filters, filter, setFilter }: {
+  filters: { key: Filter; label: string; count: number }[];
+  filter: Filter;
+  setFilter: (f: Filter) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [pillStyle, setPillStyle] = useState<{ left: number; width: number } | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    const idx = filters.findIndex((f) => f.key === filter);
+    const btn = btnRefs.current[idx];
+    const container = containerRef.current;
+    if (!btn || !container) return;
+    const cRect = container.getBoundingClientRect();
+    const bRect = btn.getBoundingClientRect();
+    setPillStyle({ left: bRect.left - cRect.left, width: bRect.width });
+    setReady(true);
+  }, [filter, filters]);
+
+  return (
+    <section style={{ display: 'flex', justifyContent: 'center', padding: '26px 0 8px' }}>
+      <div
+        ref={containerRef}
+        style={{
+          position: 'relative',
+          display: 'flex',
+          gap: 0,
+          alignItems: 'center',
+          padding: 6,
+          border: `1px solid ${D.faint}`,
+          borderRadius: 999,
+          background: D.softer,
+        }}
+      >
+        {/* sliding pill */}
+        {pillStyle && (
+          <div style={{
+            position: 'absolute',
+            top: 6,
+            bottom: 6,
+            left: pillStyle.left,
+            width: pillStyle.width,
+            borderRadius: 999,
+            background: D.ink,
+            transition: ready ? 'left 220ms cubic-bezier(0.4,0,0.2,1), width 220ms cubic-bezier(0.4,0,0.2,1)' : 'none',
+            pointerEvents: 'none',
+          }} />
+        )}
+        {filters.map((item, idx) => {
+          const active = filter === item.key;
+          return (
+            <button
+              key={item.key}
+              ref={(el) => { btnRefs.current[idx] = el; }}
+              onClick={() => setFilter(item.key)}
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                border: 'none',
+                borderRadius: 999,
+                background: 'transparent',
+                color: active ? D.bg : D.mute,
+                padding: '10px 13px',
+                cursor: 'pointer',
+                fontFamily: D.mono,
+                fontSize: 9,
+                letterSpacing: '0.11em',
+                textTransform: 'uppercase',
+                transition: 'color 180ms ease',
+              }}
+            >
+              {item.label}
+              <span style={{ marginLeft: 8, opacity: active ? 0.72 : 0.86 }}>{item.count}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const { state, dispatch } = useStore();
   const { dark } = useTheme();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
-  const [query, setQuery] = useState('');
+
   const [mode, setMode] = useState<DashboardMode>('courses');
+  const [appMode, setAppMode] = useState<'learn' | 'study'>('learn');
   const [topic, setTopic] = useState('');
+  const [studyFile, setStudyFile] = useState<File | null>(null);
+  const [studyUploading, setStudyUploading] = useState(false);
   const [heroFocused, setHeroFocused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const typingPlaceholder = useTypingPlaceholder({
-    phrases: HERO_PLACEHOLDER_PHRASES,
+    phrases: appMode === 'study'
+      ? ['study for my economics exam', 'revise system design concepts', 'review my uploaded lecture notes', 'prep for product management interview']
+      : HERO_PLACEHOLDER_PHRASES,
     enabled: !heroFocused && !topic.trim(),
   });
 
@@ -636,15 +725,12 @@ export default function Dashboard() {
   }, [state.courses]);
 
   const filteredCourses = useMemo(() => {
-    const search = query.trim().toLowerCase();
     return state.courses.filter((course) => {
       if (filter === 'urgent' && course.status !== 'active-urgent') return false;
       if (filter !== 'all' && filter !== 'urgent' && getCourseFilter(course) !== filter) return false;
-      if (!search) return true;
-      const lesson = course.curriculum.modules[course.currentModule]?.lessons[course.currentLesson]?.title ?? '';
-      return `${course.subject} ${lesson} ${course.curriculum.title}`.toLowerCase().includes(search);
+      return true;
     });
-  }, [filter, query, state.courses]);
+  }, [filter, state.courses]);
 
   const upcoming = useMemo(() => {
     return state.courses
@@ -665,6 +751,26 @@ export default function Dashboard() {
     const nextTopic = topic.trim();
     if (!nextTopic) return;
     navigate(`/new?topic=${encodeURIComponent(nextTopic)}`);
+  }
+
+  async function handleStartStudy(e: React.FormEvent) {
+    e.preventDefault();
+    const nextTopic = topic.trim();
+    if (!nextTopic && !studyFile) return;
+    if (studyFile) {
+      setStudyUploading(true);
+      try {
+        const fd = new FormData();
+        fd.append('files', studyFile);
+        const res = await fetch(apiUrl('/api/upload-materials'), { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.materialsContext) {
+          sessionStorage.setItem('study_notes_context', data.materialsContext);
+        }
+      } catch {}
+      setStudyUploading(false);
+    }
+    navigate(`/study?topic=${encodeURIComponent(nextTopic || studyFile!.name.replace(/\.pdf$/i, ''))}`);
   }
 
   const filters: { key: Filter; label: string; count: number }[] = [
@@ -705,58 +811,64 @@ export default function Dashboard() {
       <main style={{ position: 'relative', maxWidth: 1520, margin: '0 auto', padding: '28px clamp(20px, 4vw, 58px) 64px' }}>
 
         <div style={{ minWidth: 0 }}>
-        <section
-          style={{
-            padding: '100px 24px 120px',
-            textAlign: 'center',
-          }}
-        >
+        <section style={{ padding: '80px 24px 100px', textAlign: 'center' }}>
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
-            <div style={{ fontFamily: D.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: D.red, marginBottom: 32 }}>
-              — dashboard
+
+            {/* Learn / Study toggle */}
+            <div style={{ display: 'inline-flex', border: `1px solid ${D.faint}`, borderRadius: 999, background: D.softer, padding: 4, marginBottom: 36, position: 'relative' }}>
+              {(['learn', 'study'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => { setAppMode(m); setTopic(''); setStudyFile(null); }}
+                  style={{
+                    position: 'relative', zIndex: 1, border: 'none', borderRadius: 999,
+                    background: appMode === m ? D.ink : 'transparent',
+                    color: appMode === m ? D.bg : D.mute,
+                    padding: '9px 22px', cursor: 'pointer',
+                    fontFamily: D.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase',
+                    transition: 'background 200ms ease, color 200ms ease',
+                  }}
+                >
+                  {m === 'learn' ? 'Learn' : 'Study'}
+                </button>
+              ))}
             </div>
-            <h1 style={{ margin: '0 0 28px', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(42px, 6.8vw, 86px)', lineHeight: 0.94, letterSpacing: '-0.035em', color: D.ink }}>
+
+            <h1 style={{ margin: '0 0 20px', fontFamily: D.serif, fontWeight: 400, fontSize: 'clamp(42px, 6.8vw, 86px)', lineHeight: 0.94, letterSpacing: '-0.035em', color: D.ink }}>
               Hey {displayName},<br />
-              what do you want to{' '}
-              <span style={{ fontStyle: 'italic', color: D.red }}>learn today?</span>
+              {appMode === 'learn' ? (
+                <>what do you want to{' '}<span style={{ fontStyle: 'italic', color: D.red }}>learn today?</span></>
+              ) : (
+                <>what are you{' '}<span style={{ fontStyle: 'italic', color: D.red }}>studying for?</span></>
+              )}
             </h1>
-            <p style={{ margin: '0 auto 42px', maxWidth: 460, fontFamily: D.serif, fontStyle: 'italic', fontSize: 20, lineHeight: 1.4, color: D.mute }}>
-              Start something new, or jump back into what is already on the clock.
+            <p style={{ margin: '0 auto 36px', maxWidth: 460, fontFamily: D.serif, fontStyle: 'italic', fontSize: 20, lineHeight: 1.4, color: D.mute }}>
+              {appMode === 'learn'
+                ? 'Start something new, or jump back into what is already on the clock.'
+                : 'Type a topic or upload your notes — we\'ll generate a study guide and quiz you on it.'}
             </p>
 
-            <form onSubmit={handleStartCourse}>
-              <div
-                style={{
-                  border: `1.5px solid ${heroFocused ? D.ink : D.faint}`,
-                  background: dark ? '#1c1a16' : '#faf7f0',
-                  transition: 'border-color 0.15s',
-                  boxShadow: heroFocused ? `0 0 0 3px ${dark ? 'rgba(246,240,231,0.08)' : 'rgba(26,21,16,0.06)'}` : 'none',
-                }}
-              >
+            <form onSubmit={appMode === 'learn' ? handleStartCourse : handleStartStudy}>
+              <div style={{
+                border: `1.5px solid ${heroFocused ? D.ink : D.faint}`,
+                background: dark ? '#1c1a16' : '#faf7f0',
+                transition: 'border-color 0.15s',
+                boxShadow: heroFocused ? `0 0 0 3px ${dark ? 'rgba(246,240,231,0.08)' : 'rgba(26,21,16,0.06)'}` : 'none',
+              }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', padding: '20px 20px 12px' }}>
                   <span style={{ fontFamily: D.mono, fontSize: 13, color: D.red, marginRight: 14, marginTop: 3, flexShrink: 0 }}>$</span>
                   <div style={{ position: 'relative', flex: 1 }}>
                     {typingPlaceholder.show && (
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          pointerEvents: 'none',
-                          fontFamily: D.serif,
-                          fontSize: 22,
-                          lineHeight: 1.4,
-                          color: D.mute,
-                          minHeight: 56,
-                          whiteSpace: 'pre-wrap',
-                        }}
-                      >
+                      <div aria-hidden="true" style={{
+                        position: 'absolute', inset: 0, pointerEvents: 'none',
+                        fontFamily: D.serif, fontSize: 22, lineHeight: 1.4, color: D.mute, minHeight: 56, whiteSpace: 'pre-wrap',
+                      }}>
                         {typingPlaceholder.text}
                         <span style={{ opacity: typingPlaceholder.cursorVisible ? 1 : 0, transition: 'opacity 140ms ease' }}>|</span>
                       </div>
                     )}
                     <textarea
-                      aria-label="What do you want to learn?"
+                      aria-label={appMode === 'learn' ? 'What do you want to learn?' : 'What are you studying for?'}
                       value={topic}
                       onChange={(event) => {
                         setTopic(event.target.value);
@@ -768,48 +880,50 @@ export default function Dashboard() {
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' && !event.shiftKey) {
                           event.preventDefault();
-                          handleStartCourse(event);
+                          if (appMode === 'learn') handleStartCourse(event);
+                          else handleStartStudy(event);
                         }
                       }}
                       placeholder=""
                       rows={2}
                       style={{
-                        position: 'relative',
-                        zIndex: 1,
-                        flex: 1,
-                        width: '100%',
-                        border: 'none',
-                        outline: 'none',
-                        background: 'transparent',
-                        resize: 'none',
-                        fontFamily: D.serif,
-                        fontSize: 22,
-                        lineHeight: 1.4,
-                        color: D.ink,
-                        minHeight: 56,
-                        overflow: 'hidden',
+                        position: 'relative', zIndex: 1, flex: 1, width: '100%',
+                        border: 'none', outline: 'none', background: 'transparent', resize: 'none',
+                        fontFamily: D.serif, fontSize: 22, lineHeight: 1.4, color: D.ink, minHeight: 56, overflow: 'hidden',
                       }}
                     />
                   </div>
                 </div>
+
+                {/* Study mode: PDF upload row */}
+                {appMode === 'study' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px', borderTop: `1px dashed ${D.faint}` }}>
+                    <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: D.mute, flexShrink: 0 }}>pdf</span>
+                    <label style={{ cursor: 'pointer', flex: 1 }}>
+                      <span style={{ fontFamily: D.mono, fontSize: 12, color: studyFile ? D.ink : D.mute, borderBottom: `1px solid ${studyFile ? D.ink : D.faint}`, paddingBottom: 2 }}>
+                        {studyFile ? studyFile.name : 'attach your notes (optional)…'}
+                      </span>
+                      <input type="file" accept=".pdf" onChange={(e) => setStudyFile(e.target.files?.[0] ?? null)} style={{ display: 'none' }} />
+                    </label>
+                    {studyFile && (
+                      <button type="button" onClick={() => setStudyFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: D.mono, fontSize: 13, color: D.mute, padding: 0 }}>×</button>
+                    )}
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '12px 20px', borderTop: `1px solid ${D.faint}` }}>
                   <button
                     type="submit"
-                    disabled={!topic.trim()}
+                    disabled={appMode === 'learn' ? !topic.trim() : (!topic.trim() && !studyFile) || studyUploading}
                     style={{
-                      background: topic.trim() ? D.ink : D.faint,
-                      color: topic.trim() ? D.bg : D.mute,
-                      border: 'none',
-                      padding: '12px 24px',
-                      flexShrink: 0,
-                      fontFamily: D.mono,
-                      fontSize: 11,
-                      letterSpacing: '0.18em',
-                      textTransform: 'uppercase',
-                      cursor: topic.trim() ? 'pointer' : 'not-allowed',
+                      background: (appMode === 'learn' ? topic.trim() : topic.trim() || studyFile) && !studyUploading ? D.ink : D.faint,
+                      color: (appMode === 'learn' ? topic.trim() : topic.trim() || studyFile) && !studyUploading ? D.bg : D.mute,
+                      border: 'none', padding: '12px 24px', flexShrink: 0,
+                      fontFamily: D.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase',
+                      cursor: (appMode === 'learn' ? topic.trim() : topic.trim() || studyFile) && !studyUploading ? 'pointer' : 'not-allowed',
                     }}
                   >
-                    Start course →
+                    {studyUploading ? 'Reading PDF…' : appMode === 'learn' ? 'Start course →' : 'Study →'}
                   </button>
                 </div>
               </div>
@@ -817,6 +931,47 @@ export default function Dashboard() {
           </div>
         </section>
 
+        {appMode === 'study' ? (
+          <section style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 40 }}>
+            <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: D.mute, marginBottom: 24 }}>
+              — past sessions
+            </div>
+            {(state.studySessions ?? []).length === 0 ? (
+              <p style={{ fontFamily: `"Instrument Serif", Georgia, serif`, fontStyle: 'italic', fontSize: 22, color: D.mute, margin: 0 }}>
+                Your study sessions will appear here.
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+                {(state.studySessions ?? []).map((session) => (
+                  <div
+                    key={session.id}
+                    style={{ border: `1px solid ${D.faint}`, padding: '20px 22px', cursor: 'pointer', transition: 'border-color 140ms ease', position: 'relative' }}
+                    onClick={() => navigate(`/study?topic=${encodeURIComponent(session.topic)}&sessionId=${session.id}`)}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = D.ink)}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = D.faint)}
+                  >
+                    <button
+                      onClick={e => { e.stopPropagation(); dispatch({ type: 'DELETE_STUDY_SESSION', id: session.id }); }}
+                      title="Delete session"
+                      style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', cursor: 'pointer', color: D.mute, fontFamily: D.mono, fontSize: 14, lineHeight: 1, padding: '2px 6px', opacity: 0.6 }}
+                      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
+                    >
+                      ×
+                    </button>
+                    <div style={{ fontFamily: `"Instrument Serif", Georgia, serif`, fontSize: 20, fontWeight: 400, color: D.ink, marginBottom: 8, lineHeight: 1.2, paddingRight: 24 }}>
+                      {session.topic}
+                    </div>
+                    <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: D.mute }}>
+                      {new Date(session.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : (
+        <>
         <section style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', padding: '28px 0 24px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {(['courses', 'quizzes'] as DashboardMode[]).map((item) => (
@@ -888,99 +1043,8 @@ export default function Dashboard() {
           </p>
         </section>
 
-        <section style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', padding: '26px 0 8px', flexWrap: 'wrap' }}>
-          <div
-            style={{
-              display: 'flex',
-              gap: 8,
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              padding: 6,
-              border: `1px solid ${D.faint}`,
-              borderRadius: 999,
-              background: D.softer,
-            }}
-          >
-            {filters.map((item) => {
-              const active = filter === item.key;
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => setFilter(item.key)}
-                  style={{
-                    border: `1px solid ${active ? D.ink : 'transparent'}`,
-                    borderRadius: 999,
-                    background: active ? D.ink : 'transparent',
-                    color: active ? D.bg : D.mute,
-                    padding: '10px 13px',
-                    cursor: 'pointer',
-                    fontFamily: D.mono,
-                    fontSize: 9,
-                    letterSpacing: '0.11em',
-                    textTransform: 'uppercase',
-                    transition: 'background 160ms ease, color 160ms ease, border-color 160ms ease',
-                  }}
-                >
-                  {item.label}
-                  <span style={{ marginLeft: 8, opacity: active ? 0.72 : 0.86 }}>{item.count}</span>
-                </button>
-              );
-            })}
-          </div>
+        <FilterTabs filters={filters} filter={filter} setFilter={setFilter} />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                width: 'min(320px, 54vw)',
-                border: `1px solid ${D.faint}`,
-                borderRadius: 999,
-                background: D.softer,
-                padding: '0 14px',
-              }}
-            >
-              <span style={{ color: D.mute, fontFamily: D.mono, fontSize: 12 }}>⌕</span>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search courses"
-                style={{
-                  width: '100%',
-                  border: 'none',
-                  background: 'transparent',
-                  color: D.ink,
-                  outline: 'none',
-                  padding: '12px 0',
-                  fontFamily: D.sans,
-                  fontSize: 13,
-                }}
-              />
-            </label>
-            <button
-              onClick={() => navigate('/')}
-              aria-label="Create a new course"
-              title="Create a new course"
-              style={{
-                width: 44,
-                height: 44,
-                border: `1px solid ${D.ink}`,
-                borderRadius: '50%',
-                background: D.ink,
-                color: D.bg,
-                cursor: 'pointer',
-                display: 'grid',
-                placeItems: 'center',
-                fontFamily: D.sans,
-                fontSize: 24,
-                lineHeight: 1,
-              }}
-            >
-              +
-            </button>
-          </div>
-        </section>
 
         <section>
           {state.courses.length === 0 ? (
@@ -1057,6 +1121,8 @@ export default function Dashboard() {
           </section>
         )}
           </>
+        )}
+        </>
         )}
           </div>
       </main>
