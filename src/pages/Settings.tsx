@@ -4,6 +4,7 @@ import { useStore } from '../store';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { supabase } from '../lib/supabase';
+import type { UsageSnapshot } from '../types';
 
 type SettingsTab = 'profile' | 'billing';
 
@@ -22,6 +23,18 @@ const S = {
   amber:  'var(--s-amber)',
   green:  'var(--s-green)',
 };
+
+function formatTimeUntil(target: string) {
+  const ms = Math.max(0, new Date(target).getTime() - Date.now());
+  const totalMinutes = Math.ceil(ms / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}h`;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  return `${Math.max(1, totalMinutes)}m`;
+}
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -92,6 +105,7 @@ export default function Settings() {
     setSaved(false);
     setSaveError('');
     const profile = {
+      ...state.profile,
       displayName: displayName.trim(),
       headline: headline.trim(),
       bio: bio.trim(),
@@ -415,6 +429,7 @@ const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env
 
 const FEATURE_ROWS = [
   { label: 'Messages',         free: '25 / day',   premium: 'Unlimited' },
+  { label: 'Study mode',       free: '1 / 72h',    premium: 'Unlimited' },
   { label: 'Notes',            free: '—',          premium: '✓ Saved' },
   { label: 'Import content',   free: '—',          premium: '✓ Anywhere' },
   { label: 'PDF upload',       free: '—',          premium: '✓' },
@@ -422,20 +437,37 @@ const FEATURE_ROWS = [
   { label: 'Voice mode',       free: '—',          premium: '✓' },
 ];
 
+const DEFAULT_STUDY_USAGE: UsageSnapshot['study'] = {
+  count: 0,
+  limit: 1,
+  available: true,
+  retryAt: null,
+  windowHours: 72,
+  lastSessionAt: null,
+};
+
 function BillingTab() {
   const { state, dispatch } = useStore();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [isIndia, setIsIndia] = useState(false);
   const isPremium = state.profile?.plan === 'premium';
-  const [usage, setUsage] = useState<{ count: number; limit: number; isPremium: boolean } | null>(null);
+  const [usage, setUsage] = useState<UsageSnapshot | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
     fetch(`${API_BASE}/api/usage?userId=${user.id}`)
       .then(r => r.json())
-      .then(setUsage)
+      .then((data: UsageSnapshot) => setUsage(data))
       .catch(() => {});
   }, [user?.id]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/geo`)
+      .then(r => r.json())
+      .then(({ country }) => setIsIndia(country === 'IN'))
+      .catch(() => {});
+  }, []);
 
   async function handleUpgrade() {
     console.log('[upgrade] user:', user?.id, 'API_BASE:', API_BASE);
@@ -479,6 +511,15 @@ function BillingTab() {
       })
       .catch(() => {});
   });
+
+  const studyUsage = usage?.study ?? DEFAULT_STUDY_USAGE;
+  const studyLocked = !isPremium && !!studyUsage.retryAt && new Date(studyUsage.retryAt).getTime() > Date.now();
+  const studyUsedCount = studyLocked ? studyUsage.count : 0;
+  const studyRetryLabel = studyUsage.retryAt ? formatTimeUntil(studyUsage.retryAt) : '';
+  const studyUnlockStamp = studyUsage.retryAt
+    ? new Date(studyUsage.retryAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : '';
+  const premiumPrice = isIndia ? '₹299' : '$21';
 
   return (
     <>
@@ -556,6 +597,47 @@ function BillingTab() {
         </div>
       </div>
 
+      <div style={{ marginBottom: 48 }}>
+        <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: S.mute, marginBottom: 16 }}>Study mode usage</div>
+        <div style={{ padding: '24px 28px', border: `1px solid ${studyLocked ? S.red : S.faint}` }}>
+          {isPremium ? (
+            <div>
+              <div style={{ fontFamily: SERIF, fontSize: 22, letterSpacing: '-0.02em', color: S.ink }}>Unlimited</div>
+              <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                Premium · unlimited study sessions
+              </div>
+            </div>
+          ) : usage ? (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ fontFamily: SERIF, fontSize: 28, letterSpacing: '-0.03em', color: studyLocked ? S.red : S.ink }}>
+                  {studyUsedCount} <span style={{ fontFamily: MONO, fontSize: 12, color: S.mute }}>/ {studyUsage.limit} session</span>
+                </div>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  1 free session every {studyUsage.windowHours} hours
+                </div>
+              </div>
+              <div style={{ height: 4, background: S.softer, borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${Math.min((studyUsedCount / studyUsage.limit) * 100, 100)}%`,
+                  background: studyLocked ? S.red : S.green,
+                  borderRadius: 2,
+                  transition: 'width 0.4s ease',
+                }} />
+              </div>
+              <div style={{ marginTop: 10, fontFamily: MONO, fontSize: 9, color: studyLocked ? S.red : S.mute, letterSpacing: '0.1em', textTransform: 'uppercase', lineHeight: 1.6 }}>
+                {studyLocked
+                  ? `Limit reached · next unlock in ${studyRetryLabel}${studyUnlockStamp ? ` · ${studyUnlockStamp}` : ''}`
+                  : 'Ready for your next study session'}
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.1em' }}>Loading…</div>
+          )}
+        </div>
+      </div>
+
       {/* Feature table */}
       <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: S.mute, marginBottom: 16 }}>What's included</div>
       <div style={{ border: `1px solid ${S.faint}`, marginBottom: 36 }}>
@@ -582,7 +664,7 @@ function BillingTab() {
           >
             {loading ? 'Redirecting…' : 'Upgrade to Premium →'}
           </button>
-          <div style={{ fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.08em' }}>₹299 / month · $21 / month · cancel anytime</div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.08em' }}>{premiumPrice} / month · cancel anytime</div>
         </div>
       )}
 

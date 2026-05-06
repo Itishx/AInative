@@ -4,9 +4,10 @@ import { apiUrl } from '../api';
 import { HC } from '../theme';
 import { AppNav } from '../components/Chrome';
 import { useStore } from '../store';
+import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { useTypingPlaceholder } from '../lib/useTypingPlaceholder';
-import type { Course, QuizAttempt } from '../types';
+import type { Course, QuizAttempt, UsageSnapshot } from '../types';
 
 type Filter = 'all' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
 type DashboardMode = 'courses' | 'quizzes';
@@ -76,6 +77,18 @@ function makeHandle(username: string) {
 
 function getActivityKey(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function formatTimeUntil(target: string, now = Date.now()) {
+  const ms = Math.max(0, new Date(target).getTime() - now);
+  const totalMinutes = Math.ceil(ms / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}h`;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  return `${Math.max(1, totalMinutes)}m`;
 }
 
 function buildConsistency(courses: Course[]) {
@@ -692,6 +705,7 @@ function FilterTabs({ filters, filter, setFilter }: {
 
 export default function Dashboard() {
   const { state, dispatch } = useStore();
+  const { user } = useAuth();
   const { dark } = useTheme();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
@@ -701,6 +715,9 @@ export default function Dashboard() {
   const [topic, setTopic] = useState('');
   const [studyFile, setStudyFile] = useState<File | null>(null);
   const [studyUploading, setStudyUploading] = useState(false);
+  const [studyUsage, setStudyUsage] = useState<UsageSnapshot['study'] | null>(null);
+  const [studyGateError, setStudyGateError] = useState('');
+  const [checkingStudyAccess, setCheckingStudyAccess] = useState(false);
   const [heroFocused, setHeroFocused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const typingPlaceholder = useTypingPlaceholder({
@@ -714,6 +731,14 @@ export default function Dashboard() {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(apiUrl(`/api/usage?userId=${user.id}`))
+      .then((res) => res.json())
+      .then((data: UsageSnapshot) => setStudyUsage(data.study))
+      .catch(() => {});
+  }, [user?.id]);
 
   const stats = useMemo(() => {
     const notStarted = state.courses.filter((c) => c.status !== 'tombstone' && c.status !== 'expired' && c.status !== 'completed' && !courseHasStarted(c)).length;
@@ -755,8 +780,27 @@ export default function Dashboard() {
 
   async function handleStartStudy(e: React.FormEvent) {
     e.preventDefault();
+    setStudyGateError('');
     const nextTopic = topic.trim();
     if (!nextTopic && !studyFile) return;
+    if (user?.id && state.profile?.plan !== 'premium') {
+      setCheckingStudyAccess(true);
+      try {
+        const res = await fetch(apiUrl(`/api/usage?userId=${user.id}`));
+        const data: UsageSnapshot = await res.json();
+        setStudyUsage(data.study);
+        if (!data.isPremium && !data.study.available) {
+          const unlockText = data.study.retryAt ? `Next free session in ${formatTimeUntil(data.study.retryAt)}.` : 'Try again later.';
+          setStudyGateError(`Free study mode is limited to 1 session every ${data.study.windowHours} hours. ${unlockText}`);
+          return;
+        }
+      } catch {
+        // If the preflight check fails, let the server enforce the limit.
+      } finally {
+        setCheckingStudyAccess(false);
+      }
+    }
+    if (!studyFile) sessionStorage.removeItem('study_notes_context');
     if (studyFile) {
       setStudyUploading(true);
       try {
@@ -783,6 +827,13 @@ export default function Dashboard() {
   ];
 
   const displayName = state.profile?.displayName?.trim() || (state.username === 'you' ? 'learner' : state.username);
+  const isPremium = state.profile?.plan === 'premium';
+  const studyLocked = !isPremium && !!studyUsage?.retryAt && new Date(studyUsage.retryAt).getTime() > now;
+  const studyUsedCount = studyLocked ? studyUsage?.count ?? 0 : 0;
+  const studyRetryLabel = studyUsage?.retryAt ? formatTimeUntil(studyUsage.retryAt, now) : '';
+  const studyUnlockStamp = studyUsage?.retryAt
+    ? new Date(studyUsage.retryAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : '';
   return (
     <div style={{
       minHeight: '100vh',
@@ -819,7 +870,13 @@ export default function Dashboard() {
               {(['learn', 'study'] as const).map((m) => (
                 <button
                   key={m}
-                  onClick={() => { setAppMode(m); setTopic(''); setStudyFile(null); }}
+                  onClick={() => {
+                    setAppMode(m);
+                    setTopic('');
+                    setStudyFile(null);
+                    setStudyGateError('');
+                    sessionStorage.removeItem('study_notes_context');
+                  }}
                   style={{
                     position: 'relative', zIndex: 1, border: 'none', borderRadius: 999,
                     background: appMode === m ? D.ink : 'transparent',
@@ -847,6 +904,34 @@ export default function Dashboard() {
                 ? 'Start something new, or jump back into what is already on the clock.'
                 : 'Type a topic or upload your notes — we\'ll generate a study guide and quiz you on it.'}
             </p>
+
+            {appMode === 'study' && !isPremium && studyUsage && (
+              <div style={{
+                maxWidth: 520,
+                margin: '0 auto 24px',
+                padding: '14px 16px',
+                border: `1px solid ${studyLocked ? D.red : D.faint}`,
+                background: dark ? 'rgba(255,81,72,0.06)' : 'rgba(26,21,16,0.03)',
+                textAlign: 'left',
+              }}>
+                <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: studyLocked ? D.red : D.mute, marginBottom: 6 }}>
+                  study mode
+                </div>
+                <div style={{ fontFamily: D.serif, fontSize: 22, letterSpacing: '-0.02em', color: D.ink }}>
+                  {studyUsedCount} / {studyUsage.limit} free session used
+                </div>
+                <div style={{ marginTop: 6, fontFamily: D.mono, fontSize: 9, letterSpacing: '0.09em', textTransform: 'uppercase', color: D.mute, lineHeight: 1.6 }}>
+                  {studyLocked
+                    ? `Next unlock in ${studyRetryLabel}${studyUnlockStamp ? ` · ${studyUnlockStamp}` : ''}`
+                    : `Free plan includes 1 study session every ${studyUsage.windowHours} hours`}
+                </div>
+                {studyLocked && (
+                  <a href="/settings?tab=billing" style={{ display: 'inline-block', marginTop: 10, fontFamily: D.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: D.ink, textDecoration: 'none', borderBottom: `1px solid ${D.ink}` }}>
+                    Upgrade →
+                  </a>
+                )}
+              </div>
+            )}
 
             <form onSubmit={appMode === 'learn' ? handleStartCourse : handleStartStudy}>
               <div style={{
@@ -914,20 +999,33 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '12px 20px', borderTop: `1px solid ${D.faint}` }}>
                   <button
                     type="submit"
-                    disabled={appMode === 'learn' ? !topic.trim() : (!topic.trim() && !studyFile) || studyUploading}
+                    disabled={appMode === 'learn' ? !topic.trim() : (!topic.trim() && !studyFile) || studyUploading || checkingStudyAccess || studyLocked}
                     style={{
-                      background: (appMode === 'learn' ? topic.trim() : topic.trim() || studyFile) && !studyUploading ? D.ink : D.faint,
-                      color: (appMode === 'learn' ? topic.trim() : topic.trim() || studyFile) && !studyUploading ? D.bg : D.mute,
+                      background: (appMode === 'learn' ? topic.trim() : topic.trim() || studyFile) && !studyUploading && !checkingStudyAccess && !studyLocked ? D.ink : D.faint,
+                      color: (appMode === 'learn' ? topic.trim() : topic.trim() || studyFile) && !studyUploading && !checkingStudyAccess && !studyLocked ? D.bg : D.mute,
                       border: 'none', padding: '12px 24px', flexShrink: 0,
                       fontFamily: D.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase',
-                      cursor: (appMode === 'learn' ? topic.trim() : topic.trim() || studyFile) && !studyUploading ? 'pointer' : 'not-allowed',
+                      cursor: (appMode === 'learn' ? topic.trim() : topic.trim() || studyFile) && !studyUploading && !checkingStudyAccess && !studyLocked ? 'pointer' : 'not-allowed',
                     }}
                   >
-                    {studyUploading ? 'Reading PDF…' : appMode === 'learn' ? 'Start course →' : 'Study →'}
+                    {studyUploading
+                      ? 'Reading PDF…'
+                      : checkingStudyAccess
+                        ? 'Checking limit…'
+                        : appMode === 'learn'
+                          ? 'Start course →'
+                          : studyLocked
+                            ? `Locked · ${studyRetryLabel}`
+                            : 'Study →'}
                   </button>
                 </div>
               </div>
             </form>
+            {appMode === 'study' && studyGateError && (
+              <div style={{ maxWidth: 520, margin: '16px auto 0', padding: '12px 14px', border: `1px solid ${D.red}`, color: D.ink, background: dark ? 'rgba(255,81,72,0.08)' : 'rgba(196,34,27,0.05)', fontFamily: D.sans, fontSize: 14, lineHeight: 1.55, textAlign: 'left' }}>
+                {studyGateError}
+              </div>
+            )}
           </div>
         </section>
 

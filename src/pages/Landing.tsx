@@ -1480,6 +1480,7 @@ function NotesSectionLanding({ onNav }: { onNav: (k: string) => void }) {
 // ── Pricing ───────────────────────────────────────────────────────────────────
 const PRICING_ROWS: { label: string; free: string | boolean; premium: string | boolean }[] = [
   { label: 'Messages',        free: '25 / day',    premium: 'Unlimited' },
+  { label: 'Study mode',      free: '1 / 72h',     premium: 'Unlimited' },
   { label: 'Notes',           free: false,         premium: true },
   { label: 'Import content',  free: false,         premium: 'Anywhere' },
   { label: 'PDF upload',      free: false,         premium: true },
@@ -1489,6 +1490,7 @@ const PRICING_ROWS: { label: string; free: string | boolean; premium: string | b
 
 function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndia: boolean }) {
   const { t, mob } = useTheme();
+  const premiumPrice = isIndia ? '₹299' : '$21';
 
   function cell(val: string | boolean, accent?: boolean) {
     if (val === false) return <span style={{ color: t.mute, fontSize: 16 }}>—</span>;
@@ -1530,7 +1532,7 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
           <div style={{ border: `1.5px solid ${t.red}`, padding: '24px 20px', background: t.paper, position: 'relative' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: t.red }} />
             <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red }}>Premium</div>
-            <div style={{ fontFamily: SERIF, fontSize: 48, color: t.ink, marginTop: 6, letterSpacing: '-0.03em' }}>{isIndia ? '₹299' : '$21'}</div>
+            <div style={{ fontFamily: SERIF, fontSize: 48, color: t.ink, marginTop: 6, letterSpacing: '-0.03em' }}>{premiumPrice}</div>
             <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.08em', marginBottom: 20 }}>/ month</div>
             {PRICING_ROWS.map((row) => (
               <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${t.ruleFaint}` }}>
@@ -1539,7 +1541,7 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
               </div>
             ))}
             <button onClick={() => onNav('premium')} style={{ width: '100%', marginTop: 20, background: t.ink, color: t.bg, border: 'none', padding: '12px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
-              {isIndia ? 'Get premium · ₹299 →' : 'Get premium · $21 →'}
+              Get premium · {premiumPrice} →
             </button>
           </div>
           <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.1em' }}>
@@ -1559,7 +1561,7 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
             <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper, position: 'relative' }}>
               <div style={{ position: 'absolute', top: -1, left: 0, right: 0, height: 3, background: t.red }} />
               <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red }}>Premium</div>
-              <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>{isIndia ? '₹299' : '$21'}</div>
+              <div style={{ fontFamily: SERIF, fontSize: 36, color: t.ink, marginTop: 8, letterSpacing: '-0.03em' }}>{premiumPrice}</div>
               <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, marginTop: 4, letterSpacing: '0.08em' }}>/ month</div>
             </div>
             <div style={{ padding: '20px 24px' }}>
@@ -1583,7 +1585,7 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
             </div>
             <div style={{ padding: '20px 24px', borderRight: `1px solid ${t.ruleFaint}`, background: t.paper }}>
               <button onClick={() => onNav('premium')} style={{ background: t.ink, color: t.bg, border: 'none', padding: '10px 18px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
-                {isIndia ? 'Get premium · ₹299 →' : 'Get premium · $21 →'}
+                Get premium · {premiumPrice} →
               </button>
             </div>
             <div style={{ padding: '20px 24px' }}>

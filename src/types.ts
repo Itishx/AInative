@@ -113,6 +113,22 @@ export interface StudySession {
   createdAt: string;
 }
 
+export interface StudyUsage {
+  count: number;
+  limit: number;
+  available: boolean;
+  retryAt: string | null;
+  windowHours: number;
+  lastSessionAt: string | null;
+}
+
+export interface UsageSnapshot {
+  count: number;
+  limit: number;
+  isPremium: boolean;
+  study: StudyUsage;
+}
+
 export interface AppState {
   courses: Course[];
   leaderboard: LeaderboardEntry[];

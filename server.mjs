@@ -761,27 +761,129 @@ app.options('*', cors(corsOptions));
 
 // ── Usage helpers ─────────────────────────────────────────────────────────────
 const FREE_MSG_LIMIT = 25;
+const FREE_STUDY_LIMIT = 1;
+const STUDY_WINDOW_MS = 72 * 3600000;
+const STUDY_WINDOW_HOURS = 72;
 
-async function getProfile(userId) {
+async function getUserCourseRow(userId, select = 'profile') {
   const sKey = (process.env.SUPABASE_SERVICE_KEY || '').trim();
   const sUrl = (process.env.SUPABASE_URL || 'https://nxxisxugpfswyvpchexs.supabase.co').trim();
   if (!sKey || !userId) return null;
-  const r = await fetch(`${sUrl}/rest/v1/user_courses?user_id=eq.${userId}&select=profile&limit=1`, {
+  const r = await fetch(`${sUrl}/rest/v1/user_courses?user_id=eq.${userId}&select=${encodeURIComponent(select)}&limit=1`, {
     headers: { 'apikey': sKey, 'Authorization': `Bearer ${sKey}` },
   });
   const rows = await r.json();
-  return rows?.[0]?.profile || {};
+  return rows?.[0] || null;
 }
 
-async function patchProfile(userId, profile) {
+async function getProfile(userId) {
+  const row = await getUserCourseRow(userId, 'profile');
+  return row?.profile || {};
+}
+
+async function patchUserCourseRow(userId, patch) {
   const sKey = (process.env.SUPABASE_SERVICE_KEY || '').trim();
   const sUrl = (process.env.SUPABASE_URL || 'https://nxxisxugpfswyvpchexs.supabase.co').trim();
   if (!sKey || !userId) return;
   await fetch(`${sUrl}/rest/v1/user_courses?user_id=eq.${userId}`, {
     method: 'PATCH',
     headers: { 'apikey': sKey, 'Authorization': `Bearer ${sKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ profile }),
+    body: JSON.stringify(patch),
   });
+}
+
+async function patchProfile(userId, profile) {
+  await patchUserCourseRow(userId, { profile });
+}
+
+function buildStudyUsage(studySessions, isPremium, nowMs = Date.now()) {
+  if (isPremium) {
+    return {
+      count: 0,
+      limit: FREE_STUDY_LIMIT,
+      available: true,
+      retryAt: null,
+      windowHours: STUDY_WINDOW_HOURS,
+      lastSessionAt: null,
+    };
+  }
+
+  const latestSession = Array.isArray(studySessions)
+    ? studySessions
+      .map((session) => ({
+        createdAt: session?.createdAt,
+        createdAtMs: new Date(session?.createdAt || 0).getTime(),
+      }))
+      .filter((session) => Number.isFinite(session.createdAtMs) && session.createdAtMs > 0)
+      .sort((a, b) => b.createdAtMs - a.createdAtMs)[0]
+    : undefined;
+
+  if (!latestSession) {
+    return {
+      count: 0,
+      limit: FREE_STUDY_LIMIT,
+      available: true,
+      retryAt: null,
+      windowHours: STUDY_WINDOW_HOURS,
+      lastSessionAt: null,
+    };
+  }
+
+  const retryAtMs = latestSession.createdAtMs + STUDY_WINDOW_MS;
+  const locked = retryAtMs > nowMs;
+
+  return {
+    count: locked ? FREE_STUDY_LIMIT : 0,
+    limit: FREE_STUDY_LIMIT,
+    available: !locked,
+    retryAt: locked ? new Date(retryAtMs).toISOString() : null,
+    windowHours: STUDY_WINDOW_HOURS,
+    lastSessionAt: latestSession.createdAt,
+  };
+}
+
+async function getStudyAccessState(userId) {
+  if (!userId) {
+    return {
+      profile: {},
+      studySessions: [],
+      isPremium: false,
+      studyUsage: buildStudyUsage([], false),
+    };
+  }
+
+  const row = await getUserCourseRow(userId, 'profile,study_sessions');
+  if (!row) {
+    return {
+      profile: {},
+      studySessions: [],
+      isPremium: false,
+      studyUsage: buildStudyUsage([], false),
+    };
+  }
+
+  const profile = row.profile || {};
+  const studySessions = Array.isArray(row.study_sessions) ? row.study_sessions : [];
+  const isPremium = profile.plan === 'premium';
+
+  return {
+    profile,
+    studySessions,
+    isPremium,
+    studyUsage: buildStudyUsage(studySessions, isPremium),
+  };
+}
+
+async function persistStudySession(userId, studySessions, session) {
+  if (!userId) return session;
+  const nextStudySessions = [session, ...(Array.isArray(studySessions) ? studySessions : [])]
+    .filter((item, index, arr) => arr.findIndex((entry) => entry.id === item.id) === index)
+    .slice(0, 50);
+  await patchUserCourseRow(userId, {
+    study_sessions: nextStudySessions,
+    updated_at: new Date().toISOString(),
+  });
+  return session;
 }
 
 // In-memory counter — avoids DB read-write race on rapid messages
@@ -2613,30 +2715,65 @@ app.get('/api/search-learners', async (req, res) => {
   }
 });
 
-// GET /api/usage — live message count for the settings page
+// GET /api/usage — live message + study usage for the settings page
 app.get('/api/usage', async (req, res) => {
   const { userId } = req.query;
-  if (!userId) return res.json({ count: 0, limit: FREE_MSG_LIMIT, isPremium: false });
+  if (!userId) {
+    return res.json({
+      count: 0,
+      limit: FREE_MSG_LIMIT,
+      isPremium: false,
+      study: buildStudyUsage([], false),
+    });
+  }
   try {
-    const profile = await getProfile(userId);
-    if (!profile) return res.json({ count: 0, limit: FREE_MSG_LIMIT, isPremium: false });
-    const isPremium = profile.plan === 'premium';
+    const access = await getStudyAccessState(userId);
+    const profile = access.profile;
+    const isPremium = access.isPremium;
     const today = new Date().toISOString().slice(0, 10);
     const cacheKey = `${userId}_${today}`;
     // Prefer in-memory count (more accurate during active session) over DB
     const dbCount = profile.usage?.[today] ?? 0;
     const count = isPremium ? 0 : Math.max(_usageCache[cacheKey] ?? 0, dbCount);
-    res.json({ count, limit: FREE_MSG_LIMIT, isPremium });
+    res.json({ count, limit: FREE_MSG_LIMIT, isPremium, study: access.studyUsage });
   } catch (e) {
-    res.json({ count: 0, limit: FREE_MSG_LIMIT, isPremium: false });
+    res.json({
+      count: 0,
+      limit: FREE_MSG_LIMIT,
+      isPremium: false,
+      study: buildStudyUsage([], false),
+    });
   }
 });
 
 // ── Study Mode ───────────────────────────────────────────────────────────────
 
 app.post('/api/study-notes', async (req, res) => {
-  const { topic, notesContext } = req.body;
+  const { topic, notesContext, userId } = req.body;
   if (!topic && !notesContext) return res.status(400).json({ error: 'topic or notesContext required' });
+
+  let studyAccess = {
+    profile: {},
+    studySessions: [],
+    isPremium: false,
+    studyUsage: buildStudyUsage([], false),
+  };
+
+  if (userId) {
+    try {
+      studyAccess = await getStudyAccessState(userId);
+      if (!studyAccess.isPremium && !studyAccess.studyUsage.available) {
+        return res.status(429).json({
+          error: `Free study mode is limited to ${FREE_STUDY_LIMIT} session every ${STUDY_WINDOW_HOURS} hours. Upgrade to premium for unlimited access.`,
+          limitReached: true,
+          retryAt: studyAccess.studyUsage.retryAt,
+          study: studyAccess.studyUsage,
+        });
+      }
+    } catch {
+      // If usage lookup fails, let the request continue instead of blocking study mode.
+    }
+  }
 
   const systemPrompt = `You are a study guide writer. Produce clear, well-structured study notes in markdown.
 Use ## headings, bullet points, and **bold** for key terms. Be dense with information — this is for revision, not discovery.
@@ -2704,7 +2841,27 @@ Structure:${structure}`;
 
   try {
     const notes = await callGemini(systemPrompt, [{ role: 'user', content: [{ type: 'text', text: userPrompt }] }], 2400);
-    res.json({ notes });
+    let session = null;
+
+    if (userId) {
+      try {
+        session = await persistStudySession(userId, studyAccess.studySessions, {
+          id: randomUUID(),
+          topic: topic || 'Untitled study session',
+          notes,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (persistError) {
+        console.warn('[study-notes] could not persist session:', persistError.message);
+      }
+    }
+
+    const studyUsage = buildStudyUsage(
+      session ? [session, ...studyAccess.studySessions] : studyAccess.studySessions,
+      studyAccess.isPremium,
+    );
+
+    res.json({ notes, session, study: studyUsage });
   } catch (err) {
     console.error('[study-notes]', err.message);
     res.status(500).json({ error: err.message });

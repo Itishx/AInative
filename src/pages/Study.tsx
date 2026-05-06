@@ -1,14 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AppNav } from '../components/Chrome';
+import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { HC, HCDark } from '../theme';
 import { apiUrl } from '../api';
 import { useStore } from '../store';
+import type { StudySession, UsageSnapshot } from '../types';
 
 type McqQuestion = { type: 'mcq'; q: string; options: string[]; correct: number };
 type QuizData = { questions: McqQuestion[] };
 type HoResult = { score: number; correct: boolean; whatWasRight: string; whatWasMissing: string; betterAnswer: string } | null;
+type StudyNotesResponse = {
+  notes: string;
+  session?: StudySession | null;
+  error?: string;
+  limitReached?: boolean;
+  retryAt?: string | null;
+  study?: UsageSnapshot['study'];
+};
 
 // ── Inline markdown helpers ──────────────────────────────────────────────────
 
@@ -17,6 +27,18 @@ function inlineHtml(text: string) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`(.+?)`/g, '<code style="font-family:monospace;font-size:0.88em;background:rgba(128,128,128,0.12);padding:1px 5px;border-radius:3px">$1</code>');
+}
+
+function formatTimeUntil(target: string) {
+  const ms = Math.max(0, new Date(target).getTime() - Date.now());
+  const totalMinutes = Math.ceil(ms / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}h`;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  return `${Math.max(1, totalMinutes)}m`;
 }
 
 const SLIDE_BG = 'linear-gradient(145deg,#1a1510 0%,#2d2218 55%,#1a1208 100%)';
@@ -242,6 +264,7 @@ function StepBar({ activeTab, setActiveTab, quizSubmitted, t }: { activeTab: Tab
 export default function Study() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
   const { dark } = useTheme();
   const { state, dispatch } = useStore();
   const t = dark ? HCDark : HC;
@@ -253,6 +276,7 @@ export default function Study() {
   const [notesReady, setNotesReady] = useState(false);
   const [notes, setNotes] = useState('');
   const [notesError, setNotesError] = useState('');
+  const [studyLimit, setStudyLimit] = useState<UsageSnapshot['study'] | null>(null);
 
   // ── Tab ──
   const [activeTab, setActiveTab] = useState<Tab>('notes');
@@ -277,31 +301,87 @@ export default function Study() {
   const [hoIsCoding, setHoIsCoding] = useState(false);
 
   const quizRef = useRef<HTMLDivElement>(null);
+  const loadKeyRef = useRef('');
+
+  useEffect(() => {
+    loadKeyRef.current = '';
+    setNotesReady(false);
+    setNotes('');
+    setNotesError('');
+    setStudyLimit(null);
+    setActiveTab('notes');
+    setQuiz(null);
+    setQuizLoading(false);
+    setQuizError('');
+    setAnswers([]);
+    setSubmitted(false);
+    setHoQuestions([]);
+    setHoAnswers([]);
+    setHoResults([]);
+    setHoHints([]);
+    setHoLoading(false);
+    setHoError('');
+    setHoChecking(null);
+    setHoHintLoading(null);
+    setHoHintErrors([]);
+    setHoIsCoding(false);
+  }, [sessionId, topic]);
 
   // ── Load notes ──
   useEffect(() => {
+    const loadKey = `${sessionId}:${topic}`;
     if (sessionId) {
       const saved = (state.studySessions ?? []).find((s) => s.id === sessionId);
-      if (saved) { setNotes(saved.notes); setNotesReady(true); return; }
+      if (saved) {
+        setNotesError('');
+        setNotes(saved.notes);
+        setNotesReady(true);
+        return;
+      }
+      setNotesError('That study session could not be found.');
+      setNotesReady(true);
+      return;
     }
+    if (loading || !topic || loadKeyRef.current === loadKey) return;
+    if (!user?.id) {
+      setNotesError('Please sign in again to start a study session.');
+      setNotesReady(true);
+      return;
+    }
+    loadKeyRef.current = loadKey;
 
     const notesContext = sessionStorage.getItem('study_notes_context') || undefined;
-    sessionStorage.removeItem('study_notes_context');
 
     fetch(apiUrl('/api/study-notes'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, notesContext }),
+      body: JSON.stringify({ topic, notesContext, userId: user.id }),
     })
-      .then((r) => r.json())
+      .then(async (r) => {
+        const data = await r.json() as StudyNotesResponse;
+        if (!r.ok || data.error) {
+          const err = new Error(data.error || 'Could not generate study notes.') as Error & { payload?: StudyNotesResponse };
+          err.payload = data;
+          throw err;
+        }
+        return data;
+      })
       .then((data) => {
-        if (data.error) throw new Error(data.error);
+        setStudyLimit(data.study ?? null);
+        if (notesContext) sessionStorage.removeItem('study_notes_context');
         setNotes(data.notes);
         setNotesReady(true);
-        dispatch({ type: 'ADD_STUDY_SESSION', session: { id: crypto.randomUUID(), topic, notes: data.notes, createdAt: new Date().toISOString() } });
+        dispatch({
+          type: 'ADD_STUDY_SESSION',
+          session: data.session ?? { id: crypto.randomUUID(), topic, notes: data.notes, createdAt: new Date().toISOString() },
+        });
       })
-      .catch((err) => { setNotesError(err.message); setNotesReady(true); });
-  }, [topic]);
+      .catch((err: Error & { payload?: StudyNotesResponse }) => {
+        if (err.payload?.study) setStudyLimit(err.payload.study);
+        setNotesError(err.message);
+        setNotesReady(true);
+      });
+  }, [dispatch, loading, sessionId, state.studySessions, topic, user?.id]);
 
   // ── Switch to quiz tab — load quiz ──
   async function goToQuiz() {
@@ -399,6 +479,10 @@ export default function Study() {
   const pct = quiz ? Math.round((score / quiz.questions.length) * 100) : 0;
 
   const panelFill = dark ? 'rgba(241,236,223,0.06)' : 'rgba(26,21,16,0.045)';
+  const studyRetryLabel = studyLimit?.retryAt ? formatTimeUntil(studyLimit.retryAt) : '';
+  const studyUnlockStamp = studyLimit?.retryAt
+    ? new Date(studyLimit.retryAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : '';
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: t.paper, color: t.ink }}>
@@ -448,7 +532,19 @@ export default function Study() {
             {notesError && (
               <div style={{ padding: '12px 16px', border: `1px solid ${t.red}`, background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.05)', display: 'flex', gap: 10, marginBottom: 24 }}>
                 <span style={{ color: t.red, fontFamily: HC.mono, fontWeight: 700 }}>!</span>
-                <div style={{ fontSize: 13, color: t.ink }}>{notesError}</div>
+                <div style={{ fontSize: 13, color: t.ink, lineHeight: 1.6 }}>
+                  <div>{notesError}</div>
+                  {studyLimit?.retryAt && (
+                    <>
+                      <div style={{ marginTop: 6, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: t.mute }}>
+                        Next free session in {studyRetryLabel}{studyUnlockStamp ? ` · ${studyUnlockStamp}` : ''}
+                      </div>
+                      <a href="/settings?tab=billing" style={{ display: 'inline-block', marginTop: 8, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.ink, textDecoration: 'none', borderBottom: `1px solid ${t.ink}` }}>
+                        Upgrade to premium →
+                      </a>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 
