@@ -1,21 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HC, btn } from '../theme';
-import { Chrome } from '../components/Chrome';
-import { useEnrollCourse } from '../store';
-import type { PublishedCourse, EnrolledCourse, Module } from '../types';
+import { HC } from '../theme';
+import { useEnrollCourse, useStore } from '../store';
+import { useAuth } from '../lib/auth';
+import { useTheme } from '../lib/theme';
+import type { EnrolledCourse, Module, PublishedCourse } from '../types';
+
+const B = {
+  bg: 'var(--browse-bg)',
+  ink: 'var(--browse-ink)',
+  mute: 'var(--browse-mute)',
+  faint: 'var(--browse-faint)',
+  softer: 'var(--browse-softer)',
+  red: 'var(--browse-red)',
+  amber: 'var(--browse-amber)',
+  green: 'var(--browse-green)',
+  paper: 'var(--browse-paper)',
+  serif: HC.serif,
+  sans: HC.sans,
+  mono: HC.mono,
+};
+
+function lessonCount(course: PublishedCourse) {
+  return course.curriculum.modules.reduce((sum, module) => sum + module.lessons.length, 0);
+}
 
 export default function Browse() {
   const navigate = useNavigate();
   const enrollCourse = useEnrollCourse();
+  const { state, remoteLoaded } = useStore();
+  const { user } = useAuth();
+  const { dark } = useTheme();
+
   const [courses, setCourses] = useState<PublishedCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/published-courses')
-      .then((r) => r.json())
-      .then((data) => { setCourses(Array.isArray(data) ? data : []); setLoading(false); })
+      .then((response) => response.json())
+      .then((data) => {
+        setCourses(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
@@ -30,12 +57,18 @@ export default function Browse() {
       const full = await res.json();
       if (full.error) throw new Error(full.error);
 
-      const deadline = new Date(Date.now() + (full.curriculum.estimatedHours / 1) * 3600000 * 1.5).toISOString();
-      const modules: Module[] = full.curriculum.modules.map((m: { title: string; lessons: { title: string; objective: string; minutes: number }[] }, mi: number) => ({
-        title: m.title,
+      const deadline = new Date(Date.now() + full.curriculum.estimatedHours * 3600000 * 1.5).toISOString();
+      const modules: Module[] = full.curriculum.modules.map((module: { title: string; lessons: { title: string; objective: string; minutes: number }[] }) => ({
+        title: module.title,
         unlocked: true,
         quizPassed: false,
-        lessons: m.lessons.map((l) => ({ title: l.title, objective: l.objective, minutes: l.minutes, completed: false, quizPassed: false })),
+        lessons: module.lessons.map((lesson) => ({
+          title: lesson.title,
+          objective: lesson.objective,
+          minutes: lesson.minutes,
+          completed: false,
+          quizPassed: false,
+        })),
       }));
 
       const enrolled: EnrolledCourse = {
@@ -50,7 +83,12 @@ export default function Browse() {
         status: 'active',
         paused: false,
         pauseUsed: false,
-        curriculum: { title: full.curriculum.title, level: full.curriculum.level, estimatedHours: full.curriculum.estimatedHours, modules },
+        curriculum: {
+          title: full.curriculum.title,
+          level: full.curriculum.level,
+          estimatedHours: full.curriculum.estimatedHours,
+          modules,
+        },
         lessonChats: {},
         moduleNotes: {},
         currentModule: 0,
@@ -59,79 +97,204 @@ export default function Browse() {
 
       enrollCourse(enrolled);
       navigate(`/learn/${enrolled.id}`);
-    } catch (e) {
-      alert(`Enroll failed: ${(e as Error).message}`);
+    } catch (err) {
+      alert(`Enroll failed: ${(err as Error).message}`);
     } finally {
       setEnrolling(null);
     }
   }
 
+  const hasOnboarding = !!state.profile?.onboardingCompleted;
+
+  const vars = {
+    '--browse-bg': dark ? '#050505' : '#f4f0e8',
+    '--browse-paper': dark ? '#1c1a16' : '#faf7f0',
+    '--browse-ink': dark ? '#f6f0e7' : '#1a1510',
+    '--browse-mute': dark ? 'rgba(246,240,231,0.48)' : 'rgba(26,21,16,0.52)',
+    '--browse-faint': dark ? 'rgba(246,240,231,0.10)' : 'rgba(26,21,16,0.12)',
+    '--browse-softer': dark ? 'rgba(246,240,231,0.05)' : 'rgba(26,21,16,0.05)',
+    '--browse-red': dark ? '#ff5148' : '#c4221b',
+    '--browse-amber': dark ? '#d99b45' : '#b87822',
+    '--browse-green': dark ? '#72c089' : '#2d6a3f',
+  } as React.CSSProperties;
+
+  const shellButton: React.CSSProperties = {
+    border: `1px solid ${B.faint}`,
+    borderRadius: 999,
+    background: 'transparent',
+    color: B.ink,
+    cursor: 'pointer',
+    padding: '10px 16px',
+    fontFamily: B.mono,
+    fontSize: 9.5,
+    letterSpacing: '0.13em',
+    textTransform: 'uppercase',
+  };
+
   return (
-    <div style={{ minHeight: '100vh', background: HC.bg }}>
-      <Chrome
-        label="browse courses"
-        right={
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button onClick={() => navigate('/create')} style={{ ...btn.ghost, fontSize: 11 }}>Teach →</button>
-            <button onClick={() => navigate('/dashboard')} style={{ ...btn.ghost, fontSize: 11 }}>← Dashboard</button>
-          </div>
-        }
-      />
+    <main style={{ minHeight: '100vh', background: B.bg, color: B.ink, fontFamily: B.sans, position: 'relative', ...vars }}>
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        pointerEvents: 'none',
+        background: dark
+          ? 'radial-gradient(circle at 76% 10%, rgba(255,81,72,0.10), transparent 28%), radial-gradient(circle at 18% 88%, rgba(246,240,231,0.06), transparent 26%)'
+          : 'radial-gradient(circle at 76% 10%, rgba(196,34,27,0.08), transparent 28%), radial-gradient(circle at 18% 88%, rgba(26,21,16,0.05), transparent 26%)',
+      }} />
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '48px 24px' }}>
-        <h1 style={{ fontFamily: HC.serif, fontSize: 42, fontWeight: 400, letterSpacing: '-0.02em', margin: '0 0 8px' }}>
-          Courses by real instructors.
-        </h1>
-        <p style={{ fontFamily: HC.serif, fontStyle: 'italic', color: HC.mute, fontSize: 18, margin: '0 0 40px' }}>
-          Human knowledge. AI delivery. Deadline-enforced mastery.
-        </p>
-
-        {loading && (
-          <div style={{ fontFamily: HC.serif, fontStyle: 'italic', color: HC.mute, fontSize: 18 }}>Loading…</div>
-        )}
-
-        {!loading && courses.length === 0 && (
-          <div style={{ textAlign: 'center', paddingTop: 60 }}>
-            <div style={{ fontFamily: HC.serif, fontStyle: 'italic', fontSize: 28, color: HC.mute, marginBottom: 16 }}>
-              No courses yet.
-            </div>
-            <div style={{ fontFamily: HC.mono, fontSize: 12, color: HC.mute, marginBottom: 28 }}>
-              Be the first to publish a course.
-            </div>
-            <button onClick={() => navigate('/create')} style={{ ...btn.primary, padding: '12px 28px' }}>
-              Start teaching →
+      <div style={{ position: 'relative', maxWidth: 1360, margin: '0 auto', padding: '32px clamp(20px, 4vw, 56px) 88px' }}>
+        <section style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 42 }}>
+          <button onClick={() => navigate(user ? '/dashboard' : '/')} style={shellButton}>
+            {user ? '← Dashboard' : '← Home'}
+          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button onClick={() => navigate(user ? (hasOnboarding ? '/settings' : '/onboarding') : '/auth')} style={shellButton}>
+              {user ? (hasOnboarding ? 'Tune profile →' : 'Finish onboarding →') : 'Sign in →'}
+            </button>
+            <button onClick={() => navigate('/create')} style={{ ...shellButton, borderColor: B.ink, background: B.ink, color: B.bg }}>
+              Teach →
             </button>
           </div>
-        )}
+        </section>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
-          {courses.map((c) => (
-            <div key={c.id} style={{ background: HC.paper, border: `1px solid ${HC.ruleFaint}`, padding: '24px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', color: HC.mute, textTransform: 'uppercase', marginBottom: 8 }}>
-                {c.curriculum.level} · {c.curriculum.estimatedHours}h · {c.enrollCount} enrolled
+        <section style={{ borderBottom: `1px solid ${B.faint}`, paddingBottom: 34 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 28, alignItems: 'end' }}>
+            <div>
+              <div style={{ fontFamily: B.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: B.red }}>
+                Browse
               </div>
-              <div style={{ fontFamily: HC.serif, fontSize: 20, fontWeight: 400, letterSpacing: '-0.01em', flex: 1, marginBottom: 12 }}>
-                {c.curriculum.title}
-              </div>
-              <div style={{ fontFamily: HC.mono, fontSize: 10, color: HC.mute, marginBottom: 16 }}>
-                {c.curriculum.modules.length} modules · {c.curriculum.modules.reduce((s, m) => s + m.lessons.length, 0)} lessons
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontFamily: HC.serif, fontSize: 26, fontWeight: 400 }}>
-                  {c.price === 0 ? <span style={{ color: HC.green, fontStyle: 'italic' }}>Free</span> : `$${c.price}`}
+              <h1 style={{ margin: '12px 0 0', fontFamily: B.serif, fontWeight: 400, fontSize: 'clamp(46px, 6vw, 88px)', lineHeight: 0.9, letterSpacing: '-0.07em', color: B.ink }}>
+                Marketplace
+                <br />
+                courses.
+              </h1>
+              <p style={{ maxWidth: 640, margin: '18px 0 0', color: B.mute, fontFamily: B.sans, fontSize: 15, lineHeight: 1.65 }}>
+                Your personalized suggestions live on the dashboard now. Browse is where you explore ready-made courses by real instructors.
+              </p>
+            </div>
+
+            <div style={{ display: 'grid', gap: 16, borderLeft: `1px solid ${B.faint}`, paddingLeft: 'clamp(18px, 3vw, 34px)' }}>
+              <div style={{ borderTop: `1px solid ${B.faint}`, paddingTop: 14 }}>
+                <div style={{ fontFamily: B.serif, fontSize: 32, lineHeight: 0.92, color: B.ink }}>
+                  Dashboard suggestions
                 </div>
-                <button
-                  style={{ ...btn.primary, padding: '10px 20px', fontSize: 12, opacity: enrolling === c.id ? 0.5 : 1 }}
-                  disabled={enrolling === c.id}
-                  onClick={() => handleEnroll(c)}
-                >
-                  {enrolling === c.id ? 'Enrolling…' : 'Enroll →'}
-                </button>
+                <div style={{ marginTop: 10, fontFamily: B.mono, fontSize: 9, color: B.mute, letterSpacing: '0.11em', textTransform: 'uppercase', lineHeight: 1.7 }}>
+                  {user && remoteLoaded && hasOnboarding
+                    ? 'refreshable prompts now live on your dashboard'
+                    : 'go back home for personalized prompt suggestions'}
+                </div>
+              </div>
+
+              <div style={{ borderTop: `1px solid ${B.faint}`, paddingTop: 14 }}>
+                <div style={{ fontFamily: B.serif, fontSize: 32, lineHeight: 0.92, color: B.ink }}>
+                  {courses.length}
+                </div>
+                <div style={{ marginTop: 10, fontFamily: B.mono, fontSize: 9, color: B.mute, letterSpacing: '0.11em', textTransform: 'uppercase' }}>
+                  Published courses in marketplace
+                </div>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
+
+        <section style={{ marginTop: 34 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'baseline', marginBottom: 18, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontFamily: B.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: B.mute }}>
+                Marketplace
+              </div>
+              <h2 style={{ margin: '10px 0 0', fontFamily: B.serif, fontSize: 40, fontWeight: 400, letterSpacing: '-0.055em', lineHeight: 0.94 }}>
+                Courses by real instructors.
+              </h2>
+            </div>
+            <p style={{ maxWidth: 520, margin: 0, fontFamily: B.sans, fontSize: 14, lineHeight: 1.65, color: B.mute }}>
+              Human-built curricula you can enroll into directly if you want a ready-made path instead of generating one from a prompt.
+            </p>
+          </div>
+
+          {loading && (
+            <div style={{ padding: '36px 0', fontFamily: B.serif, fontStyle: 'italic', color: B.mute, fontSize: 22 }}>
+              Loading published courses…
+            </div>
+          )}
+
+          {!loading && courses.length === 0 ? (
+            <div style={{ border: `1px solid ${B.faint}`, borderRadius: 28, padding: '34px 30px', background: 'linear-gradient(145deg, rgba(255,255,255,0.03), rgba(26,21,16,0.018))' }}>
+              <div style={{ fontFamily: B.serif, fontSize: 32, letterSpacing: '-0.04em', marginBottom: 10 }}>
+                No published courses yet.
+              </div>
+              <div style={{ fontFamily: B.sans, fontSize: 14, lineHeight: 1.6, color: B.mute, marginBottom: 18 }}>
+                Personalized prompt suggestions are on the dashboard already. The instructor marketplace will fill up as courses get published.
+              </div>
+              <button onClick={() => navigate('/create')} style={{ ...shellButton, borderColor: B.ink, background: B.ink, color: B.bg }}>
+                Start teaching →
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+              {courses.map((course) => (
+                <article
+                  key={course.id}
+                  style={{
+                    minHeight: 240,
+                    border: `1px solid ${B.faint}`,
+                    borderRadius: 28,
+                    padding: 22,
+                    background: 'linear-gradient(145deg, rgba(255,255,255,0.035), rgba(26,21,16,0.018))',
+                    boxShadow: '0 24px 80px rgba(26,21,16,0.06)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: 18,
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+                      <span style={{ fontFamily: B.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: B.red }}>
+                        {course.curriculum.level}
+                      </span>
+                      <span style={{ fontFamily: B.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: B.mute }}>
+                        {course.enrollCount} enrolled
+                      </span>
+                    </div>
+                    <h3 style={{ margin: 0, fontFamily: B.serif, fontSize: 'clamp(22px, 2.4vw, 34px)', lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 400, color: B.ink }}>
+                      {course.curriculum.title}
+                    </h3>
+                    <p style={{ margin: '12px 0 0', fontFamily: B.mono, fontSize: 9.5, lineHeight: 1.7, color: B.mute, letterSpacing: '0.11em', textTransform: 'uppercase' }}>
+                      {course.curriculum.estimatedHours}h · {course.curriculum.modules.length} modules · {lessonCount(course)} lessons
+                    </p>
+                  </div>
+
+                  <div style={{ borderTop: `1px solid ${B.faint}`, paddingTop: 14, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+                    <div style={{ fontFamily: B.serif, fontSize: 28, lineHeight: 0.92, color: course.price === 0 ? B.green : B.ink }}>
+                      {course.price === 0 ? 'Free' : `$${course.price}`}
+                    </div>
+                    <button
+                      onClick={() => handleEnroll(course)}
+                      disabled={enrolling === course.id}
+                      style={{
+                        border: `1px solid ${B.ink}`,
+                        borderRadius: 999,
+                        background: B.ink,
+                        color: B.bg,
+                        cursor: enrolling === course.id ? 'wait' : 'pointer',
+                        opacity: enrolling === course.id ? 0.6 : 1,
+                        padding: '10px 16px',
+                        fontFamily: B.mono,
+                        fontSize: 9.5,
+                        letterSpacing: '0.13em',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {enrolling === course.id ? 'Enrolling…' : 'Enroll →'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

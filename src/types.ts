@@ -91,6 +91,10 @@ export interface UserProfile {
   headline?: string;
   bio?: string;
   avatarUrl?: string;
+  bestDescribesYou?: string;
+  occupation?: string;
+  learningGoals?: string[];
+  onboardingCompleted?: boolean;
   plan?: 'free' | 'premium';
 }
 

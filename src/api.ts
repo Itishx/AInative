@@ -64,3 +64,14 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   throw lastError ?? new Error('Request failed');
 }
+
+export function normalizeApiErrorMessage(message: string, fallback: string): string {
+  const trimmed = String(message || '').trim();
+  if (!trimmed) return fallback;
+
+  if (/unterminated string in json|unexpected token .* in json|json at position|invalid json/i.test(trimmed)) {
+    return `${fallback} Learnor hit a formatting snag while building the response. Try again, and if it keeps happening restart the server.`;
+  }
+
+  return trimmed;
+}

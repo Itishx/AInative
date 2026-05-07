@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { supabase } from '../lib/supabase';
 import type { UsageSnapshot } from '../types';
+import { LEARNING_GOAL_OPTIONS, ROLE_OPTIONS, buildLearningGoalSummary } from '../lib/onboarding';
 
 type SettingsTab = 'profile' | 'billing';
 
@@ -50,12 +51,35 @@ export default function Settings() {
   const [headline, setHeadline] = useState(state.profile?.headline ?? '');
   const [bio, setBio] = useState(state.profile?.bio ?? '');
   const [avatarUrl, setAvatarUrl] = useState(state.profile?.avatarUrl ?? '');
+  const [bestDescribesYou, setBestDescribesYou] = useState(state.profile?.bestDescribesYou ?? '');
+  const [occupation, setOccupation] = useState(state.profile?.occupation ?? '');
+  const [learningGoals, setLearningGoals] = useState<string[]>(state.profile?.learningGoals ?? []);
   const [avatarError, setAvatarError] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
 
   const profileLabel = displayName.trim() || username.trim() || user?.email?.split('@')[0] || 'me';
+
+  useEffect(() => {
+    setUsername(state.username ?? '');
+    setDisplayName(state.profile?.displayName ?? '');
+    setHeadline(state.profile?.headline ?? '');
+    setBio(state.profile?.bio ?? '');
+    setAvatarUrl(state.profile?.avatarUrl ?? '');
+    setBestDescribesYou(state.profile?.bestDescribesYou ?? '');
+    setOccupation(state.profile?.occupation ?? '');
+    setLearningGoals(state.profile?.learningGoals ?? []);
+  }, [
+    state.username,
+    state.profile?.displayName,
+    state.profile?.headline,
+    state.profile?.bio,
+    state.profile?.avatarUrl,
+    state.profile?.bestDescribesYou,
+    state.profile?.occupation,
+    state.profile?.learningGoals,
+  ]);
 
   function compressImage(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -110,6 +134,10 @@ export default function Settings() {
       headline: headline.trim(),
       bio: bio.trim(),
       avatarUrl: avatarUrl.trim(),
+      bestDescribesYou,
+      occupation: occupation.trim(),
+      learningGoals,
+      onboardingCompleted: true,
     };
     dispatch({ type: 'SET_USERNAME', username: trimmed });
     dispatch({ type: 'SET_PROFILE', profile });
@@ -251,6 +279,9 @@ export default function Settings() {
             displayName={displayName} setDisplayName={setDisplayName}
             headline={headline} setHeadline={setHeadline}
             bio={bio} setBio={setBio}
+            bestDescribesYou={bestDescribesYou} setBestDescribesYou={setBestDescribesYou}
+            occupation={occupation} setOccupation={setOccupation}
+            learningGoals={learningGoals} setLearningGoals={setLearningGoals}
             email={user?.email ?? ''}
             avatarError={avatarError}
             saving={saving} saved={saved} saveError={saveError}
@@ -270,7 +301,7 @@ export default function Settings() {
 // ── Profile Tab ────────────────────────────────────────────────────────────────
 function ProfileTab({
   profileLabel, avatarUrl, username, setUsername, displayName, setDisplayName,
-  headline, setHeadline, bio, setBio, email,
+  headline, setHeadline, bio, setBio, bestDescribesYou, setBestDescribesYou, occupation, setOccupation, learningGoals, setLearningGoals, email,
   avatarError, saving, saved, saveError,
   onAvatarUpload, onRemoveAvatar, onSave, onCancel,
 }: {
@@ -279,6 +310,9 @@ function ProfileTab({
   displayName: string; setDisplayName: (v: string) => void;
   headline: string; setHeadline: (v: string) => void;
   bio: string; setBio: (v: string) => void;
+  bestDescribesYou: string; setBestDescribesYou: (v: string) => void;
+  occupation: string; setOccupation: (v: string) => void;
+  learningGoals: string[]; setLearningGoals: (value: string[] | ((current: string[]) => string[])) => void;
   email: string;
   avatarError: string; saving: boolean; saved: boolean; saveError: string;
   onAvatarUpload: (f?: File) => void;
@@ -362,6 +396,77 @@ function ProfileTab({
             style={{ ...lineInput, resize: 'vertical', lineHeight: 1.6, paddingTop: 14, paddingBottom: 14 }}
           />
           <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.08em' }}>{bio.length}/160</div>
+        </LineField>
+        <LineField label="Best describes you">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, paddingTop: 10 }}>
+            {ROLE_OPTIONS.map((option) => {
+              const active = bestDescribesYou === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setBestDescribesYou(option.id)}
+                  style={{
+                    border: `1px solid ${active ? S.ink : S.faint}`,
+                    background: active ? S.ink : 'transparent',
+                    color: active ? S.bg : S.ink,
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    fontFamily: MONO,
+                    fontSize: 9,
+                    letterSpacing: '0.11em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </LineField>
+        <LineField label="Current occupation">
+          <input
+            value={occupation} onChange={(e) => setOccupation(e.target.value)}
+            placeholder="What do you do right now?"
+            maxLength={72}
+            style={lineInput}
+          />
+        </LineField>
+        <LineField label="What you want to learn">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, paddingTop: 10 }}>
+            {LEARNING_GOAL_OPTIONS.map((option) => {
+              const active = learningGoals.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setLearningGoals((current) => {
+                    if (current.includes(option.id)) return current.filter((id) => id !== option.id);
+                    if (current.length >= 3) return [...current.slice(1), option.id];
+                    return [...current, option.id];
+                  })}
+                  style={{
+                    border: `1px solid ${active ? S.ink : S.faint}`,
+                    background: active ? S.ink : 'transparent',
+                    color: active ? S.bg : S.ink,
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    fontFamily: MONO,
+                    fontSize: 9,
+                    letterSpacing: '0.11em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 10, fontFamily: MONO, fontSize: 9, color: S.mute, letterSpacing: '0.08em' }}>
+            {learningGoals.length
+              ? `Saved: ${buildLearningGoalSummary(learningGoals).join(' · ')}`
+              : 'Pick up to three to shape your recommendations.'}
+          </div>
         </LineField>
         <LineField label="Email">
           <div style={{ ...lineInput, color: S.mute, cursor: 'default', opacity: 0.72 }}>{email || '—'}</div>

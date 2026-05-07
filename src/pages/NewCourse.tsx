@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { HC, btn } from '../theme';
-import { Chrome } from '../components/Chrome';
 import { apiJson } from '../api';
 import { useStore } from '../store';
 import type { Course, Module } from '../types';
@@ -178,8 +177,6 @@ export default function NewCourse() {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: HC.bg }}>
-      <Chrome label="new course" right="step 2 of 2" />
-
       {loading && (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontFamily: HC.serif, fontSize: 56, fontStyle: 'italic', color: HC.mute, letterSpacing: '-0.02em' }}>
@@ -288,13 +285,13 @@ export default function NewCourse() {
           <aside>
             <div style={{ border: `1px solid ${HC.ink}`, background: HC.paper, padding: 28, position: 'sticky', top: 0 }}>
               <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: HC.mute }}>
-                Set your deadline
+                Set your course window
               </div>
               <h3 style={{ fontFamily: HC.serif, fontSize: 28, margin: '8px 0 4px', fontWeight: 400, letterSpacing: '-0.01em', color: HC.ink }}>
-                When will this be yours?
+                How long do you want for this course?
               </h3>
               <p style={{ fontSize: 13, color: HC.mute, lineHeight: 1.5 }}>
-                Choose a window between 3 and 90 days. <u>Cannot be extended.</u>
+                Pick the number of days you want. We will set the finish date automatically. <u>Cannot be extended.</u>
               </p>
 
               <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
@@ -345,7 +342,7 @@ export default function NewCourse() {
                 }}>
                   {accepted && <span style={{ color: HC.paper, fontSize: 10 }}>✓</span>}
                 </span>
-                I understand. Lock the deadline.
+                I understand. Lock this course window.
               </label>
 
               <button onClick={handleCommit} disabled={!accepted || !canStart || committing} style={{

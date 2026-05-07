@@ -729,7 +729,7 @@ function TutorMockup() {
   const msgs = [
     { who: 'tutor', text: 'A primary key is the one value that identifies a row. Keep it unique and the table stays searchable.' },
     { who: 'user', text: 'show example' },
-    { who: 'tutor', text: 'Perfect — I’ll put the table on the canvas while we talk through it.' },
+    { who: 'tutor', text: 'Perfect — I’ll open the workspace with the table while we talk through it.' },
   ];
   return (
     <div style={{
@@ -766,14 +766,14 @@ function TutorMockup() {
         </div>
         <div style={{ marginTop: 'auto' }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            {['show example', 'ask again', 'take quiz'].map((label, i) => (
+            {['show visual', 'voice mode', 'take quiz'].map((label, i) => (
               <span key={label} style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: '0.10em', color: i === 0 ? '#7ad08b' : 'rgba(250,247,240,0.48)', border: '1px solid rgba(250,247,240,0.10)', padding: '6px 8px', borderRadius: 999 }}>
                 {label}
               </span>
             ))}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 9, border: '1px solid rgba(250,247,240,0.10)', borderRadius: 16, background: 'rgba(250,247,240,0.06)' }}>
-            <div style={{ flex: 1, fontFamily: SANS, fontSize: 13, color: 'rgba(250,247,240,0.42)' }}>Ask, answer, or hold space...</div>
+            <div style={{ flex: 1, fontFamily: SANS, fontSize: 13, color: 'rgba(250,247,240,0.42)' }}>Ask a follow-up or keep moving...</div>
             <div style={{ fontFamily: MONO, fontSize: 9, color: '#faf7f0', letterSpacing: '0.12em' }}>SEND ↵</div>
           </div>
         </div>
@@ -782,10 +782,10 @@ function TutorMockup() {
       <div style={{ background: t.bg, color: t.ink, padding: 24, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', marginBottom: 22 }}>
           <div>
-            <div style={{ fontFamily: MONO, fontSize: 9, color: t.red, letterSpacing: '0.16em', textTransform: 'uppercase' }}>Canvas</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: t.red, letterSpacing: '0.16em', textTransform: 'uppercase' }}>Workspace</div>
             <div style={{ marginTop: 5, fontFamily: SERIF, fontSize: 34, lineHeight: 0.95, letterSpacing: '-0.035em' }}>Orders table</div>
           </div>
-          <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>visual example</div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.12em', textTransform: 'uppercase' }}>visual context</div>
         </div>
 
         <div style={{ border: `1px solid ${t.ruleFaint}`, background: t.paper, padding: 18 }}>
@@ -811,7 +811,7 @@ function TutorMockup() {
           <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
             <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Why it matters</div>
             <p style={{ margin: '10px 0 0', fontFamily: SANS, fontSize: 14, lineHeight: 1.55, color: t.inkSoft }}>
-              The canvas holds the visual so the chat can stay focused.
+              The workspace keeps visuals, code, and checks beside the tutor so the lesson never has to break.
             </p>
           </div>
           <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
@@ -963,10 +963,10 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
       <div style={{ maxWidth: 720, marginBottom: 48 }}>
         <Kicker>The product</Kicker>
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-          Chat on the left.<br />Canvas on the <span style={{ color: t.red }}>right.</span>
+          Chat on the left.<br />Workspace on the <span style={{ color: t.red }}>right.</span>
         </h2>
         <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
-          Learn by conversation, but never stare at a wall of text. Whenever an example, table, diagram, or code block matters, it opens beside the tutor.
+          Learn by conversation, but never stare at a wall of text. The workspace shifts with the lesson: visuals when you need clarity, and for coding lessons it opens built-in practice with code and output checks right there.
         </p>
       </div>
       {/* Tutor feature */}
@@ -977,7 +977,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
             The course room.
           </h3>
           <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.inkSoft, margin: 0 }}>
-            The tutor teaches one step at a time in chat. The canvas carries the heavy stuff: examples, tables, code, diagrams, notes, and quiz context.
+            The tutor teaches one step at a time in chat. The workspace carries the heavy stuff: examples, tables, diagrams, notes, and when the lesson turns coding-related, it opens a mini practice surface with code and output checks on the spot.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
             <button onClick={() => navigate('/auth')} style={{
@@ -1068,7 +1068,7 @@ function AfterLessonSection() {
     },
     {
       n: '03', label: 'Hands-on', title: 'Write it yourself.',
-      body: 'Typed open questions — or real queries for coding lessons. Explain it back. The AI checks logic, flags gaps, shows a better answer.',
+      body: 'Typed open questions when the lesson is conceptual. In coding lessons, Learnor opens a mini editor so you can write real code, check the output, and fix it right there.',
       art: <HandsOnViz />,
     },
   ];
@@ -1128,15 +1128,15 @@ function StudyMockup() {
   const steps = [
     { label: 'Notes', sub: 'Read first', active: true, done: false },
     { label: 'Quiz', sub: '10 questions', active: false, done: false },
-    { label: 'Hands-on', sub: 'Optional', active: false, done: false },
+    { label: 'Hands-on', sub: 'Required', active: false, done: false },
   ];
 
   const tableRows = [
-    ['Stage', 'Products'],
-    ['Glycolysis', '2 ATP · 2 NADH'],
-    ['Pyruvate oxidation', '2 NADH · 2 CO₂'],
-    ['Krebs cycle (×2)', '2 ATP · 6 NADH · 2 FADH₂'],
-    ['Oxidative phosphorylation', '~32 ATP'],
+    ['Join type', 'Returns'],
+    ['INNER JOIN', 'Rows with matches in both tables'],
+    ['LEFT JOIN', 'All left rows + matching right rows'],
+    ['RIGHT JOIN', 'All right rows + matching left rows'],
+    ['FULL OUTER JOIN', 'Matches plus unmatched rows from both sides'],
   ];
 
   return (
@@ -1159,7 +1159,7 @@ function StudyMockup() {
 
         {/* topic title */}
         <div style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 400, letterSpacing: '-0.035em', color: INK, lineHeight: 1, marginBottom: 6 }}>
-          Cellular Respiration
+          SQL Joins Cheat Sheet
         </div>
 
         {/* subtitle */}
@@ -1205,9 +1205,9 @@ function StudyMockup() {
 
         {/* bullets */}
         {[
-          'ATP is produced through glycolysis, the Krebs cycle, and oxidative phosphorylation.',
-          'Oxygen is the final electron acceptor in the electron transport chain.',
-          'A net of ~36–38 ATP molecules are generated per glucose molecule.',
+          'Joins combine rows from multiple tables using a shared key like customer_id or order_id.',
+          'INNER JOIN keeps only matching records, while LEFT JOIN preserves every row from the left table.',
+          'Picking the wrong join type changes your totals, row counts, and missing-data behavior.',
         ].map((b, i) => (
           <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <span style={{ color: INK, fontSize: 5, marginTop: 6, flexShrink: 0 }}>●</span>
@@ -1243,7 +1243,7 @@ function StudyMockup() {
         {/* one more bullet after slide */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
           <span style={{ color: INK, fontSize: 5, marginTop: 6, flexShrink: 0 }}>●</span>
-          <span style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.6, color: INK }}>Each stage feeds directly into the next — disrupting any one step halts the entire chain.</span>
+          <span style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.6, color: INK }}>The table gives you a one-glance reference before the quiz asks you to choose the right join for a real query.</span>
         </div>
 
         {/* CTA button — same as real page */}
@@ -1282,7 +1282,7 @@ function StudyModeSection() {
             {[
               ['01', 'Notes', 'Generated from your topic or PDF. Visual slides appear inline — tables, code, comparisons — right where the concept lives.'],
               ['02', 'Quiz', '10 questions on what was in the notes. Color-coded right/wrong per question.'],
-              ['03', 'Hands-on', 'Open-answer questions. Write the answer, get it graded, see what was missing and a model answer.'],
+              ['03', 'Hands-on', 'Open-answer questions. Write the answer, get it graded, see what was missing, and see what Learnor says.'],
             ].map(([n, title, body]) => (
               <div key={n} style={{ display: 'flex', gap: 16, alignItems: 'flex-start', paddingBottom: 18, borderBottom: `1px solid ${t.ruleFaint}` }}>
                 <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 38, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', flexShrink: 0 }}>{n}</span>
@@ -1603,7 +1603,7 @@ const FAQS: [string, string][] = [
   ['What happens if I miss the deadline?', 'The course expires. Your progress is saved. Set a new deadline and keep going. Nothing is permanently lost.'],
   ['Can I extend a deadline?', 'Not mid-course. But if you miss it, you can recommit with a fresh deadline. You also get one 72-hour pause per course.'],
   ['What if I finish early?', 'You keep the course, get the certificate, and hit the finisher wall.'],
-  ['Does the AI teach well?', 'It teaches in tiny steps, checks understanding, and uses the canvas when useful.'],
+  ['Does the AI teach well?', 'It teaches in tiny steps, checks understanding, and uses the workspace for visuals, practice, and coding checks when useful.'],
 ];
 
 function FAQSection() {

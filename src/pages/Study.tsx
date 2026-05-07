@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AppNav } from '../components/Chrome';
+import { CodingPracticeList } from '../components/CodingPracticeList';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { HC, HCDark } from '../theme';
-import { apiUrl } from '../api';
+import { apiJson, apiUrl, normalizeApiErrorMessage } from '../api';
 import { useStore } from '../store';
 import type { StudySession, UsageSnapshot } from '../types';
 
@@ -212,7 +213,7 @@ function StepBar({ activeTab, setActiveTab, quizSubmitted, t }: { activeTab: Tab
   const steps = [
     { id: 'notes' as const, label: 'Notes', sub: 'Read first' },
     { id: 'quiz' as const, label: 'Quiz', sub: '10 questions' },
-    { id: 'handson' as const, label: 'Hands-on', sub: 'Optional' },
+    { id: 'handson' as const, label: 'Hands-on', sub: 'Required' },
   ];
   return (
     <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', gap: 0 }}>
@@ -413,7 +414,7 @@ export default function Study() {
     setHoLoading(true);
     setHoError('');
     try {
-      const res = await fetch(apiUrl('/api/handson'), {
+      const data = await apiJson<{ questions?: unknown[]; isCoding?: boolean; error?: string }>('/api/handson', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -421,18 +422,19 @@ export default function Study() {
           moduleTitle: 'Study Session',
           lessonTitle: topic,
           chatHistory: [{ who: 'tutor', text: notes }],
+          questionCount: 2,
         }),
       });
-      const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setHoQuestions(data.questions);
-      setHoAnswers(new Array(data.questions.length).fill(''));
-      setHoResults(new Array(data.questions.length).fill(null));
-      setHoHints(new Array(data.questions.length).fill(''));
-      setHoHintErrors(new Array(data.questions.length).fill(''));
+      const normalizedQuestions = (data.isCoding ? data.questions.slice(0, 2) : data.questions).map((value: unknown) => String(value || '').trim()).filter(Boolean);
+      setHoQuestions(normalizedQuestions);
+      setHoAnswers(new Array(normalizedQuestions.length).fill(''));
+      setHoResults(new Array(normalizedQuestions.length).fill(null));
+      setHoHints(new Array(normalizedQuestions.length).fill(''));
+      setHoHintErrors(new Array(normalizedQuestions.length).fill(''));
       setHoIsCoding(data.isCoding ?? false);
     } catch (err: unknown) {
-      setHoError(err instanceof Error ? err.message : String(err));
+      setHoError(normalizeApiErrorMessage(err instanceof Error ? err.message : String(err), 'Could not generate hands-on questions right now.'));
     } finally {
       setHoLoading(false);
     }
@@ -441,16 +443,16 @@ export default function Study() {
   async function handleCheckHo(idx: number) {
     setHoChecking(idx);
     try {
-      const res = await fetch(apiUrl('/api/handson-check'), {
+      const data = await apiJson<{ score: number; correct: boolean; whatWasRight: string; whatWasMissing: string; betterAnswer: string; error?: string }>('/api/handson-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: hoQuestions[idx], userAnswer: hoAnswers[idx], courseTitle: topic, lessonTitle: topic, isCoding: hoIsCoding }),
       });
-      const data = await res.json();
       if (data.error) throw new Error(data.error);
       setHoResults((prev) => { const n = [...prev]; n[idx] = data; return n; });
+      setHoError('');
     } catch (err: unknown) {
-      setHoError(err instanceof Error ? err.message : String(err));
+      setHoError(normalizeApiErrorMessage(err instanceof Error ? err.message : String(err), 'Could not check that answer right now.'));
     } finally {
       setHoChecking(null);
     }
@@ -460,23 +462,32 @@ export default function Study() {
     setHoHintLoading(idx);
     setHoHintErrors((prev) => { const n = [...prev]; n[idx] = ''; return n; });
     try {
-      const res = await fetch(apiUrl('/api/handson-hint'), {
+      const data = await apiJson<{ hint?: string; error?: string }>('/api/handson-hint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: hoQuestions[idx], courseTitle: topic, lessonTitle: topic, isCoding: hoIsCoding, notesContext: notes }),
       });
-      const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setHoHints((prev) => { const n = [...prev]; n[idx] = data.hint; return n; });
+      setHoHints((prev) => { const n = [...prev]; n[idx] = String(data.hint || '').trim(); return n; });
     } catch (err: unknown) {
-      setHoHintErrors((prev) => { const n = [...prev]; n[idx] = err instanceof Error ? err.message : String(err); return n; });
+      setHoHintErrors((prev) => {
+        const n = [...prev];
+        n[idx] = normalizeApiErrorMessage(err instanceof Error ? err.message : String(err), 'Could not generate a hint right now.');
+        return n;
+      });
     } finally {
       setHoHintLoading(null);
     }
   }
 
+  function handleRetryHo(idx: number) {
+    setHoResults((prev) => { const next = [...prev]; next[idx] = null; return next; });
+  }
+
   const score = quiz ? answers.filter((a, i) => a === quiz.questions[i].correct).length : 0;
   const pct = quiz ? Math.round((score / quiz.questions.length) * 100) : 0;
+  const hoHasQuestions = hoQuestions.length > 0;
+  const hoCompleted = hoHasQuestions && hoResults.length === hoQuestions.length && hoResults.every((result) => !!result);
 
   const panelFill = dark ? 'rgba(241,236,223,0.06)' : 'rgba(26,21,16,0.045)';
   const studyRetryLabel = studyLimit?.retryAt ? formatTimeUntil(studyLimit.retryAt) : '';
@@ -685,7 +696,7 @@ export default function Study() {
             {!hoLoading && hoQuestions.length === 0 && !hoError && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ fontFamily: HC.sans, fontSize: 15, lineHeight: 1.65, color: t.mute }}>
-                  5 typed questions based on what was covered in the notes. The AI checks your answers and gives detailed feedback.
+                  Hands-on practice is grounded in these notes. Coding topics now get 2 IDE-style questions with inline hints and checked output.
                 </div>
                 <button
                   onClick={handleGenerateHo}
@@ -697,98 +708,121 @@ export default function Study() {
             )}
 
             {hoQuestions.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 30, borderTop: `1px solid ${t.ruleFaint}`, paddingTop: 22 }}>
-                {hoQuestions.map((q, idx) => {
-                  const result = hoResults[idx];
-                  const isChecking = hoChecking === idx;
-                  return (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                        <span style={{ fontFamily: HC.mono, fontSize: 11, color: t.red, flexShrink: 0, marginTop: 3 }}>
-                          {String(idx + 1).padStart(2, '0')}
-                        </span>
-                        <div style={{ fontFamily: HC.serif, fontSize: 20, letterSpacing: '-0.01em', lineHeight: 1.4 }}>{q}</div>
-                      </div>
-                      <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <textarea
-                          value={hoAnswers[idx] || ''}
-                          onChange={(e) => { if (!result) setHoAnswers((prev) => { const n = [...prev]; n[idx] = e.target.value; return n; }); }}
-                          placeholder={hoIsCoding ? 'Write your code / query here…' : 'Type your answer here…'}
-                          rows={hoIsCoding ? 6 : 3}
-                          disabled={isChecking || !!result}
-                          style={{ width: '100%', resize: 'vertical', padding: '12px 14px', border: `1px solid ${result ? (result.correct ? (dark ? 'rgba(106,174,127,0.4)' : 'rgba(45,106,63,0.3)') : 'rgba(196,34,27,0.3)') : t.ruleFaint}`, background: result ? (result.correct ? (dark ? 'rgba(106,174,127,0.06)' : 'rgba(45,106,63,0.04)') : (dark ? 'rgba(232,81,74,0.06)' : 'rgba(196,34,27,0.03)')) : hoIsCoding ? (dark ? 'rgba(0,0,0,0.3)' : '#16120f') : panelFill, color: hoIsCoding && !result ? (dark ? t.ink : HC.paper) : t.ink, fontFamily: hoIsCoding ? HC.mono : HC.sans, fontSize: hoIsCoding ? 13 : 15, lineHeight: 1.6, outline: 'none', boxSizing: 'border-box', whiteSpace: 'pre', overflowWrap: 'normal', overflowX: 'auto', opacity: result ? 0.75 : 1 }}
-                        />
+              hoIsCoding ? (
+                <CodingPracticeList
+                  questions={hoQuestions}
+                  answers={hoAnswers}
+                  results={hoResults}
+                  hints={hoHints}
+                  hintErrors={hoHintErrors}
+                  checkingIndex={hoChecking}
+                  hintLoadingIndex={hoHintLoading}
+                  theme={t}
+                  dark={dark}
+                  panelFill={panelFill}
+                  contextHint={topic}
+                  onAnswerChange={(idx, value) => setHoAnswers((prev) => { const next = [...prev]; next[idx] = value; return next; })}
+                  onCheck={handleCheckHo}
+                  onHint={handleGetHint}
+                  onRetry={handleRetryHo}
+                />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 30, borderTop: `1px solid ${t.ruleFaint}`, paddingTop: 22 }}>
+                  {hoQuestions.map((q, idx) => {
+                    const result = hoResults[idx];
+                    const isChecking = hoChecking === idx;
+                    return (
+                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                          <span style={{ fontFamily: HC.mono, fontSize: 11, color: t.red, flexShrink: 0, marginTop: 3 }}>
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                          <div style={{ fontFamily: HC.serif, fontSize: 20, letterSpacing: '-0.01em', lineHeight: 1.4 }}>{q}</div>
+                        </div>
+                        <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <textarea
+                            value={hoAnswers[idx] || ''}
+                            onChange={(e) => { if (!result) setHoAnswers((prev) => { const n = [...prev]; n[idx] = e.target.value; return n; }); }}
+                            placeholder="Type your answer here…"
+                            rows={3}
+                            disabled={isChecking || !!result}
+                            style={{ width: '100%', resize: 'vertical', padding: '12px 14px', border: `1px solid ${result ? (result.correct ? (dark ? 'rgba(106,174,127,0.4)' : 'rgba(45,106,63,0.3)') : 'rgba(196,34,27,0.3)') : t.ruleFaint}`, background: result ? (result.correct ? (dark ? 'rgba(106,174,127,0.06)' : 'rgba(45,106,63,0.04)') : (dark ? 'rgba(232,81,74,0.06)' : 'rgba(196,34,27,0.03)')) : panelFill, color: t.ink, fontFamily: HC.sans, fontSize: 15, lineHeight: 1.6, outline: 'none', boxSizing: 'border-box', opacity: result ? 0.75 : 1 }}
+                          />
 
-                        {!result && (
-                          <>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
-                              <button
-                                onClick={() => handleGetHint(idx)}
-                                disabled={hoHintLoading === idx}
-                                style={{ padding: '10px 16px', border: `1px solid ${t.ruleFaint}`, background: 'transparent', color: t.mute, fontFamily: HC.mono, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: hoHintLoading === idx ? 'not-allowed' : 'pointer', opacity: hoHintLoading === idx ? 0.4 : 1 }}
-                              >
-                                {hoHintLoading === idx ? 'Loading…' : hoHints[idx] ? 'Hint again' : 'Show hint'}
-                              </button>
-                              <button
-                                onClick={() => handleCheckHo(idx)}
-                                disabled={isChecking || !hoAnswers[idx]?.trim()}
-                                style={{ padding: '10px 18px', border: `1px solid ${t.ink}`, background: 'transparent', color: t.ink, fontFamily: HC.mono, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: isChecking || !hoAnswers[idx]?.trim() ? 'not-allowed' : 'pointer', opacity: isChecking || !hoAnswers[idx]?.trim() ? 0.4 : 1 }}
-                              >
-                                {isChecking ? 'Checking…' : 'Check answer →'}
-                              </button>
+                          {!result && (
+                            <>
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
+                                <button
+                                  onClick={() => handleGetHint(idx)}
+                                  disabled={hoHintLoading === idx}
+                                  style={{ padding: '10px 16px', border: `1px solid ${t.ruleFaint}`, background: 'transparent', color: t.mute, fontFamily: HC.mono, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: hoHintLoading === idx ? 'not-allowed' : 'pointer', opacity: hoHintLoading === idx ? 0.4 : 1 }}
+                                >
+                                  {hoHintLoading === idx ? 'Loading…' : hoHints[idx] ? 'Hint again' : 'Show hint'}
+                                </button>
+                                <button
+                                  onClick={() => handleCheckHo(idx)}
+                                  disabled={isChecking || !hoAnswers[idx]?.trim()}
+                                  style={{ padding: '10px 18px', border: `1px solid ${t.ink}`, background: 'transparent', color: t.ink, fontFamily: HC.mono, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: isChecking || !hoAnswers[idx]?.trim() ? 'not-allowed' : 'pointer', opacity: isChecking || !hoAnswers[idx]?.trim() ? 0.4 : 1 }}
+                                >
+                                  {isChecking ? 'Checking…' : 'Check answer →'}
+                                </button>
+                              </div>
+                              {hoHintErrors[idx] && <div style={{ fontSize: 12, color: t.red, fontFamily: HC.mono }}>{hoHintErrors[idx]}</div>}
+                              {hoHints[idx] && (
+                                <div style={{ padding: '10px 14px', border: `1px solid ${dark ? 'rgba(241,236,223,0.12)' : 'rgba(26,21,16,0.1)'}`, background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.03)' }}>
+                                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.amber, marginBottom: 6 }}>Hint</div>
+                                  <div style={{ fontSize: 14, lineHeight: 1.65, color: t.ink }}>{hoHints[idx]}</div>
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {result && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: result.correct ? t.green : t.red }}>
+                                  {result.correct ? '✓ Correct' : '✗ Needs work'} · {result.score}/100
+                                </span>
+                                <button
+                                  onClick={() => handleRetryHo(idx)}
+                                  style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: t.mute, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                >
+                                  retry
+                                </button>
+                              </div>
+                              {result.whatWasRight && (
+                                <div style={{ padding: '12px 16px', border: `1px solid ${dark ? 'rgba(106,174,127,0.25)' : 'rgba(45,106,63,0.18)'}`, background: dark ? 'rgba(106,174,127,0.08)' : 'rgba(45,106,63,0.05)' }}>
+                                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.green, marginBottom: 6 }}>What you got right</div>
+                                  <div style={{ fontSize: 15, lineHeight: 1.65, color: t.ink }}>{result.whatWasRight}</div>
+                                </div>
+                              )}
+                              {result.whatWasMissing && (
+                                <div style={{ padding: '12px 16px', border: `1px solid rgba(196,34,27,0.22)`, background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.04)' }}>
+                                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.red, marginBottom: 6 }}>What was missing</div>
+                                  <div style={{ fontSize: 15, lineHeight: 1.65, color: t.ink }}>{result.whatWasMissing}</div>
+                                </div>
+                              )}
+                              {result.betterAnswer && (
+                                <div style={{ padding: '12px 16px', border: `1px solid ${t.ruleFaint}`, background: panelFill }}>
+                                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute, marginBottom: 6 }}>Learnor says</div>
+                                  <div style={{ fontSize: 15, lineHeight: 1.65, color: t.ink }}>{result.betterAnswer}</div>
+                                </div>
+                              )}
                             </div>
-                            {hoHintErrors[idx] && <div style={{ fontSize: 12, color: t.red, fontFamily: HC.mono }}>{hoHintErrors[idx]}</div>}
-                            {hoHints[idx] && (
-                              <div style={{ padding: '10px 14px', border: `1px solid ${dark ? 'rgba(241,236,223,0.12)' : 'rgba(26,21,16,0.1)'}`, background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.03)' }}>
-                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.amber, marginBottom: 6 }}>Hint</div>
-                                <div style={{ fontSize: 14, lineHeight: 1.65, color: t.ink }}>{hoHints[idx]}</div>
-                              </div>
-                            )}
-                          </>
-                        )}
-
-                        {result && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: result.correct ? t.green : t.red }}>
-                                {result.correct ? '✓ Correct' : '✗ Needs work'} · {result.score}/100
-                              </span>
-                              <button
-                                onClick={() => setHoResults((prev) => { const n = [...prev]; n[idx] = null; return n; })}
-                                style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: t.mute, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                              >
-                                retry
-                              </button>
-                            </div>
-                            {result.whatWasRight && (
-                              <div style={{ padding: '12px 16px', border: `1px solid ${dark ? 'rgba(106,174,127,0.25)' : 'rgba(45,106,63,0.18)'}`, background: dark ? 'rgba(106,174,127,0.08)' : 'rgba(45,106,63,0.05)' }}>
-                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.green, marginBottom: 6 }}>What you got right</div>
-                                <div style={{ fontSize: 15, lineHeight: 1.65, color: t.ink }}>{result.whatWasRight}</div>
-                              </div>
-                            )}
-                            {result.whatWasMissing && (
-                              <div style={{ padding: '12px 16px', border: `1px solid rgba(196,34,27,0.22)`, background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.04)' }}>
-                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.red, marginBottom: 6 }}>What was missing</div>
-                                <div style={{ fontSize: 15, lineHeight: 1.65, color: t.ink }}>{result.whatWasMissing}</div>
-                              </div>
-                            )}
-                            {result.betterAnswer && (
-                              <div style={{ padding: '12px 16px', border: `1px solid ${t.ruleFaint}`, background: panelFill }}>
-                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute, marginBottom: 6 }}>Model answer</div>
-                                <div style={{ fontSize: 15, lineHeight: 1.65, color: t.ink }}>{result.betterAnswer}</div>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-
-                <div style={{ paddingTop: 28, borderTop: `1px solid ${t.ruleFaint}`, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    );
+                  })}
+                </div>
+              )
+            )}
+            {hoHasQuestions && (
+              <div style={{ paddingTop: 28, borderTop: `1px solid ${t.ruleFaint}`, display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 28 }}>
                   <button
                     onClick={() => navigate('/dashboard')}
-                    style={{ padding: '13px 24px', border: `1px solid ${t.ink}`, background: t.ink, color: t.paper, fontFamily: HC.mono, fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer' }}
+                    disabled={!hoCompleted}
+                    style={{ padding: '13px 24px', border: `1px solid ${hoCompleted ? t.ink : t.ruleFaint}`, background: hoCompleted ? t.ink : 'transparent', color: hoCompleted ? t.paper : t.mute, fontFamily: HC.mono, fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: hoCompleted ? 'pointer' : 'not-allowed', opacity: hoCompleted ? 1 : 0.55 }}
                   >
                     Done →
                   </button>
@@ -798,7 +832,11 @@ export default function Study() {
                   >
                     ← Back to notes
                   </button>
-                </div>
+                  {!hoCompleted && (
+                    <div style={{ display: 'flex', alignItems: 'center', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.mute }}>
+                      Check both hands-on answers to finish this study session.
+                    </div>
+                  )}
               </div>
             )}
           </div>

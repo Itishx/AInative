@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { StoreProvider } from './store';
+import { StoreProvider, useStore } from './store';
 import { AuthProvider, useAuth } from './lib/auth';
 import Auth from './pages/Auth';
 import Landing from './pages/Landing';
@@ -20,6 +20,7 @@ import Slides from './pages/Slides';
 import Import from './pages/Import';
 import Notes from './pages/Notes';
 import Study from './pages/Study';
+import Onboarding from './pages/Onboarding';
 import { HC } from './theme';
 import { ThemeProvider } from './lib/theme';
 
@@ -35,6 +36,23 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     );
   }
   if (!user) return <Navigate to="/auth" replace />;
+  return <>{children}</>;
+}
+
+function RequireOnboarding({ children }: { children: React.ReactNode }) {
+  const { state, remoteLoaded } = useStore();
+
+  if (!remoteLoaded) {
+    return (
+      <div style={{ minHeight: '100vh', background: HC.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: HC.mute }}>
+          Loading…
+        </div>
+      </div>
+    );
+  }
+
+  if (!state.profile?.onboardingCompleted) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
 }
 
@@ -54,20 +72,21 @@ function AppRoutes() {
           <Route path="/certificate/:id" element={<Certificate />} />
           <Route path="/logos" element={<Logos />} />
           <Route path="/slides" element={<Slides />} />
-          <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
+          <Route path="/auth" element={user ? <Navigate to="/onboarding" replace /> : <Auth />} />
 
           {/* Protected */}
-          <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
-          <Route path="/new" element={<RequireAuth><NewCourse /></RequireAuth>} />
-          <Route path="/learn/:id" element={<RequireAuth><Learn /></RequireAuth>} />
-          <Route path="/quiz/:courseId/:modIdx/:lessonIdx" element={<RequireAuth><Quiz /></RequireAuth>} />
-          <Route path="/quiz-any" element={<RequireAuth><GeneralQuiz /></RequireAuth>} />
-          <Route path="/create" element={<RequireAuth><CreateCourse /></RequireAuth>} />
-          <Route path="/anything" element={<RequireAuth><Anything /></RequireAuth>} />
+          <Route path="/onboarding" element={<RequireAuth><Onboarding /></RequireAuth>} />
+          <Route path="/dashboard" element={<RequireAuth><RequireOnboarding><Dashboard /></RequireOnboarding></RequireAuth>} />
+          <Route path="/new" element={<RequireAuth><RequireOnboarding><NewCourse /></RequireOnboarding></RequireAuth>} />
+          <Route path="/learn/:id" element={<RequireAuth><RequireOnboarding><Learn /></RequireOnboarding></RequireAuth>} />
+          <Route path="/quiz/:courseId/:modIdx/:lessonIdx" element={<RequireAuth><RequireOnboarding><Quiz /></RequireOnboarding></RequireAuth>} />
+          <Route path="/quiz-any" element={<RequireAuth><RequireOnboarding><GeneralQuiz /></RequireOnboarding></RequireAuth>} />
+          <Route path="/create" element={<RequireAuth><RequireOnboarding><CreateCourse /></RequireOnboarding></RequireAuth>} />
+          <Route path="/anything" element={<RequireAuth><RequireOnboarding><Anything /></RequireOnboarding></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
-          <Route path="/notes/:courseId" element={<RequireAuth><Notes /></RequireAuth>} />
-          <Route path="/study" element={<RequireAuth><Study /></RequireAuth>} />
+          <Route path="/notes/:courseId" element={<RequireAuth><RequireOnboarding><Notes /></RequireOnboarding></RequireAuth>} />
+          <Route path="/study" element={<RequireAuth><RequireOnboarding><Study /></RequireOnboarding></RequireAuth>} />
           <Route path="/import" element={<Import />} />
           <Route path="/udemy-test" element={<Navigate to="/import" replace />} />
 

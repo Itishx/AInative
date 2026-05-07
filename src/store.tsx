@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from 'react';
 import type { AppState, Course, LeaderboardEntry, EnrolledCourse, UserProfile, QuizAttempt, StudySession } from './types';
 import { supabase } from './lib/supabase';
 
@@ -17,6 +17,10 @@ function defaultProfile(username = 'you'): UserProfile {
     headline: '',
     bio: '',
     avatarUrl: '',
+    bestDescribesYou: '',
+    occupation: '',
+    learningGoals: [],
+    onboardingCompleted: false,
   };
 }
 
@@ -69,17 +73,6 @@ function migrateCourses(courses: Course[]): Course[] {
   }));
 }
 
-function mergeCourses(primary: Course[], secondary: Course[]): Course[] {
-  const seen = new Set<string>();
-  const merged: Course[] = [];
-  for (const course of [...primary, ...secondary]) {
-    if (!course?.id || seen.has(course.id)) continue;
-    seen.add(course.id);
-    merged.push(course);
-  }
-  return merged;
-}
-
 function mergeQuizAttempts(primary: QuizAttempt[], secondary: QuizAttempt[]): QuizAttempt[] {
   const seen = new Set<string>();
   const merged: QuizAttempt[] = [];
@@ -97,6 +90,28 @@ function mergeProfileFromDb(current: UserProfile, incoming?: UserProfile): UserP
   return { ...current, ...incoming };
 }
 
+function studyTopicKey(topic?: string) {
+  return (topic || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function dedupeStudySessions(studySessions: StudySession[]): StudySession[] {
+  const sorted = [...(Array.isArray(studySessions) ? studySessions : [])].sort(
+    (a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime(),
+  );
+  const seen = new Set<string>();
+  const deduped: StudySession[] = [];
+
+  for (const session of sorted) {
+    if (!session?.id) continue;
+    const key = studyTopicKey(session.topic) || `id:${session.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(session);
+  }
+
+  return deduped.slice(0, 50);
+}
+
 function normalizeState(state: Partial<AppState> | null | undefined): AppState {
   const username = state?.username ?? 'you';
   return {
@@ -105,7 +120,7 @@ function normalizeState(state: Partial<AppState> | null | undefined): AppState {
     username,
     profile: { ...defaultProfile(username), ...(state?.profile ?? {}) },
     quizAttempts: state?.quizAttempts ?? [],
-    studySessions: state?.studySessions ?? [],
+    studySessions: dedupeStudySessions(state?.studySessions ?? []),
   };
 }
 
@@ -143,6 +158,15 @@ function saveLocal(state: AppState, userId?: string) {
     console.error('[store:local-save]', err);
   }
 }
+
+type DbUserCoursesRow = {
+  courses?: Course[] | null;
+  username?: string | null;
+  profile?: UserProfile;
+  quiz_attempts?: QuizAttempt[] | null;
+  study_sessions?: StudySession[] | null;
+  updated_at?: string | null;
+};
 
 type Action =
   | { type: 'SET_USERNAME'; username: string }
@@ -184,18 +208,18 @@ function reducer(state: AppState, action: Action): AppState {
 
     case '_LOAD_FROM_DB': {
       const courses = migrateCourses(action.courses ?? []);
-      const mergedSessions = [...(action.studySessions ?? []), ...(state.studySessions ?? [])]
-        .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
-        .slice(0, 50);
+      const studySessions = action.studySessions
+        ? dedupeStudySessions(action.studySessions)
+        : state.studySessions;
       return checkDeadlines({
         ...state,
-        // Local state may contain newer chat/progress than a stale DB row.
-        // Keep local versions first, then backfill anything only found in DB.
-        courses: mergeCourses(state.courses, courses),
+        // DB is the source of truth for course presence so deletions do not
+        // get resurrected from stale localStorage in another client.
+        courses,
         username: action.username && action.username !== 'you' ? action.username : state.username,
         profile: mergeProfileFromDb(state.profile, action.profile),
-        quizAttempts: mergeQuizAttempts(state.quizAttempts, action.quizAttempts ?? []),
-        studySessions: mergedSessions,
+        quizAttempts: action.quizAttempts ? mergeQuizAttempts(action.quizAttempts, []) : state.quizAttempts,
+        studySessions,
       });
     }
 
@@ -360,7 +384,7 @@ function reducer(state: AppState, action: Action): AppState {
     }
 
     case 'ADD_STUDY_SESSION':
-      return { ...state, studySessions: [action.session, ...(state.studySessions ?? [])].slice(0, 50) };
+      return { ...state, studySessions: dedupeStudySessions([action.session, ...(state.studySessions ?? [])]) };
 
     case 'DELETE_STUDY_SESSION':
       return { ...state, studySessions: (state.studySessions ?? []).filter(s => s.id !== action.id) };
@@ -373,6 +397,7 @@ function reducer(state: AppState, action: Action): AppState {
 interface StoreCtx {
   state: AppState;
   dispatch: React.Dispatch<Action>;
+  remoteLoaded: boolean;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -394,81 +419,153 @@ export function StoreProvider({
     }
     return s;
   });
+  const [remoteLoaded, setRemoteLoaded] = useState(!userId);
 
   // Prevent initial save from clobbering DB before the async load resolves
   const dbLoadedRef = useRef(false);
   const lastUserIdRef = useRef<string | undefined>(userId);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const remoteUpdatedAtRef = useRef<string | null>(null);
+  const saveScheduledRef = useRef(false);
+  const skipNextRemoteSaveRef = useRef(false);
 
   if (lastUserIdRef.current !== userId) {
+    clearTimeout(saveTimer.current);
     lastUserIdRef.current = userId;
     dbLoadedRef.current = !userId;
+    remoteUpdatedAtRef.current = null;
+    saveScheduledRef.current = false;
+    skipNextRemoteSaveRef.current = false;
   }
+
+  useEffect(() => {
+    setRemoteLoaded(!userId);
+  }, [userId]);
+
+  const applyDbRow = useCallback((row: DbUserCoursesRow, options?: { includeProfile?: boolean; includeQuizAttempts?: boolean; includeStudySessions?: boolean }) => {
+    const remoteUpdatedAt = typeof row.updated_at === 'string' ? row.updated_at : null;
+    if (remoteUpdatedAt && remoteUpdatedAt === remoteUpdatedAtRef.current) return false;
+    remoteUpdatedAtRef.current = remoteUpdatedAt;
+    const incomingStudySessions = options?.includeStudySessions && Array.isArray(row.study_sessions)
+      ? row.study_sessions
+      : undefined;
+    const normalizedStudySessions = incomingStudySessions
+      ? dedupeStudySessions(incomingStudySessions)
+      : undefined;
+    const studySessionsWereCleaned = !!incomingStudySessions && (
+      normalizedStudySessions!.length !== incomingStudySessions.length
+      || normalizedStudySessions!.some((session, index) => session.id !== incomingStudySessions[index]?.id)
+    );
+    skipNextRemoteSaveRef.current = !studySessionsWereCleaned;
+    dispatch({
+      type: '_LOAD_FROM_DB',
+      courses: Array.isArray(row.courses) ? row.courses : [],
+      username: row.username ?? undefined,
+      profile: options?.includeProfile ? row.profile : undefined,
+      quizAttempts: options?.includeQuizAttempts && Array.isArray(row.quiz_attempts) ? row.quiz_attempts : undefined,
+      studySessions: normalizedStudySessions,
+    });
+    return true;
+  }, []);
+
+  const syncFromDb = useCallback(async ({ markLoaded = false, force = false }: { markLoaded?: boolean; force?: boolean } = {}) => {
+    if (!userId) return;
+    if (!force && saveScheduledRef.current) return;
+
+    try {
+      const primary = await supabase
+        .from('user_courses')
+        .select('courses, username, profile, quiz_attempts, study_sessions, updated_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!primary.error) {
+        if (primary.data) applyDbRow(primary.data as DbUserCoursesRow, { includeProfile: true, includeQuizAttempts: true, includeStudySessions: true });
+        return;
+      }
+
+      const fallback = await supabase
+        .from('user_courses')
+        .select('courses, username, profile, updated_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!fallback.error) {
+        if (fallback.data) applyDbRow(fallback.data as DbUserCoursesRow, { includeProfile: true });
+        return;
+      }
+
+      const baseFallback = await supabase
+        .from('user_courses')
+        .select('courses, username, updated_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (baseFallback.data) {
+        applyDbRow(baseFallback.data as DbUserCoursesRow);
+      }
+    } finally {
+      if (markLoaded) {
+        dbLoadedRef.current = true;
+        setRemoteLoaded(true);
+      }
+    }
+  }, [applyDbRow, userId]);
 
   // Load from Supabase on mount — DB is source of truth
   useEffect(() => {
+    void syncFromDb({ markLoaded: true, force: true });
+  }, [syncFromDb]);
+
+  useEffect(() => {
     if (!userId) return;
-    supabase
-      .from('user_courses')
-      .select('courses, username, profile, quiz_attempts, study_sessions')
-      .eq('user_id', userId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          supabase
-            .from('user_courses')
-            .select('courses, username, profile')
-            .eq('user_id', userId)
-            .maybeSingle()
-            .then(({ data: fallback, error: fallbackError }) => {
-              if (fallback) {
-                dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(fallback.courses) ? fallback.courses : [], username: fallback.username ?? undefined, profile: (fallback as { profile?: UserProfile }).profile });
-                setTimeout(() => { dbLoadedRef.current = true; }, 0);
-                return;
-              }
-              if (!fallbackError) {
-                dbLoadedRef.current = true;
-                return;
-              }
-              supabase
-                .from('user_courses')
-                .select('courses, username')
-                .eq('user_id', userId)
-                .maybeSingle()
-                .then(({ data: baseFallback }) => {
-                  if (baseFallback) {
-                    dispatch({ type: '_LOAD_FROM_DB', courses: Array.isArray(baseFallback.courses) ? baseFallback.courses : [], username: baseFallback.username ?? undefined });
-                  }
-                  setTimeout(() => { dbLoadedRef.current = true; }, 0);
-                });
-            });
-          return;
-        }
-        if (!data) {
-          dbLoadedRef.current = true;
-          return;
-        }
-        const row = data as { profile?: UserProfile; quiz_attempts?: QuizAttempt[]; study_sessions?: StudySession[] };
-        dispatch({
-          type: '_LOAD_FROM_DB',
-          courses: Array.isArray(data.courses) ? data.courses : [],
-          username: data.username ?? undefined,
-          profile: row.profile,
-          quizAttempts: Array.isArray(row.quiz_attempts) ? row.quiz_attempts : [],
-          studySessions: Array.isArray(row.study_sessions) ? row.study_sessions : [],
-        });
-        setTimeout(() => { dbLoadedRef.current = true; }, 0);
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+
+    const handleWindowFocus = () => { void syncFromDb(); };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) void syncFromDb();
+    };
+
+    const remoteChannel = supabase
+      .channel(`user-courses-${userId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'user_courses',
+        filter: `user_id=eq.${userId}`,
+      }, () => {
+        void syncFromDb();
+      })
+      .subscribe();
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const interval = window.setInterval(() => {
+      if (!document.hidden) void syncFromDb();
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(interval);
+      void supabase.removeChannel(remoteChannel);
+    };
+  }, [syncFromDb, userId]);
 
   // Save to localStorage immediately, debounce Supabase writes (2s)
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
     saveLocal(state, userId);
     if (!userId) return;
+    if (skipNextRemoteSaveRef.current) {
+      skipNextRemoteSaveRef.current = false;
+      saveScheduledRef.current = false;
+      return;
+    }
     // Don't write to Supabase until the initial DB load has completed
     if (!dbLoadedRef.current) return;
     clearTimeout(saveTimer.current);
+    saveScheduledRef.current = true;
+    const updatedAt = new Date().toISOString();
     saveTimer.current = setTimeout(() => {
       supabase
         .from('user_courses')
@@ -479,10 +576,14 @@ export function StoreProvider({
           profile: state.profile,
           quiz_attempts: state.quizAttempts,
           study_sessions: state.studySessions,
-          updated_at: new Date().toISOString(),
+          updated_at: updatedAt,
         }, { onConflict: 'user_id' })
         .then(({ error }) => {
-          if (!error) return;
+          if (!error) {
+            remoteUpdatedAtRef.current = updatedAt;
+            saveScheduledRef.current = false;
+            return;
+          }
           console.error('[store:supabase-save]', error.message);
           // Older Supabase tables may not have the profile column yet.
           // Still save courses/username instead of dropping all progress.
@@ -493,12 +594,14 @@ export function StoreProvider({
               courses: state.courses,
               username: state.username,
               study_sessions: state.studySessions,
-              updated_at: new Date().toISOString(),
+              updated_at: updatedAt,
             }, { onConflict: 'user_id' })
-            .then(() => {
+            .then(({ error: fallbackError }) => {
+              if (!fallbackError) remoteUpdatedAtRef.current = updatedAt;
+              saveScheduledRef.current = false;
               supabase
                 .from('user_courses')
-                .update({ profile: state.profile, updated_at: new Date().toISOString() })
+                .update({ profile: state.profile, updated_at: updatedAt })
                 .eq('user_id', userId)
                 .then(({ error: profileError }) => {
                   if (profileError) console.error('[store:profile-save]', profileError.message);
@@ -531,7 +634,7 @@ export function StoreProvider({
     return () => clearInterval(interval);
   }, []);
 
-  return <Ctx.Provider value={{ state, dispatch }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ state, dispatch, remoteLoaded }}>{children}</Ctx.Provider>;
 }
 
 export function useStore() {

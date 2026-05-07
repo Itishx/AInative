@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { HC, HCDark, btn, type Colors } from '../theme';
+import { CodingPracticeList } from '../components/CodingPracticeList';
+import { apiJson, normalizeApiErrorMessage } from '../api';
 import { useStore } from '../store';
 import type { MCQQuestion } from '../types';
 import { useTheme } from '../lib/theme';
@@ -279,16 +281,23 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
   const [hoChecking, setHoChecking] = useState<number | null>(null);
   const [hoHintLoading, setHoHintLoading] = useState<number | null>(null);
   const [hoHints, setHoHints] = useState<(string | null)[]>([]);
-  const [hoHintError, setHoHintError] = useState('');
+  const [hoHintErrors, setHoHintErrors] = useState<string[]>([]);
   const [hoIsCoding, setHoIsCoding] = useState(false);
   const [hoError, setHoError] = useState('');
+  const handsonContext = (course.lessonChats?.[lessonKey] ?? [])
+    .filter((message) => message.who === 'tutor')
+    .map((message) => {
+      const visual = typeof message.visual === 'string' && message.visual.trim() ? `\n\nVisual:\n${message.visual.trim()}` : '';
+      return `${message.text}${visual}`;
+    })
+    .join('\n\n');
 
   async function handleGetHint(idx: number) {
     if (hoHintLoading !== null) return;
     setHoHintLoading(idx);
-    setHoHintError('');
+    setHoHintErrors((prev) => { const next = [...prev]; next[idx] = ''; return next; });
     try {
-      const res = await fetch('/api/handson-hint', {
+      const data = await apiJson<{ hint?: string; error?: string }>('/api/handson-hint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -296,14 +305,17 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
           courseTitle: course.subject,
           lessonTitle: lesson.title,
           isCoding: hoIsCoding,
+          notesContext: handsonContext,
         }),
       });
-      if (!res.ok) throw new Error(`Server error ${res.status} — try restarting the server`);
-      const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setHoHints((prev) => { const n = [...prev]; n[idx] = data.hint; return n; });
+      setHoHints((prev) => { const n = [...prev]; n[idx] = String(data.hint || '').trim(); return n; });
     } catch (e) {
-      setHoHintError((e as Error).message);
+      setHoHintErrors((prev) => {
+        const next = [...prev];
+        next[idx] = normalizeApiErrorMessage((e as Error).message, 'Could not generate a hint right now.');
+        return next;
+      });
     } finally {
       setHoHintLoading(null);
     }
@@ -317,7 +329,7 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
     setHoResults([]);
     setHoHints([]);
     try {
-      const res = await fetch('/api/handson', {
+      const data = await apiJson<{ questions?: unknown[]; isCoding?: boolean; error?: string }>('/api/handson', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -325,19 +337,20 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
           moduleTitle: mod.title,
           lessonTitle: lesson.title,
           chatHistory: course.lessonChats?.[lessonKey] ?? [],
+          questionCount: 2,
         }),
       });
-      if (!res.ok) throw new Error(`Server error ${res.status} — restart the server to pick up new endpoints`);
-      const data = await res.json();
       if (data.error) throw new Error(data.error);
       if (!Array.isArray(data.questions) || data.questions.length === 0) throw new Error('No questions returned from API');
-      setHoQuestions(data.questions);
-      setHoAnswers(data.questions.map(() => ''));
-      setHoResults(data.questions.map(() => null));
-      setHoHints(data.questions.map(() => null));
+      const normalizedQuestions = (data.isCoding ? data.questions.slice(0, 2) : data.questions).map((value: unknown) => String(value || '').trim()).filter(Boolean);
+      setHoQuestions(normalizedQuestions);
+      setHoAnswers(normalizedQuestions.map(() => ''));
+      setHoResults(normalizedQuestions.map(() => null));
+      setHoHints(normalizedQuestions.map(() => null));
+      setHoHintErrors(normalizedQuestions.map(() => ''));
       setHoIsCoding(!!data.isCoding);
     } catch (e) {
-      setHoError((e as Error).message);
+      setHoError(normalizeApiErrorMessage((e as Error).message, 'Could not generate hands-on questions right now.'));
     } finally {
       setHoLoading(false);
     }
@@ -349,7 +362,7 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
     if (!answer) return;
     setHoChecking(idx);
     try {
-      const res = await fetch('/api/handson-check', {
+      const data = await apiJson<{ score: number; correct: boolean; whatWasRight: string; whatWasMissing: string; betterAnswer: string; error?: string }>('/api/handson-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -360,10 +373,17 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
           isCoding: hoIsCoding,
         }),
       });
-      const data = await res.json();
-      if (!data.error) setHoResults((prev) => { const n = [...prev]; n[idx] = data; return n; });
-    } catch { /* silent */ }
+      if (data.error) throw new Error(data.error);
+      setHoResults((prev) => { const n = [...prev]; n[idx] = data; return n; });
+      setHoError('');
+    } catch (e) {
+      setHoError(normalizeApiErrorMessage((e as Error).message, 'Could not check that answer right now.'));
+    }
     finally { setHoChecking(null); }
+  }
+
+  function handleRetryHo(idx: number) {
+    setHoResults((prev) => { const next = [...prev]; next[idx] = null; return next; });
   }
   async function loadQuizPayload() {
     setLoading(true);
@@ -641,7 +661,7 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
             {!hoLoading && hoQuestions.length === 0 && !hoError && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ fontFamily: HC.sans, fontSize: 15, lineHeight: 1.65, color: theme.mute }}>
-                  5 typed questions based on what was taught. For coding lessons, you'll write actual queries and code — the AI checks correctness and gives detailed feedback.
+                  Hands-on practice is grounded in what was taught. Coding lessons now get 2 IDE-style questions with inline hints and checked output.
                 </div>
                 <button
                   onClick={handleGenerateHo}
@@ -665,139 +685,156 @@ function QuizContent({ courseId, mi, li }: { courseId: string; mi: number; li: n
             )}
 
             {hoQuestions.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 30, borderTop: `1px solid ${theme.ruleFaint}`, paddingTop: 22 }}>
-                {hoQuestions.map((q, idx) => {
-                  const result = hoResults[idx];
-                  const isChecking = hoChecking === idx;
-                  return (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                        <span style={{ fontFamily: HC.mono, fontSize: 11, color: theme.red, flexShrink: 0, marginTop: 3 }}>
-                          {String(idx + 1).padStart(2, '0')}
-                        </span>
-                        <div style={{ fontFamily: HC.serif, fontSize: 20, letterSpacing: '-0.01em', lineHeight: 1.4 }}>{q}</div>
-                      </div>
+              hoIsCoding ? (
+                <CodingPracticeList
+                  questions={hoQuestions}
+                  answers={hoAnswers}
+                  results={hoResults}
+                  hints={hoHints}
+                  hintErrors={hoHintErrors}
+                  checkingIndex={hoChecking}
+                  hintLoadingIndex={hoHintLoading}
+                  theme={theme}
+                  dark={dark}
+                  panelFill={panelFill}
+                  contextHint={`${course.subject} ${lesson.title} ${lesson.objective}`}
+                  onAnswerChange={(idx, value) => setHoAnswers((prev) => { const next = [...prev]; next[idx] = value; return next; })}
+                  onCheck={handleCheckHo}
+                  onHint={handleGetHint}
+                  onRetry={handleRetryHo}
+                />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 30, borderTop: `1px solid ${theme.ruleFaint}`, paddingTop: 22 }}>
+                  {hoQuestions.map((q, idx) => {
+                    const result = hoResults[idx];
+                    const isChecking = hoChecking === idx;
+                    return (
+                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                          <span style={{ fontFamily: HC.mono, fontSize: 11, color: theme.red, flexShrink: 0, marginTop: 3 }}>
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                          <div style={{ fontFamily: HC.serif, fontSize: 20, letterSpacing: '-0.01em', lineHeight: 1.4 }}>{q}</div>
+                        </div>
 
-                      <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <textarea
-                          value={hoAnswers[idx] || ''}
-                          onChange={(e) => { if (!result) setHoAnswers((prev) => { const n = [...prev]; n[idx] = e.target.value; return n; }); }}
-                          placeholder={hoIsCoding ? 'Write your code / query here…' : 'Type your answer here…'}
-                          rows={hoIsCoding ? 6 : 3}
-                          disabled={isChecking || !!result}
-                          style={{
-                            width: '100%',
-                            resize: 'vertical',
-                            padding: '12px 14px',
-                            border: `1px solid ${result ? (result.correct ? (dark ? 'rgba(106,174,127,0.4)' : 'rgba(45,106,63,0.3)') : 'rgba(196,34,27,0.3)') : theme.ruleFaint}`,
-                            background: result
-                              ? (result.correct ? (dark ? 'rgba(106,174,127,0.06)' : 'rgba(45,106,63,0.04)') : (dark ? 'rgba(232,81,74,0.06)' : 'rgba(196,34,27,0.03)'))
-                              : hoIsCoding ? (dark ? 'rgba(0,0,0,0.3)' : '#16120f') : panelFill,
-                            color: hoIsCoding && !result ? (dark ? theme.ink : HC.paper) : theme.ink,
-                            fontFamily: hoIsCoding ? HC.mono : HC.sans,
-                            fontSize: hoIsCoding ? 13 : 15,
-                            lineHeight: 1.6,
-                            outline: 'none',
-                            boxSizing: 'border-box',
-                            whiteSpace: 'pre',
-                            overflowWrap: 'normal',
-                            overflowX: 'auto',
-                            opacity: result ? 0.75 : 1,
-                          }}
-                        />
+                        <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <textarea
+                            value={hoAnswers[idx] || ''}
+                            onChange={(e) => { if (!result) setHoAnswers((prev) => { const n = [...prev]; n[idx] = e.target.value; return n; }); }}
+                            placeholder="Type your answer here…"
+                            rows={3}
+                            disabled={isChecking || !!result}
+                            style={{
+                              width: '100%',
+                              resize: 'vertical',
+                              padding: '12px 14px',
+                              border: `1px solid ${result ? (result.correct ? (dark ? 'rgba(106,174,127,0.4)' : 'rgba(45,106,63,0.3)') : 'rgba(196,34,27,0.3)') : theme.ruleFaint}`,
+                              background: result
+                                ? (result.correct ? (dark ? 'rgba(106,174,127,0.06)' : 'rgba(45,106,63,0.04)') : (dark ? 'rgba(232,81,74,0.06)' : 'rgba(196,34,27,0.03)'))
+                                : panelFill,
+                              color: theme.ink,
+                              fontFamily: HC.sans,
+                              fontSize: 15,
+                              lineHeight: 1.6,
+                              outline: 'none',
+                              boxSizing: 'border-box',
+                              opacity: result ? 0.75 : 1,
+                            }}
+                          />
 
-                        {!result && (
-                          <>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
-                              <button
-                                onClick={() => handleGetHint(idx)}
-                                disabled={hoHintLoading === idx}
-                                style={{
-                                  padding: '10px 16px',
-                                  border: `1px solid ${theme.ruleFaint}`,
-                                  background: 'transparent',
-                                  color: theme.mute,
-                                  fontFamily: HC.mono,
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  letterSpacing: '0.14em',
-                                  textTransform: 'uppercase',
-                                  cursor: hoHintLoading === idx ? 'not-allowed' : 'pointer',
-                                  opacity: hoHintLoading === idx ? 0.4 : 1,
-                                }}
-                              >
-                                {hoHintLoading === idx ? 'Loading…' : hoHints[idx] ? 'Hint again' : 'Show hint'}
-                              </button>
-                              <button
-                                onClick={() => handleCheckHo(idx)}
-                                disabled={isChecking || !hoAnswers[idx]?.trim()}
-                                style={{
-                                  padding: '10px 18px',
-                                  border: `1px solid ${theme.ink}`,
-                                  background: 'transparent',
-                                  color: theme.ink,
-                                  fontFamily: HC.mono,
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  letterSpacing: '0.14em',
-                                  textTransform: 'uppercase',
-                                  cursor: isChecking || !hoAnswers[idx]?.trim() ? 'not-allowed' : 'pointer',
-                                  opacity: isChecking || !hoAnswers[idx]?.trim() ? 0.4 : 1,
-                                }}
-                              >
-                                {isChecking ? 'Checking…' : 'Check answer →'}
-                              </button>
+                          {!result && (
+                            <>
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
+                                <button
+                                  onClick={() => handleGetHint(idx)}
+                                  disabled={hoHintLoading === idx}
+                                  style={{
+                                    padding: '10px 16px',
+                                    border: `1px solid ${theme.ruleFaint}`,
+                                    background: 'transparent',
+                                    color: theme.mute,
+                                    fontFamily: HC.mono,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    letterSpacing: '0.14em',
+                                    textTransform: 'uppercase',
+                                    cursor: hoHintLoading === idx ? 'not-allowed' : 'pointer',
+                                    opacity: hoHintLoading === idx ? 0.4 : 1,
+                                  }}
+                                >
+                                  {hoHintLoading === idx ? 'Loading…' : hoHints[idx] ? 'Hint again' : 'Show hint'}
+                                </button>
+                                <button
+                                  onClick={() => handleCheckHo(idx)}
+                                  disabled={isChecking || !hoAnswers[idx]?.trim()}
+                                  style={{
+                                    padding: '10px 18px',
+                                    border: `1px solid ${theme.ink}`,
+                                    background: 'transparent',
+                                    color: theme.ink,
+                                    fontFamily: HC.mono,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    letterSpacing: '0.14em',
+                                    textTransform: 'uppercase',
+                                    cursor: isChecking || !hoAnswers[idx]?.trim() ? 'not-allowed' : 'pointer',
+                                    opacity: isChecking || !hoAnswers[idx]?.trim() ? 0.4 : 1,
+                                  }}
+                                >
+                                  {isChecking ? 'Checking…' : 'Check answer →'}
+                                </button>
+                              </div>
+                              {hoHintErrors[idx] && (
+                                <div style={{ fontSize: 12, color: theme.red, fontFamily: HC.mono }}>{hoHintErrors[idx]}</div>
+                              )}
+                              {hoHints[idx] && (
+                                <div style={{ padding: '10px 14px', border: `1px solid ${dark ? 'rgba(241,236,223,0.12)' : 'rgba(26,21,16,0.1)'}`, background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.03)' }}>
+                                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.amber, marginBottom: 6 }}>Hint</div>
+                                  <div style={{ fontSize: 14, lineHeight: 1.65, color: theme.ink }}>{hoHints[idx]}</div>
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {result && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: result.correct ? theme.green : theme.red }}>
+                                  {result.correct ? '✓ Correct' : '✗ Needs work'} · {result.score}/100
+                                </span>
+                                <button
+                                  onClick={() => handleRetryHo(idx)}
+                                  style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: theme.mute, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                >
+                                  retry
+                                </button>
+                              </div>
+                              {result.whatWasRight && (
+                                <div style={{ padding: '12px 16px', border: `1px solid ${dark ? 'rgba(106,174,127,0.25)' : 'rgba(45,106,63,0.18)'}`, background: dark ? 'rgba(106,174,127,0.08)' : 'rgba(45,106,63,0.05)' }}>
+                                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.green, marginBottom: 6 }}>What you got right</div>
+                                  <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink }}>{result.whatWasRight}</div>
+                                </div>
+                              )}
+                              {result.whatWasMissing && (
+                                <div style={{ padding: '12px 16px', border: `1px solid rgba(196,34,27,0.22)`, background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.04)' }}>
+                                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.red, marginBottom: 6 }}>What was missing</div>
+                                  <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink }}>{result.whatWasMissing}</div>
+                                </div>
+                              )}
+                              {result.betterAnswer && (
+                                <div style={{ padding: '12px 16px', border: `1px solid ${theme.ruleFaint}`, background: panelFill }}>
+                                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.mute, marginBottom: 6 }}>Learnor says</div>
+                                  <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink }}>{result.betterAnswer}</div>
+                                </div>
+                              )}
                             </div>
-                            {hoHintError && (
-                              <div style={{ fontSize: 12, color: theme.red, fontFamily: HC.mono }}>{hoHintError}</div>
-                            )}
-                            {hoHints[idx] && (
-                              <div style={{ padding: '10px 14px', border: `1px solid ${dark ? 'rgba(241,236,223,0.12)' : 'rgba(26,21,16,0.1)'}`, background: dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.03)' }}>
-                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.amber, marginBottom: 6 }}>Hint</div>
-                                <div style={{ fontSize: 14, lineHeight: 1.65, color: theme.ink }}>{hoHints[idx]}</div>
-                              </div>
-                            )}
-                          </>
-                        )}
-
-                        {result && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: result.correct ? theme.green : theme.red }}>
-                                {result.correct ? '✓ Correct' : '✗ Needs work'} · {result.score}/100
-                              </span>
-                              <button
-                                onClick={() => setHoResults((prev) => { const n = [...prev]; n[idx] = null; return n; })}
-                                style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: theme.mute, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                              >
-                                retry
-                              </button>
-                            </div>
-                            {result.whatWasRight && (
-                              <div style={{ padding: '12px 16px', border: `1px solid ${dark ? 'rgba(106,174,127,0.25)' : 'rgba(45,106,63,0.18)'}`, background: dark ? 'rgba(106,174,127,0.08)' : 'rgba(45,106,63,0.05)' }}>
-                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.green, marginBottom: 6 }}>What you got right</div>
-                                <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink }}>{result.whatWasRight}</div>
-                              </div>
-                            )}
-                            {result.whatWasMissing && (
-                              <div style={{ padding: '12px 16px', border: `1px solid rgba(196,34,27,0.22)`, background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.04)' }}>
-                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.red, marginBottom: 6 }}>What was missing</div>
-                                <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink }}>{result.whatWasMissing}</div>
-                              </div>
-                            )}
-                            {result.betterAnswer && (
-                              <div style={{ padding: '12px 16px', border: `1px solid ${theme.ruleFaint}`, background: panelFill }}>
-                                <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.mute, marginBottom: 6 }}>Model answer</div>
-                                <div style={{ fontSize: 15, lineHeight: 1.65, color: theme.ink }}>{result.betterAnswer}</div>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )
             )}
 
             {/* Done button — always visible in hands-on tab after quiz was submitted */}

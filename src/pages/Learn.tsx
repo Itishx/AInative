@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { HC, HCDark, btn, type Colors } from '../theme';
-import { CountdownInline } from '../components/Countdown';
+import { Countdown } from '../components/Countdown';
 import { useStore } from '../store';
-import { apiUrl } from '../api';
+import { apiJson, apiUrl, normalizeApiErrorMessage } from '../api';
 import type { Course, ChatMsg, EnrolledCourse } from '../types';
 import { useTheme } from '../lib/theme';
 import { useAuth } from '../lib/auth';
+import { handleCodeEditorKeyDown } from '../lib/codeEditor';
 
 function renderInlineFormatting(text: string) {
   const nodes: React.ReactNode[] = [];
@@ -473,6 +474,16 @@ function renderMarkdown(text: string) {
 }
 
 type Phase = 'ASSESS' | 'HOOK' | 'EXPLAIN' | 'CHECK' | 'REINFORCE';
+type WorkspaceTab = 'visual' | 'code' | 'output';
+type WorkspaceEvaluation = {
+  score: number;
+  correct: boolean;
+  whatWasRight: string;
+  whatWasMissing: string;
+  betterAnswer: string;
+};
+
+const CODING_WORKSPACE_TOPICS = /\b(sql|query|queries|join|select|where|group by|order by|python|javascript|typescript|react|html|css|bash|shell|regex|database|schema|orm|api|function|code|coding|programming|algorithm|docker|git)\b/i;
 
 function normalizeLessonObjective(objective: string | undefined, lessonTitle: string) {
   const value = String(objective ?? '').trim();
@@ -783,6 +794,78 @@ function extractFirstCodeBlock(text: string) {
   return null;
 }
 
+function extractFirstCodeLanguage(text: string) {
+  const blocks = text.split(/```/);
+  for (let i = 1; i < blocks.length; i += 2) {
+    const lines = blocks[i].split('\n');
+    const firstLine = lines[0]?.trim() ?? '';
+    const looksLikeLanguage = firstLine.length > 0 && !/\s/.test(firstLine);
+    const code = (looksLikeLanguage ? lines.slice(1) : lines).join('\n').trim();
+    if (!code) continue;
+    return looksLikeLanguage ? firstLine.toLowerCase() : 'txt';
+  }
+  return null;
+}
+
+function getCodeExtension(language: string) {
+  switch (language) {
+    case 'python':
+      return 'py';
+    case 'javascript':
+      return 'js';
+    case 'typescript':
+      return 'ts';
+    case 'markdown':
+      return 'md';
+    case 'shell':
+    case 'bash':
+    case 'zsh':
+      return 'sh';
+    default:
+      return language || 'txt';
+  }
+}
+
+function isCodingWorkspaceLesson(...parts: string[]) {
+  const joined = parts.filter(Boolean).join(' ');
+  return /```(?:sql|python|py|javascript|js|typescript|ts|html|css|bash|sh)\b/i.test(joined) || CODING_WORKSPACE_TOPICS.test(joined);
+}
+
+function inferWorkspaceLanguage(...parts: string[]) {
+  const joined = parts.filter(Boolean).join(' ');
+  if (/```sql\b|\b(sql|select|from|where|join|group by|order by|having)\b/i.test(joined)) return 'sql';
+  if (/```python\b|```py\b|\bpython\b/i.test(joined)) return 'python';
+  if (/```typescript\b|```ts\b|\btypescript\b/i.test(joined)) return 'typescript';
+  if (/```javascript\b|```js\b|\bjavascript\b/i.test(joined)) return 'javascript';
+  if (/```html\b|\bhtml\b/i.test(joined)) return 'html';
+  if (/```css\b|\bcss\b/i.test(joined)) return 'css';
+  if (/```bash\b|```sh\b|```shell\b|\b(bash|shell|terminal|command line)\b/i.test(joined)) return 'bash';
+  return 'txt';
+}
+
+function looksLikeCodePracticeQuestion(question: string) {
+  return /\b(write|build|implement|create|code|query|select|return|render|style|fix|complete|update|sort|filter|loop|function|component|command)\b/i.test(question);
+}
+
+function getCodeEditorPlaceholder(language: string, question: string) {
+  const prompt = question.trim() || 'Write your answer here.';
+  if (language === 'sql') return `-- ${prompt}\n`;
+  if (language === 'html') return `<!-- ${prompt} -->\n`;
+  if (language === 'css') return `/* ${prompt} */\n`;
+  if (language === 'javascript' || language === 'typescript') return `// ${prompt}\n`;
+  return `# ${prompt}\n`;
+}
+
+function buildWorkspaceTutorContext(messages: ChatMsg[]) {
+  return messages
+    .filter((message) => message.who === 'tutor')
+    .map((message) => {
+      const visual = typeof message.visual === 'string' && message.visual.trim() ? `\n\nVisual:\n${message.visual.trim()}` : '';
+      return `${message.text}${visual}`;
+    })
+    .join('\n\n');
+}
+
 function extractFirstMarkdownTable(text: string) {
   const lines = text.split('\n');
   for (let i = 0; i < lines.length - 1; i += 1) {
@@ -872,6 +955,18 @@ function LessonCanvas({
   const { t, dark } = useTheme();
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncedVisual, setSyncedVisual] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('visual');
+  const [draftCode, setDraftCode] = useState('');
+  const [workspaceQuestions, setWorkspaceQuestions] = useState<string[]>([]);
+  const [workspaceQuestionIndex, setWorkspaceQuestionIndex] = useState(0);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState('');
+  const [workspaceChecking, setWorkspaceChecking] = useState(false);
+  const [workspaceHintLoading, setWorkspaceHintLoading] = useState(false);
+  const [workspaceHintError, setWorkspaceHintError] = useState('');
+  const [workspaceHint, setWorkspaceHint] = useState('');
+  const [workspaceResult, setWorkspaceResult] = useState<WorkspaceEvaluation | null>(null);
+  const workspaceAutoloadedRef = useRef(false);
 
   async function handleSyncCanvas() {
     if (syncLoading) return;
@@ -903,12 +998,174 @@ function LessonCanvas({
 
   const visualSource = syncedVisual || latestVisual || latestTutorText;
   const code = extractFirstCodeBlock(visualSource);
+  const codeLanguage = extractFirstCodeLanguage(visualSource) || 'txt';
+  const codeExtension = getCodeExtension(codeLanguage);
   const table = extractFirstMarkdownTable(visualSource);
   const chartMode = !code && !table && /(trend|chart|graph|growth|volume|increase|decrease|over time)/i.test(latestTutorText);
   const ambientMode = !table && !code && !chartMode;
   const accent = readyToMoveOn ? t.green : t.red;
   const objective = normalizeLessonObjective(lesson.objective, lesson.title);
   const ambientPalette = getAmbientPalette(`${course.subject}:${lesson.title}`);
+  const workspaceContext = buildWorkspaceTutorContext(chatMessages);
+  const workspaceLanguage = code && codeLanguage !== 'txt'
+    ? codeLanguage
+    : inferWorkspaceLanguage(course.subject, mod.title, lesson.title, objective, latestTutorText, latestVisual, visualSource);
+  const workspaceExtension = getCodeExtension(workspaceLanguage);
+  const isCodingLesson = isCodingWorkspaceLesson(course.subject, mod.title, lesson.title, objective, latestTutorText, latestVisual, visualSource);
+  const showCodingTabs = isCodingLesson;
+  const workspaceQuestion = workspaceQuestions[workspaceQuestionIndex] ?? '';
+  const hasWorkspacePractice = isCodingLesson || workspaceQuestions.length > 0 || workspaceLoading || !!workspaceError || !!workspaceHint || !!workspaceResult;
+  const codeLineCount = Math.max(1, draftCode.split('\n').length);
+  const workspaceTabs: { id: WorkspaceTab; label: string; sub: string }[] = showCodingTabs
+    ? [
+        { id: 'visual', label: 'Visual', sub: table ? 'table' : code ? 'example' : chartMode ? 'chart' : 'context' },
+        { id: 'code', label: 'Code', sub: hasWorkspacePractice ? workspaceExtension : code ? codeLanguage : 'ide' },
+        { id: 'output', label: 'Output', sub: workspaceResult ? 'feedback' : workspaceHint ? 'hint' : hasWorkspacePractice ? 'check' : 'tests' },
+      ]
+    : [
+        { id: 'visual', label: 'Visual', sub: table ? 'table' : code ? 'example' : chartMode ? 'chart' : 'context' },
+      ];
+  const workspaceCanvasMinHeight =
+    activeTab === 'code'
+      ? (hasWorkspacePractice ? (narrow ? 520 : 640) : (narrow ? 420 : 520))
+      : activeTab === 'output'
+        ? (narrow ? 320 : 380)
+        : ambientMode
+          ? (narrow ? 360 : 430)
+          : chartMode
+            ? (narrow ? 380 : 460)
+            : table
+              ? (narrow ? 400 : 500)
+              : code
+                ? (narrow ? 380 : 460)
+                : (narrow ? 360 : 430);
+
+  function resetWorkspaceFeedback() {
+    setWorkspaceError('');
+    setWorkspaceHint('');
+    setWorkspaceHintError('');
+    setWorkspaceResult(null);
+  }
+
+  function handleResetWorkspaceDraft() {
+    setDraftCode(workspaceQuestion ? '' : code ?? '');
+  }
+
+  async function handleGenerateWorkspacePrompts() {
+    if (workspaceLoading) return;
+    setWorkspaceLoading(true);
+    resetWorkspaceFeedback();
+    try {
+      const data = await apiJson<{ questions?: unknown[]; isCoding?: boolean; error?: string }>('/api/handson', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseTitle: course.subject,
+          moduleTitle: mod.title,
+          lessonTitle: lesson.title,
+          chatHistory: chatMessages,
+          forceCoding: isCodingLesson,
+        }),
+      });
+      if (data.error) throw new Error(data.error || 'Could not generate coding practice right now.');
+      const questions = Array.isArray(data.questions)
+        ? data.questions.map((value: unknown) => String(value || '').trim()).filter(Boolean).slice(0, 5)
+        : [];
+      if (questions.length === 0) throw new Error('No coding prompts came back for this lesson.');
+      const preferredIndex = questions.findIndex(looksLikeCodePracticeQuestion);
+      setWorkspaceQuestions(questions);
+      setWorkspaceQuestionIndex(preferredIndex >= 0 ? preferredIndex : 0);
+      setDraftCode('');
+    } catch (err) {
+      setWorkspaceError(normalizeApiErrorMessage(err instanceof Error ? err.message : 'Could not generate coding practice right now.', 'Could not generate coding practice right now.'));
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function handleCheckWorkspaceAnswer() {
+    if (!workspaceQuestion || !draftCode.trim() || workspaceChecking) return;
+    setWorkspaceChecking(true);
+    setWorkspaceError('');
+    setWorkspaceHintError('');
+    try {
+      const data = await apiJson<{ score: number; correct: boolean; whatWasRight: string; whatWasMissing: string; betterAnswer: string; error?: string }>('/api/handson-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: workspaceQuestion,
+          userAnswer: draftCode,
+          courseTitle: course.subject,
+          lessonTitle: lesson.title,
+          isCoding: true,
+        }),
+      });
+      if (data.error) throw new Error(data.error || 'Could not check your answer right now.');
+      setWorkspaceResult(data);
+      setWorkspaceHint('');
+      setActiveTab('output');
+    } catch (err) {
+      setWorkspaceError(normalizeApiErrorMessage(err instanceof Error ? err.message : 'Could not check your answer right now.', 'Could not check your answer right now.'));
+      setActiveTab('output');
+    } finally {
+      setWorkspaceChecking(false);
+    }
+  }
+
+  async function handleGetWorkspaceHint() {
+    if (!workspaceQuestion || workspaceHintLoading) return;
+    setWorkspaceHintLoading(true);
+    setWorkspaceError('');
+    setWorkspaceHintError('');
+    try {
+      const data = await apiJson<{ hint?: string; error?: string }>('/api/handson-hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: workspaceQuestion,
+          courseTitle: course.subject,
+          lessonTitle: lesson.title,
+          isCoding: true,
+          notesContext: workspaceContext,
+        }),
+      });
+      if (data.error) throw new Error(data.error || 'Could not generate a hint right now.');
+      setWorkspaceHint(String(data.hint || '').trim());
+      setActiveTab('output');
+    } catch (err) {
+      setWorkspaceHintError(normalizeApiErrorMessage(err instanceof Error ? err.message : 'Could not generate a hint right now.', 'Could not generate a hint right now.'));
+      setActiveTab('output');
+    } finally {
+      setWorkspaceHintLoading(false);
+    }
+  }
+
+  function handleNextWorkspacePrompt() {
+    resetWorkspaceFeedback();
+    if (workspaceQuestions.length > 1) {
+      setWorkspaceQuestionIndex((prev) => (prev + 1) % workspaceQuestions.length);
+      setDraftCode('');
+      return;
+    }
+    void handleGenerateWorkspacePrompts();
+  }
+
+  useEffect(() => {
+    if (workspaceQuestion) return;
+    setDraftCode(code ?? '');
+  }, [code, workspaceQuestion]);
+
+  useEffect(() => {
+    if (activeTab !== 'code' || !isCodingLesson || workspaceQuestions.length > 0 || workspaceLoading || workspaceAutoloadedRef.current) return;
+    workspaceAutoloadedRef.current = true;
+    void handleGenerateWorkspacePrompts();
+  }, [activeTab, isCodingLesson, workspaceQuestions.length, workspaceLoading]);
+
+  useEffect(() => {
+    if (!showCodingTabs && activeTab !== 'visual') {
+      setActiveTab('visual');
+    }
+  }, [activeTab, showCodingTabs]);
 
   return (
     <div style={{ position: narrow ? 'relative' : 'sticky', top: 20 }}>
@@ -936,7 +1193,7 @@ function LessonCanvas({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute }}>
-            Visual canvas
+            Workspace
           </span>
           {readyToMoveOn && (
             <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.green }}>
@@ -961,14 +1218,46 @@ function LessonCanvas({
             whiteSpace: 'nowrap',
           }}
         >
-          {syncLoading ? '⟳ syncing…' : '⟳ sync canvas'}
+          {syncLoading ? '⟳ syncing…' : '⟳ refresh visual'}
         </button>
       </div>
+
+      {workspaceTabs.length > 1 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          {workspaceTabs.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 8,
+                  padding: '8px 12px',
+                  borderRadius: 999,
+                  border: `1px solid ${active ? t.ink : t.ruleFaint}`,
+                  background: active ? t.ink : (dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.035)'),
+                  color: active ? t.paper : t.mute,
+                  fontFamily: HC.mono,
+                  fontSize: 9,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                <span>{tab.label}</span>
+                <span style={{ opacity: active ? 0.72 : 0.56, fontSize: 8 }}>{tab.sub}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div
         style={{
           position: 'relative',
-          minHeight: narrow ? 380 : 'calc(100vh - 96px)',
+          minHeight: workspaceCanvasMinHeight,
           borderRadius: 28,
           overflow: 'hidden',
           background: dark
@@ -1000,129 +1289,464 @@ function LessonCanvas({
           ))}
         </svg>
 
-        <div style={{ position: 'relative', zIndex: 1, height: '100%', padding: narrow ? '24px 24px 28px' : '32px 34px 36px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'start', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontFamily: HC.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.76)' : t.mute, marginBottom: 12 }}>
-                {course.subject}
-              </div>
-              <div style={{ fontFamily: HC.serif, fontSize: narrow ? 42 : 62, lineHeight: 0.96, letterSpacing: '-0.04em', color: dark ? HC.paper : t.ink, maxWidth: 760 }}>
-                {lesson.title}
-              </div>
-            </div>
-            <div style={{ padding: '10px 12px', borderRadius: 999, background: dark ? 'rgba(250,247,240,0.10)' : 'rgba(26,21,16,0.06)', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: dark ? HC.paper : t.ink }}>
-              Chapter {String(course.currentModule + 1).padStart(2, '0')} · Lesson {String(course.currentLesson + 1).padStart(2, '0')}
-            </div>
-          </div>
-
-          <div style={{ marginTop: 18, maxWidth: 560, fontSize: 16, lineHeight: 1.6, color: dark ? 'rgba(250,247,240,0.82)' : t.mute }}>
-            {objective}
-          </div>
-
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 26 }}>
-            {table ? (
-              <div style={{ width: '100%', maxWidth: 920, borderRadius: 22, background: 'rgba(16,13,10,0.42)', border: '1px solid rgba(250,247,240,0.12)', backdropFilter: 'blur(10px)', overflow: 'hidden' }}>
-                <div style={{ padding: '14px 18px', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.68)', borderBottom: '1px solid rgba(250,247,240,0.10)' }}>
-                  live structure preview
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', color: HC.paper, tableLayout: 'fixed' }}>
-                    <thead>
-                      <tr>
-                        {table.header.map((cell, idx) => (
-                          <th key={idx} style={{ padding: '12px 16px', textAlign: 'left', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)', borderBottom: '1px solid rgba(250,247,240,0.08)', whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word', verticalAlign: 'top' }}>
-                            {renderInlineFormatting(cell)}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table.rows.slice(0, 5).map((row, rowIdx) => (
-                        <tr key={rowIdx}>
-                          {row.map((cell, cellIdx) => (
-                            <td key={cellIdx} style={{ padding: '14px 16px', borderBottom: '1px solid rgba(250,247,240,0.08)', fontSize: 15, lineHeight: 1.5, whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word', verticalAlign: 'top' }}>
+        <div style={{ position: 'relative', zIndex: 1, height: '100%', padding: narrow ? '24px 24px 28px' : '28px 30px 32px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 0 }}>
+            {activeTab === 'visual' ? (
+              table ? (
+                <div style={{ width: '100%', maxWidth: 920, borderRadius: 22, background: 'rgba(16,13,10,0.42)', border: '1px solid rgba(250,247,240,0.12)', backdropFilter: 'blur(10px)', overflow: 'hidden' }}>
+                  <div style={{ padding: '14px 18px', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.68)', borderBottom: '1px solid rgba(250,247,240,0.10)' }}>
+                    live structure preview
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', color: HC.paper, tableLayout: 'fixed' }}>
+                      <thead>
+                        <tr>
+                          {table.header.map((cell, idx) => (
+                            <th key={idx} style={{ padding: '12px 16px', textAlign: 'left', fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)', borderBottom: '1px solid rgba(250,247,240,0.08)', whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word', verticalAlign: 'top' }}>
                               {renderInlineFormatting(cell)}
-                            </td>
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : code ? (
-              <div style={{ width: '100%', maxWidth: 760, borderRadius: 22, background: '#120f0d', border: '1px solid rgba(250,247,240,0.10)', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid rgba(250,247,240,0.08)' }}>
-                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#ff7b65' }} />
-                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#f1bd57' }} />
-                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#78c26a' }} />
-                  <span style={{ marginLeft: 10, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)' }}>
-                    working example
-                  </span>
-                </div>
-                <pre style={{ margin: 0, padding: '22px 22px 24px', color: HC.paper, fontFamily: HC.mono, fontSize: 15, lineHeight: 1.6, overflowX: 'auto' }}>
-                  <code>{code}</code>
-                </pre>
-              </div>
-            ) : chartMode ? (
-              <div style={{ width: '100%', maxWidth: 760, borderRadius: 22, background: 'rgba(16,13,10,0.42)', border: '1px solid rgba(250,247,240,0.12)', padding: '26px 26px 18px', backdropFilter: 'blur(10px)' }}>
-                <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)', marginBottom: 16 }}>
-                  concept trend
-                </div>
-                <svg viewBox="0 0 720 340" style={{ width: '100%', height: 'auto' }}>
-                  {[0, 1, 2, 3, 4].map((row) => (
-                    <line key={row} x1="0" y1={40 + row * 58} x2="720" y2={40 + row * 58} stroke="rgba(250,247,240,0.08)" strokeWidth="1" />
-                  ))}
-                  <polyline
-                    fill="none"
-                    stroke={accent}
-                    strokeWidth="6"
-                    points="20,286 110,250 190,258 270,220 360,226 450,180 540,154 620,96 700,54"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-            ) : (
-              /* Ambient fallback: key facts + generate button */
-              <div style={{ width: '100%', maxWidth: 820, position: 'relative', borderRadius: 28, overflow: 'hidden', border: '1px solid rgba(250,247,240,0.10)', background: `linear-gradient(145deg, ${ambientPalette.base}, ${ambientPalette.mid} 60%, rgba(245,238,225,0.04) 100%)`, boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
-                <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 82% 14%, ${ambientPalette.glowC}, transparent 28%), radial-gradient(circle at 10% 80%, ${ambientPalette.glowA}, transparent 30%)` }} />
-                <div style={{ position: 'absolute', inset: 0, opacity: 0.08, backgroundImage: 'linear-gradient(rgba(250,247,240,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(250,247,240,0.2) 1px, transparent 1px)', backgroundSize: '56px 56px' }} />
-                <div style={{ position: 'relative', zIndex: 1, padding: narrow ? '24px 22px 26px' : '28px 28px 30px' }}>
-                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.50)', marginBottom: 16 }}>
-                    key facts · {lesson.title}
+                      </thead>
+                      <tbody>
+                        {table.rows.slice(0, 5).map((row, rowIdx) => (
+                          <tr key={rowIdx}>
+                            {row.map((cell, cellIdx) => (
+                              <td key={cellIdx} style={{ padding: '14px 16px', borderBottom: '1px solid rgba(250,247,240,0.08)', fontSize: 15, lineHeight: 1.5, whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word', verticalAlign: 'top' }}>
+                                {renderInlineFormatting(cell)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  {Array.isArray((lesson as any).facts) && (lesson as any).facts.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                      {((lesson as any).facts as string[]).map((fact: string, idx: number) => (
-                        <div key={idx} style={{ display: 'flex', gap: 14, alignItems: 'start' }}>
-                          <span style={{ fontFamily: HC.mono, fontSize: 11, color: accent, flexShrink: 0, marginTop: 2, opacity: 0.9 }}>
-                            {String(idx + 1).padStart(2, '0')}
-                          </span>
-                          <span style={{ fontSize: narrow ? 14 : 15, lineHeight: 1.55, color: 'rgba(250,247,240,0.88)', letterSpacing: '-0.01em' }}>
-                            {fact}
-                          </span>
+                </div>
+              ) : code ? (
+                <div style={{ width: '100%', maxWidth: 760, borderRadius: 22, background: '#120f0d', border: '1px solid rgba(250,247,240,0.10)', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid rgba(250,247,240,0.08)' }}>
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#ff7b65' }} />
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#f1bd57' }} />
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#78c26a' }} />
+                    <span style={{ marginLeft: 10, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)' }}>
+                      working example
+                    </span>
+                  </div>
+                  <pre style={{ margin: 0, padding: '22px 22px 24px', color: HC.paper, fontFamily: HC.mono, fontSize: 15, lineHeight: 1.6, overflowX: 'auto' }}>
+                    <code>{code}</code>
+                  </pre>
+                </div>
+              ) : chartMode ? (
+                <div style={{ width: '100%', maxWidth: 760, borderRadius: 22, background: 'rgba(16,13,10,0.42)', border: '1px solid rgba(250,247,240,0.12)', padding: '26px 26px 18px', backdropFilter: 'blur(10px)' }}>
+                  <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)', marginBottom: 16 }}>
+                    concept trend
+                  </div>
+                  <svg viewBox="0 0 720 340" style={{ width: '100%', height: 'auto' }}>
+                    {[0, 1, 2, 3, 4].map((row) => (
+                      <line key={row} x1="0" y1={40 + row * 58} x2="720" y2={40 + row * 58} stroke="rgba(250,247,240,0.08)" strokeWidth="1" />
+                    ))}
+                    <polyline
+                      fill="none"
+                      stroke={accent}
+                      strokeWidth="6"
+                      points="20,286 110,250 190,258 270,220 360,226 450,180 540,154 620,96 700,54"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+              ) : (
+                <div style={{ width: '100%', maxWidth: 1080, position: 'relative', borderRadius: 28, overflow: 'hidden', border: '1px solid rgba(250,247,240,0.10)', background: `linear-gradient(145deg, ${ambientPalette.base}, ${ambientPalette.mid} 60%, rgba(245,238,225,0.04) 100%)`, boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+                  <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 82% 14%, ${ambientPalette.glowC}, transparent 28%), radial-gradient(circle at 10% 80%, ${ambientPalette.glowA}, transparent 30%)` }} />
+                  <div style={{ position: 'absolute', inset: 0, opacity: 0.08, backgroundImage: 'linear-gradient(rgba(250,247,240,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(250,247,240,0.2) 1px, transparent 1px)', backgroundSize: '56px 56px' }} />
+                  <div style={{ position: 'relative', zIndex: 1, padding: narrow ? '24px 22px 26px' : '28px 28px 30px' }}>
+                    <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.50)', marginBottom: 16 }}>
+                      Key facts
+                    </div>
+                    {Array.isArray((lesson as any).facts) && (lesson as any).facts.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {((lesson as any).facts as string[]).map((fact: string, idx: number) => (
+                          <div key={idx} style={{ display: 'flex', gap: 14, alignItems: 'start' }}>
+                            <span style={{ fontFamily: HC.mono, fontSize: 11, color: accent, flexShrink: 0, marginTop: 2, opacity: 0.9 }}>
+                              {String(idx + 1).padStart(2, '0')}
+                            </span>
+                            <span style={{ fontSize: narrow ? 14 : 15, lineHeight: 1.55, color: 'rgba(250,247,240,0.88)', letterSpacing: '-0.01em' }}>
+                              {fact}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(250,247,240,0.72)', fontStyle: 'italic' }}>
+                        {objective}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid rgba(250,247,240,0.10)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {[
+                        mod.title,
+                        readyToMoveOn ? '✓ objective covered' : 'lesson grounded',
+                      ].map((item) => (
+                        <div key={item} style={{ padding: '7px 12px', borderRadius: 999, background: 'rgba(250,247,240,0.08)', color: 'rgba(250,247,240,0.70)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', border: '1px solid rgba(250,247,240,0.08)' }}>
+                          {item}
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <div style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(250,247,240,0.72)', fontStyle: 'italic' }}>
-                      {objective}
-                    </div>
-                  )}
-                  <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid rgba(250,247,240,0.10)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    {[
-                      mod.title,
-                      readyToMoveOn ? '✓ objective covered' : `Lesson ${String(course.currentLesson + 1).padStart(2, '0')}`,
-                    ].map((item) => (
-                      <div key={item} style={{ padding: '7px 12px', borderRadius: 999, background: 'rgba(250,247,240,0.08)', color: 'rgba(250,247,240,0.70)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', border: '1px solid rgba(250,247,240,0.08)' }}>
-                        {item}
-                      </div>
-                    ))}
                   </div>
                 </div>
+              )
+            ) : activeTab === 'code' ? (
+              <div style={{ width: '100%', maxWidth: 920, display: 'flex', flexDirection: 'column', gap: 14, alignSelf: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.68)' : t.mute }}>
+                    {hasWorkspacePractice ? 'coding workspace' : 'mini ide'}
+                  </div>
+                  <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.54)' : t.mute }}>
+                    {hasWorkspacePractice ? `${workspaceExtension} practice · ${codeLineCount} lines` : code ? `${codeLanguage} example · ${codeLineCount} lines` : 'opens for coding exercises'}
+                  </div>
+                </div>
+
+                {hasWorkspacePractice ? (
+                  <>
+                    <div style={{ width: '100%', borderRadius: 22, background: dark ? 'rgba(16,13,10,0.46)' : 'rgba(255,255,255,0.45)', border: '1px solid rgba(250,247,240,0.10)', backdropFilter: 'blur(8px)', padding: narrow ? '22px 20px' : '24px 24px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 14, flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.56)' : t.mute, marginBottom: 8 }}>
+                            Practice prompt
+                          </div>
+                          <div style={{ fontFamily: HC.serif, fontSize: narrow ? 24 : 30, lineHeight: 1.12, letterSpacing: '-0.03em', color: dark ? HC.paper : t.ink, maxWidth: 680 }}>
+                            {workspaceLoading && !workspaceQuestion
+                              ? 'Generating a coding task grounded in this lesson…'
+                              : workspaceQuestion || 'Open this tab on a coding lesson and Learnor will load a prompt here.'}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {code && (
+                            <button
+                              onClick={() => setActiveTab('visual')}
+                              style={{ padding: '8px 12px', borderRadius: 999, border: `1px solid ${dark ? 'rgba(250,247,240,0.12)' : t.ruleFaint}`, background: 'transparent', color: dark ? 'rgba(250,247,240,0.72)' : t.ink, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}
+                            >
+                              View reference visual
+                            </button>
+                          )}
+                          <button
+                            onClick={() => void handleGenerateWorkspacePrompts()}
+                            disabled={workspaceLoading}
+                            style={{ padding: '8px 12px', borderRadius: 999, border: `1px solid ${dark ? 'rgba(250,247,240,0.12)' : t.ruleFaint}`, background: workspaceLoading ? 'transparent' : (dark ? 'rgba(250,247,240,0.06)' : 'rgba(26,21,16,0.05)'), color: dark ? 'rgba(250,247,240,0.72)' : t.ink, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: workspaceLoading ? 'not-allowed' : 'pointer', opacity: workspaceLoading ? 0.5 : 1 }}
+                          >
+                            {workspaceQuestions.length > 0 ? 'Regenerate prompts' : 'Generate prompt'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {['lesson-grounded', workspaceExtension, code ? 'reference available' : 'scratchpad'].map((item) => (
+                          <div key={item} style={{ padding: '7px 12px', borderRadius: 999, background: dark ? 'rgba(250,247,240,0.06)' : 'rgba(26,21,16,0.06)', color: dark ? 'rgba(250,247,240,0.72)' : t.ink, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+
+                      {workspaceError && !workspaceQuestion && (
+                        <div style={{ marginTop: 16, padding: '11px 14px', borderRadius: 16, border: '1px solid rgba(196,34,27,0.24)', background: dark ? 'rgba(232,81,74,0.09)' : 'rgba(196,34,27,0.05)', color: dark ? HC.paper : t.ink, fontSize: 13, lineHeight: 1.55 }}>
+                          {workspaceError}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', minHeight: narrow ? 320 : 520, borderRadius: 22, background: '#120f0d', border: '1px solid rgba(250,247,240,0.10)', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid rgba(250,247,240,0.08)' }}>
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#ff7b65' }} />
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#f1bd57' }} />
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#78c26a' }} />
+                        <span style={{ marginLeft: 10, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)' }}>
+                          {lesson.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'lesson-workspace'}.{workspaceExtension}
+                        </span>
+                      </div>
+                      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '56px minmax(0, 1fr)' }}>
+                        <div style={{ padding: '18px 10px 18px 0', background: 'rgba(250,247,240,0.04)', borderRight: '1px solid rgba(250,247,240,0.06)', textAlign: 'right', fontFamily: HC.mono, fontSize: 13, lineHeight: 1.7, color: 'rgba(250,247,240,0.34)', userSelect: 'none', overflow: 'hidden' }}>
+                          {Array.from({ length: codeLineCount }).map((_, idx) => (
+                            <div key={idx}>{idx + 1}</div>
+                          ))}
+                        </div>
+                        <textarea
+                          value={draftCode}
+                          onChange={(e) => setDraftCode(e.target.value)}
+                          onKeyDown={(event) => handleCodeEditorKeyDown(event, draftCode, setDraftCode)}
+                          spellCheck={false}
+                          placeholder={getCodeEditorPlaceholder(workspaceLanguage, workspaceQuestion || 'Write your answer here.')}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            minHeight: 0,
+                            resize: 'none',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            color: HC.paper,
+                            padding: '18px 18px 18px 16px',
+                            fontFamily: HC.mono,
+                            fontSize: 14,
+                            lineHeight: 1.7,
+                            tabSize: 2,
+                          }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 16px', borderTop: '1px solid rgba(250,247,240,0.08)' }}>
+                        <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.54)' }}>
+                          {workspaceChecking
+                            ? 'checking your answer…'
+                            : workspaceHintLoading
+                            ? 'generating a useful hint…'
+                            : workspaceResult
+                            ? 'feedback is waiting in output'
+                            : 'write the answer here, then check the logic'}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            onClick={handleResetWorkspaceDraft}
+                            style={{ padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(250,247,240,0.14)', background: 'transparent', color: 'rgba(250,247,240,0.72)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}
+                          >
+                            Reset
+                          </button>
+                          <button
+                            onClick={() => void handleGetWorkspaceHint()}
+                            disabled={!workspaceQuestion || workspaceHintLoading || workspaceLoading}
+                            style={{ padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(250,247,240,0.10)', background: 'rgba(250,247,240,0.05)', color: !workspaceQuestion || workspaceHintLoading || workspaceLoading ? 'rgba(250,247,240,0.34)' : 'rgba(250,247,240,0.72)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: !workspaceQuestion || workspaceHintLoading || workspaceLoading ? 'not-allowed' : 'pointer', opacity: !workspaceQuestion || workspaceHintLoading || workspaceLoading ? 0.55 : 1 }}
+                          >
+                            {workspaceHintLoading ? 'Hinting…' : 'Show hint'}
+                          </button>
+                          <button
+                            onClick={() => void handleCheckWorkspaceAnswer()}
+                            disabled={!workspaceQuestion || !draftCode.trim() || workspaceChecking || workspaceLoading}
+                            style={{ padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(250,247,240,0.10)', background: !workspaceQuestion || !draftCode.trim() || workspaceChecking || workspaceLoading ? 'rgba(250,247,240,0.05)' : 'rgba(250,247,240,0.12)', color: !workspaceQuestion || !draftCode.trim() || workspaceChecking || workspaceLoading ? 'rgba(250,247,240,0.34)' : HC.paper, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: !workspaceQuestion || !draftCode.trim() || workspaceChecking || workspaceLoading ? 'not-allowed' : 'pointer', opacity: !workspaceQuestion || !draftCode.trim() || workspaceChecking || workspaceLoading ? 0.55 : 1 }}
+                          >
+                            {workspaceChecking ? 'Checking…' : 'Check answer'}
+                          </button>
+                          <button
+                            onClick={handleNextWorkspacePrompt}
+                            disabled={workspaceLoading}
+                            style={{ padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(250,247,240,0.10)', background: 'rgba(250,247,240,0.05)', color: workspaceLoading ? 'rgba(250,247,240,0.34)' : 'rgba(250,247,240,0.72)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: workspaceLoading ? 'not-allowed' : 'pointer', opacity: workspaceLoading ? 0.55 : 1 }}
+                          >
+                            {workspaceQuestions.length > 1 ? 'Next prompt' : 'New prompt'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(workspaceError && workspaceQuestion) || workspaceHintError ? (
+                      <div style={{ padding: '11px 14px', borderRadius: 16, border: '1px solid rgba(196,34,27,0.24)', background: dark ? 'rgba(232,81,74,0.09)' : 'rgba(196,34,27,0.05)', color: dark ? HC.paper : t.ink, fontSize: 13, lineHeight: 1.55 }}>
+                        {workspaceHintError || workspaceError}
+                      </div>
+                    ) : null}
+                  </>
+                ) : code ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', minHeight: narrow ? 320 : 520, borderRadius: 22, background: '#120f0d', border: '1px solid rgba(250,247,240,0.10)', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid rgba(250,247,240,0.08)' }}>
+                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#ff7b65' }} />
+                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#f1bd57' }} />
+                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#78c26a' }} />
+                      <span style={{ marginLeft: 10, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.62)' }}>
+                        {lesson.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'lesson-example'}.{codeExtension}
+                      </span>
+                    </div>
+                    <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '56px minmax(0, 1fr)' }}>
+                      <div style={{ padding: '18px 10px 18px 0', background: 'rgba(250,247,240,0.04)', borderRight: '1px solid rgba(250,247,240,0.06)', textAlign: 'right', fontFamily: HC.mono, fontSize: 13, lineHeight: 1.7, color: 'rgba(250,247,240,0.34)', userSelect: 'none', overflow: 'hidden' }}>
+                        {draftCode.split('\n').map((_, idx) => (
+                          <div key={idx}>{idx + 1}</div>
+                        ))}
+                      </div>
+                      <textarea
+                        value={draftCode}
+                        onChange={(e) => setDraftCode(e.target.value)}
+                        onKeyDown={(event) => handleCodeEditorKeyDown(event, draftCode, setDraftCode)}
+                        spellCheck={false}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          minHeight: 0,
+                          resize: 'none',
+                          border: 'none',
+                          outline: 'none',
+                          background: 'transparent',
+                          color: HC.paper,
+                          padding: '18px 18px 18px 16px',
+                          fontFamily: HC.mono,
+                          fontSize: 14,
+                          lineHeight: 1.7,
+                          tabSize: 2,
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 16px', borderTop: '1px solid rgba(250,247,240,0.08)' }}>
+                      <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(250,247,240,0.54)' }}>
+                        Tutor can teach against a real editor here.
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button onClick={() => setDraftCode(code ?? '')} style={{ padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(250,247,240,0.14)', background: 'transparent', color: 'rgba(250,247,240,0.72)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}>
+                          Reset
+                        </button>
+                        {['Run', 'Test'].map((label) => (
+                          <div key={label} style={{ padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(250,247,240,0.08)', background: 'rgba(250,247,240,0.05)', color: 'rgba(250,247,240,0.34)', fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            {label} soon
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ width: '100%', maxWidth: 820, borderRadius: 24, border: '1px solid rgba(250,247,240,0.10)', background: dark ? 'rgba(16,13,10,0.46)' : 'rgba(255,255,255,0.45)', backdropFilter: 'blur(8px)', padding: narrow ? '24px 22px' : '30px 30px' }}>
+                    <div style={{ fontFamily: HC.serif, fontSize: narrow ? 28 : 36, lineHeight: 1, letterSpacing: '-0.03em', color: dark ? HC.paper : t.ink, marginBottom: 10 }}>
+                      Code lives here when the lesson needs it.
+                    </div>
+                    <div style={{ fontSize: 15, lineHeight: 1.65, color: dark ? 'rgba(250,247,240,0.78)' : t.mute, maxWidth: 620 }}>
+                      For coding-heavy hands-on steps, this workspace will load starter files, let the learner edit code, and give the tutor a stable place to debug against real output.
+                    </div>
+                    <div style={{ marginTop: 18, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {['starter files', 'run / test', 'error feedback', 'tutor-guided fixes'].map((item) => (
+                        <div key={item} style={{ padding: '7px 12px', borderRadius: 999, background: dark ? 'rgba(250,247,240,0.06)' : 'rgba(26,21,16,0.06)', color: dark ? 'rgba(250,247,240,0.72)' : t.ink, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            ) : activeTab === 'output' ? (
+              hasWorkspacePractice ? (
+                <div style={{ width: '100%', maxWidth: 820, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ width: '100%', borderRadius: 24, border: '1px solid rgba(250,247,240,0.10)', background: dark ? 'rgba(16,13,10,0.46)' : 'rgba(255,255,255,0.45)', backdropFilter: 'blur(8px)', padding: narrow ? '24px 22px' : '30px 30px' }}>
+                    <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.56)' : t.mute, marginBottom: 10 }}>
+                      Output · tutor feedback
+                    </div>
+
+                    {workspaceChecking || workspaceHintLoading ? (
+                      <>
+                        <div style={{ fontFamily: HC.serif, fontSize: narrow ? 28 : 36, lineHeight: 1, letterSpacing: '-0.03em', color: dark ? HC.paper : t.ink, marginBottom: 12 }}>
+                          {workspaceChecking ? 'Checking your answer…' : 'Generating a useful hint…'}
+                        </div>
+                        <div style={{ fontSize: 15, lineHeight: 1.65, color: dark ? 'rgba(250,247,240,0.78)' : t.mute }}>
+                          Learnor is reading the current draft and grounding the feedback in this lesson before it replies.
+                        </div>
+                      </>
+                    ) : workspaceResult ? (
+                      <>
+                        <div style={{ fontFamily: HC.serif, fontSize: narrow ? 28 : 36, lineHeight: 1, letterSpacing: '-0.03em', color: workspaceResult.correct ? t.green : t.red, marginBottom: 12 }}>
+                          {workspaceResult.correct ? 'Nice. The solution is working.' : 'Close, but there are gaps to fix.'}
+                        </div>
+                        <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: workspaceResult.correct ? t.green : t.red, marginBottom: 16 }}>
+                          {workspaceResult.score}/100
+                        </div>
+                        {workspaceResult.whatWasRight && (
+                          <div style={{ padding: '12px 16px', borderRadius: 18, border: `1px solid ${dark ? 'rgba(106,174,127,0.25)' : 'rgba(45,106,63,0.18)'}`, background: dark ? 'rgba(106,174,127,0.08)' : 'rgba(45,106,63,0.05)', marginBottom: 12 }}>
+                            <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.green, marginBottom: 6 }}>What you got right</div>
+                            <div style={{ fontSize: 15, lineHeight: 1.65, color: dark ? HC.paper : t.ink }}>{workspaceResult.whatWasRight}</div>
+                          </div>
+                        )}
+                        {workspaceResult.whatWasMissing && (
+                          <div style={{ padding: '12px 16px', borderRadius: 18, border: '1px solid rgba(196,34,27,0.22)', background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.04)', marginBottom: 12 }}>
+                            <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.red, marginBottom: 6 }}>What to fix</div>
+                            <div style={{ fontSize: 15, lineHeight: 1.65, color: dark ? HC.paper : t.ink }}>{workspaceResult.whatWasMissing}</div>
+                          </div>
+                        )}
+                        {workspaceResult.betterAnswer && (
+                          <div style={{ padding: '12px 16px', borderRadius: 18, border: `1px solid ${dark ? 'rgba(250,247,240,0.10)' : t.ruleFaint}`, background: dark ? 'rgba(250,247,240,0.04)' : 'rgba(26,21,16,0.04)' }}>
+                            <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.62)' : t.mute, marginBottom: 8 }}>Learnor says</div>
+                            <div style={{ whiteSpace: 'pre-wrap', fontFamily: HC.mono, fontSize: 13, lineHeight: 1.7, color: dark ? HC.paper : t.ink }}>
+                              {workspaceResult.betterAnswer}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : workspaceHint || workspaceHintError ? (
+                      <>
+                        <div style={{ fontFamily: HC.serif, fontSize: narrow ? 28 : 36, lineHeight: 1, letterSpacing: '-0.03em', color: dark ? HC.paper : t.ink, marginBottom: 12 }}>
+                          {workspaceHint ? 'Here is the nudge you needed.' : 'Hint generation failed this time.'}
+                        </div>
+                        <div style={{ padding: '12px 16px', borderRadius: 18, border: `1px solid ${workspaceHint ? (dark ? 'rgba(241,236,223,0.12)' : 'rgba(26,21,16,0.10)') : 'rgba(196,34,27,0.22)'}`, background: workspaceHint ? (dark ? 'rgba(241,236,223,0.04)' : 'rgba(26,21,16,0.03)') : (dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.04)') }}>
+                          <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: workspaceHint ? t.amber : t.red, marginBottom: 6 }}>
+                            {workspaceHint ? 'Hint' : 'Error'}
+                          </div>
+                          <div style={{ fontSize: 15, lineHeight: 1.65, color: dark ? HC.paper : t.ink }}>
+                            {workspaceHint || workspaceHintError}
+                          </div>
+                        </div>
+                      </>
+                    ) : workspaceError ? (
+                      <>
+                        <div style={{ fontFamily: HC.serif, fontSize: narrow ? 28 : 36, lineHeight: 1, letterSpacing: '-0.03em', color: t.red, marginBottom: 12 }}>
+                          The workspace hit a snag.
+                        </div>
+                        <div style={{ padding: '12px 16px', borderRadius: 18, border: '1px solid rgba(196,34,27,0.22)', background: dark ? 'rgba(232,81,74,0.08)' : 'rgba(196,34,27,0.04)', fontSize: 15, lineHeight: 1.65, color: dark ? HC.paper : t.ink }}>
+                          {workspaceError}
+                        </div>
+                      </>
+                    ) : workspaceQuestion ? (
+                      <>
+                        <div style={{ fontFamily: HC.serif, fontSize: narrow ? 28 : 36, lineHeight: 1, letterSpacing: '-0.03em', color: dark ? HC.paper : t.ink, marginBottom: 12 }}>
+                          Check the answer or ask for a hint from Code.
+                        </div>
+                        <div style={{ fontSize: 15, lineHeight: 1.65, color: dark ? 'rgba(250,247,240,0.78)' : t.mute }}>
+                          This tab will hold tutor feedback for the current prompt after you use the workspace actions.
+                        </div>
+                        <div style={{ marginTop: 18, padding: '14px 16px', borderRadius: 18, background: dark ? 'rgba(250,247,240,0.04)' : 'rgba(26,21,16,0.04)', border: `1px solid ${dark ? 'rgba(250,247,240,0.08)' : t.ruleFaint}` }}>
+                          <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.52)' : t.mute }}>
+                            Current prompt
+                          </div>
+                          <div style={{ marginTop: 8, fontSize: 15, lineHeight: 1.6, color: dark ? HC.paper : t.ink }}>
+                            {workspaceQuestion}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontFamily: HC.serif, fontSize: narrow ? 28 : 36, lineHeight: 1, letterSpacing: '-0.03em', color: dark ? HC.paper : t.ink, marginBottom: 12 }}>
+                          Open Code and generate a lesson-grounded prompt.
+                        </div>
+                        <div style={{ fontSize: 15, lineHeight: 1.65, color: dark ? 'rgba(250,247,240,0.78)' : t.mute }}>
+                          Once the coding workspace has a task, tutor feedback will show up here instead of the old placeholder copy.
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => setActiveTab('code')}
+                        style={{ padding: '8px 12px', borderRadius: 999, border: `1px solid ${dark ? 'rgba(250,247,240,0.12)' : t.ruleFaint}`, background: 'transparent', color: dark ? 'rgba(250,247,240,0.72)' : t.ink, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}
+                      >
+                        Back to code
+                      </button>
+                      <button
+                        onClick={() => { setActiveTab('code'); handleNextWorkspacePrompt(); }}
+                        disabled={workspaceLoading}
+                        style={{ padding: '8px 12px', borderRadius: 999, border: `1px solid ${dark ? 'rgba(250,247,240,0.12)' : t.ruleFaint}`, background: workspaceLoading ? 'transparent' : (dark ? 'rgba(250,247,240,0.06)' : 'rgba(26,21,16,0.05)'), color: workspaceLoading ? (dark ? 'rgba(250,247,240,0.34)' : t.mute) : (dark ? 'rgba(250,247,240,0.72)' : t.ink), fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: workspaceLoading ? 'not-allowed' : 'pointer', opacity: workspaceLoading ? 0.55 : 1 }}
+                      >
+                        {workspaceQuestions.length > 1 ? 'Next prompt' : 'New prompt'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ width: '100%', maxWidth: 820, borderRadius: 24, border: '1px solid rgba(250,247,240,0.10)', background: dark ? 'rgba(16,13,10,0.46)' : 'rgba(255,255,255,0.45)', backdropFilter: 'blur(8px)', padding: narrow ? '24px 22px' : '30px 30px' }}>
+                  <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.56)' : t.mute, marginBottom: 10 }}>
+                    Output · future runner
+                  </div>
+                  <div style={{ fontFamily: HC.serif, fontSize: narrow ? 28 : 36, lineHeight: 1, letterSpacing: '-0.03em', color: dark ? HC.paper : t.ink, marginBottom: 12 }}>
+                    Run logs, tests, and tracebacks will land here.
+                  </div>
+                  <div style={{ fontSize: 15, lineHeight: 1.65, color: dark ? 'rgba(250,247,240,0.78)' : t.mute }}>
+                    Once hands-on mode gets live execution, this panel becomes the place for stdout, failing tests, error stacks, and the tutor’s debugging commentary.
+                  </div>
+                  <div style={{ marginTop: 18, padding: '14px 16px', borderRadius: 18, background: dark ? 'rgba(250,247,240,0.04)' : 'rgba(26,21,16,0.04)', border: `1px solid ${dark ? 'rgba(250,247,240,0.08)' : t.ruleFaint}` }}>
+                    <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: dark ? 'rgba(250,247,240,0.52)' : t.mute }}>
+                      Current draft
+                    </div>
+                    <div style={{ marginTop: 8, fontFamily: HC.mono, fontSize: 12, lineHeight: 1.6, color: dark ? 'rgba(250,247,240,0.78)' : t.ink }}>
+                      {code ? `${codeLineCount} lines in the workspace editor.` : 'No live code in this lesson yet.'}
+                    </div>
+                  </div>
+                </div>
+              )
+            ) : null}
           </div>
         </div>
       </div>
@@ -1286,20 +1910,16 @@ function LearnContent({ course }: { course: Course }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [generatingNotes, setGeneratingNotes] = useState(false);
   const [exampleMode, setExampleMode] = useState(true);
-  const [voiceMode, setVoiceMode] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState('');
-  const [listening, setListening] = useState(false);
   const [speakingTs, setSpeakingTs] = useState<number | null>(null);
+  const [voiceLoadingTs, setVoiceLoadingTs] = useState<number | null>(null);
+  const [voiceFeedbackTs, setVoiceFeedbackTs] = useState<number | null>(null);
+  const [voiceFeedbackMessage, setVoiceFeedbackMessage] = useState('');
   const [spokenWords, setSpokenWords] = useState(0);
   const [phase, setPhase] = useState<Phase>('HOOK');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speechUrlRef = useRef<string | null>(null);
-  const recognitionRef = useRef<any>(null);
-  const listeningRef = useRef(false);
-  const voiceTranscriptRef = useRef('');
-  const voiceStartedAtRef = useRef(0);
   const [notesOpen, setNotesOpen] = useState<number | null>(null);
   const [narrow, setNarrow] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 1100 : false));
   // Ref-based guard so React StrictMode's double-effect fire doesn't send two intro messages
@@ -1336,134 +1956,17 @@ function LearnContent({ course }: { course: Course }) {
       speechUrlRef.current = null;
     }
     setSpeakingTs(null);
+    setVoiceLoadingTs(null);
     setSpokenWords(0);
-  }
-
-  function getSpeechRecognitionCtor() {
-    if (typeof window === 'undefined') return null;
-    return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
-  }
-
-  async function startVoiceInput() {
-    if (!voiceMode || aiLoading || generatingNotes || listeningRef.current) return;
-    const SpeechRecognition = getSpeechRecognitionCtor();
-    if (!SpeechRecognition) {
-      setVoiceStatus('speech not supported');
-      return;
-    }
-
-    stopVoicePlayback();
-    const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
-    listeningRef.current = true;
-    voiceTranscriptRef.current = '';
-    voiceStartedAtRef.current = Date.now();
-    setListening(true);
-    setVoiceStatus('listening… release space to send');
-
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onresult = (event: any) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i += 1) {
-        transcript += event.results[i][0]?.transcript ?? '';
-      }
-      voiceTranscriptRef.current = transcript.trim();
-      if (transcript.trim()) setInput(transcript.trim());
-    };
-    recognition.onerror = (event: any) => {
-      setVoiceStatus(event?.error === 'not-allowed' ? 'mic permission blocked' : 'speech failed');
-      listeningRef.current = false;
-      setListening(false);
-    };
-    recognition.onend = () => {
-      listeningRef.current = false;
-      setListening(false);
-    };
-
-    try {
-      recognition.start();
-    } catch {
-      listeningRef.current = false;
-      setListening(false);
-      setVoiceStatus('speech failed');
-    }
-  }
-
-  async function stopVoiceInput() {
-    if (!listeningRef.current && !recognitionRef.current) return;
-    const recognition = recognitionRef.current;
-    const elapsed = Date.now() - voiceStartedAtRef.current;
-    if (elapsed < 700) {
-      await new Promise((resolve) => window.setTimeout(resolve, 700 - elapsed));
-    }
-
-    let settled = false;
-    const waitForFinalTranscript = new Promise<void>((resolve) => {
-      const done = () => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-      const previousOnEnd = recognition?.onend;
-      if (recognition) {
-        recognition.onend = (event: any) => {
-          previousOnEnd?.(event);
-          done();
-        };
-      }
-      window.setTimeout(done, 900);
-    });
-
-    try { recognition?.stop?.(); } catch {}
-    await waitForFinalTranscript;
-
-    const transcript = voiceTranscriptRef.current.trim();
-    recognitionRef.current = null;
-    listeningRef.current = false;
-    setListening(false);
-
-    if (transcript) {
-      setVoiceStatus('sending voice…');
-      setInput('');
-      await sendUserText(transcript);
-      setVoiceStatus(voiceMode ? 'hold space to talk' : '');
-    } else {
-      setVoiceStatus('no speech heard');
-      window.setTimeout(() => setVoiceStatus((value) => value === 'no speech heard' ? '' : value), 1200);
-    }
-  }
-
-  async function unlockVoiceMode() {
-    setVoiceMode((value) => {
-      const next = !value;
-      if (!next) {
-        stopVoicePlayback();
-        try { recognitionRef.current?.abort?.(); } catch {}
-        recognitionRef.current = null;
-        listeningRef.current = false;
-        setListening(false);
-        setVoiceStatus('');
-      } else {
-        setVoiceStatus('hold space to talk');
-      }
-      return next;
-    });
-    try {
-      const ctx = new AudioContext();
-      await ctx.resume();
-      await ctx.close();
-    } catch { /* browser may not need explicit unlock */ }
   }
 
   async function speakTutorReply(text: string, ts: number) {
     const speechText = stripSpeechText(text);
     if (!speechText) return;
     stopVoicePlayback();
-    setVoiceStatus('preparing voice…');
+    setVoiceFeedbackTs(null);
+    setVoiceFeedbackMessage('');
+    setVoiceLoadingTs(ts);
     try {
       const res = await fetch(apiUrl('/api/tts'), {
         method: 'POST',
@@ -1478,11 +1981,13 @@ function LearnContent({ course }: { course: Course }) {
           message = parsed?.error || errorText;
         } catch { /* keep text response */ }
         const lowered = message.toLowerCase();
-        if (lowered.includes('env')) setVoiceStatus('voice env missing');
-        else if (lowered.includes('invalid') || lowered.includes('unauthorized') || res.status === 401) setVoiceStatus('invalid elevenlabs key');
-        else if (lowered.includes('quota') || lowered.includes('credits')) setVoiceStatus('elevenlabs quota/credits');
-        else if (lowered.includes('voice') || res.status === 404) setVoiceStatus('voice id not found');
-        else setVoiceStatus(`voice failed (${res.status})`);
+        if (lowered.includes('env')) setVoiceFeedbackMessage('voice env missing');
+        else if (lowered.includes('invalid') || lowered.includes('unauthorized') || res.status === 401) setVoiceFeedbackMessage('invalid elevenlabs key');
+        else if (lowered.includes('quota') || lowered.includes('credits')) setVoiceFeedbackMessage('elevenlabs quota/credits');
+        else if (lowered.includes('voice') || res.status === 404) setVoiceFeedbackMessage('voice id not found');
+        else setVoiceFeedbackMessage(`voice failed (${res.status})`);
+        setVoiceFeedbackTs(ts);
+        setVoiceLoadingTs(null);
         return;
       }
       const blob = await res.blob();
@@ -1503,25 +2008,40 @@ function LearnContent({ course }: { course: Course }) {
       };
 
       audio.onplay = () => {
-        setVoiceStatus('speaking…');
+        setVoiceLoadingTs(null);
         requestAnimationFrame(sync);
       };
       audio.onended = () => {
         setSpokenWords(words.length);
-        setVoiceStatus(voiceMode ? 'hold space to talk' : '');
         window.setTimeout(() => {
           if (audioRef.current === audio) stopVoicePlayback();
         }, 350);
       };
       audio.onerror = () => {
-        setVoiceStatus('audio playback failed');
+        setVoiceFeedbackTs(ts);
+        setVoiceFeedbackMessage('audio playback failed');
         if (audioRef.current === audio) stopVoicePlayback();
       };
       await audio.play();
     } catch (err) {
-      setVoiceStatus(err instanceof DOMException && err.name === 'NotAllowedError' ? 'click once to allow audio' : 'voice failed');
+      setVoiceFeedbackTs(ts);
+      setVoiceFeedbackMessage(err instanceof DOMException && err.name === 'NotAllowedError' ? 'click once to allow audio' : 'voice failed');
       stopVoicePlayback();
     }
+  }
+
+  function handlePlayTutorReply(text: string, ts: number) {
+    if (!isPremium) {
+      alert('Voice playback is a Premium feature. Upgrade to unlock.');
+      return;
+    }
+    if (speakingTs === ts) {
+      stopVoicePlayback();
+      setVoiceFeedbackTs(null);
+      setVoiceFeedbackMessage('');
+      return;
+    }
+    void speakTutorReply(text, ts);
   }
 
   useEffect(() => {
@@ -1542,38 +2062,7 @@ function LearnContent({ course }: { course: Course }) {
 
   useEffect(() => () => {
     stopVoicePlayback();
-    try { recognitionRef.current?.abort?.(); } catch {}
   }, []);
-
-  useEffect(() => {
-    if (!voiceMode) stopVoicePlayback();
-  }, [voiceMode]);
-
-  useEffect(() => {
-    if (!voiceMode) return undefined;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (aiLoading || generatingNotes) return;
-      const target = event.target as HTMLElement | null;
-      const isTypingTarget = target?.tagName === 'TEXTAREA' || target?.tagName === 'INPUT' || target?.isContentEditable;
-      if (isTypingTarget && input.trim()) return;
-      event.preventDefault();
-      startVoiceInput();
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (event.code !== 'Space') return;
-      event.preventDefault();
-      stopVoiceInput();
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-    };
-  }, [voiceMode, aiLoading, generatingNotes, input]);
 
   useEffect(() => {
     setPhase('HOOK');
@@ -1613,6 +2102,10 @@ function LearnContent({ course }: { course: Course }) {
   const latestVisual = lastTutorMsg?.visual ?? '';
   const lessonHasNotes = !!lesson?.notes;
   const canGenerateNotes = currentChat.some((msg) => msg.who === 'tutor');
+  const completionPercent = Math.round(course.progress * 100);
+  const lessonHeading = String(lesson?.title || mod?.title || 'Current lesson').trim();
+  const moduleHeading = String(mod?.title || '').trim();
+  const showModuleHeading = !!moduleHeading && moduleHeading.toLowerCase() !== lessonHeading.toLowerCase();
 
   async function handleQuickPrompt(prompt: string, phaseOverride?: Phase, requestOptions?: { wantsVisualExample?: boolean }) {
     if (!mod || !lesson || aiLoading || generatingNotes) return;
@@ -1725,7 +2218,6 @@ function LearnContent({ course }: { course: Course }) {
           visual: clientVisual || responseVisual,
         },
       });
-      if (voiceMode) speakTutorReply(tutorText, tutorTs);
     } catch (e) {
       const openingTurn = !!options?.isOpening;
       const tutorTurnCount = currentChat.filter((m) => m.who === 'tutor').length;
@@ -1759,7 +2251,6 @@ function LearnContent({ course }: { course: Course }) {
           visual: wantsCanvasVisual ? buildCanvasExampleVisual(lessonTitle, latestUserMessage, fallbackText) : undefined,
         },
       });
-      if (voiceMode) speakTutorReply(fallbackText, tutorTs);
     } finally {
       setAiLoading(false);
     }
@@ -1768,10 +2259,6 @@ function LearnContent({ course }: { course: Course }) {
   async function sendUserText(rawText: string) {
     const text = rawText.trim();
     if (!text || !mod || !lesson) return;
-    if (listeningRef.current) {
-      await stopVoiceInput();
-      return;
-    }
     const userMsg: ChatMsg = { who: 'user', text, ts: Date.now() };
     dispatch({ type: 'ADD_CHAT', id: course.id, lessonKey, msg: userMsg });
 
@@ -1904,38 +2391,65 @@ function LearnContent({ course }: { course: Course }) {
 
       <div style={{ height: '100%', display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'minmax(440px, 38vw) minmax(0, 1fr)', overflow: 'hidden' }}>
         <section style={{ background: theme.bg, color: theme.ink, display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: narrow ? 'none' : `1px solid ${theme.ruleFaint}` }}>
-          <div style={{ padding: '14px 18px 12px', borderBottom: `1px solid ${theme.ruleFaint}` }}>
-            <button
-              onClick={() => navigate('/dashboard')}
-              style={{ ...btn.ghost, padding: 0, fontSize: 10, color: theme.mute }}
+          <div style={{ padding: '18px 18px 0', flexShrink: 0 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 14,
+                padding: narrow ? '14px 14px 12px' : '16px 16px 14px',
+                borderRadius: 22,
+                border: `1px solid ${theme.ruleFaint}`,
+                background: panelFill,
+              }}
             >
-              ← dashboard
-            </button>
-            <div style={{ marginTop: 10, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: faintText }}>
-              {course.subject}
-            </div>
-            <div style={{ marginTop: 6, fontFamily: HC.sans, fontSize: 23, fontWeight: 600, lineHeight: 1.15, letterSpacing: '-0.02em', color: theme.ink }}>
-              {lesson?.title}
+              <button
+                onClick={() => navigate('/dashboard')}
+                style={{
+                  ...btn.ghost,
+                  padding: '8px 12px',
+                  fontSize: 10,
+                  color: theme.mute,
+                  borderRadius: 999,
+                  border: `1px solid ${theme.ruleFaint}`,
+                  background: panelFillStrong,
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
+                  flexShrink: 0,
+                }}
+              >
+                ← dashboard
+              </button>
+
+              <div style={{ minWidth: 0, textAlign: 'right' }}>
+                <div style={{ fontFamily: HC.mono, fontSize: 8, letterSpacing: '0.16em', textTransform: 'uppercase', color: faintText }}>
+                  Learnor chat
+                </div>
+                <div style={{ marginTop: 5, fontFamily: HC.sans, fontSize: 13, lineHeight: 1.4, color: subtleText }}>
+                  Ask, clarify, or get unstuck.
+                </div>
+              </div>
             </div>
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px 14px 18px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px 14px 18px', display: 'flex', flexDirection: 'column', gap: 24 }}>
             {currentChat.map((m, i) => (
               <div key={i}>
                 <div style={{
                   fontFamily: HC.mono,
-                  fontSize: 9,
-                  letterSpacing: '0.16em',
+                  fontSize: 8,
+                  letterSpacing: '0.14em',
                   color: m.who === 'user' ? faintText : subtleText,
                   textTransform: 'uppercase',
-                  marginBottom: 8,
+                  marginBottom: 9,
                 }}>
-                  {m.who === 'user' ? state.username : 'Learnor'}
+                  {m.who === 'user' ? 'You' : 'Learnor'}
                 </div>
                 {m.who === 'user' ? (
                   <div style={{
-                    padding: '12px 14px',
-                    borderRadius: 16,
+                    padding: '13px 15px',
+                    borderRadius: 18,
                     background: panelFillStrong,
                     border: `1px solid ${theme.ruleFaint}`,
                     color: theme.ink,
@@ -1949,9 +2463,44 @@ function LearnContent({ course }: { course: Course }) {
                     {speakingTs === m.ts ? renderSpokenMessage(m.text, spokenWords) : renderChatMessage(m.text, theme, dark)}
                   </div>
                 )}
-                {m.who === 'tutor' && m.readyToMoveOn && tutorTurnCount >= 5 && (
-                  <div style={{ marginTop: 10, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#7ad08b' }}>
-                    lesson objective covered
+                {m.who === 'tutor' && (
+                  <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => handlePlayTutorReply(m.text, m.ts)}
+                      disabled={voiceLoadingTs !== null && voiceLoadingTs !== m.ts}
+                      aria-label={voiceLoadingTs === m.ts ? 'Preparing voice' : speakingTs === m.ts ? 'Stop voice' : 'Play voice'}
+                      title={voiceLoadingTs === m.ts ? 'Preparing voice' : speakingTs === m.ts ? 'Stop voice' : 'Play voice'}
+                      style={{
+                        width: 34,
+                        height: 34,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 999,
+                        border: `1px solid ${speakingTs === m.ts ? theme.ink : theme.ruleFaint}`,
+                        background: speakingTs === m.ts ? theme.ink : 'transparent',
+                        color: speakingTs === m.ts ? theme.bg : theme.mute,
+                        fontFamily: HC.mono,
+                        fontSize: 12,
+                        lineHeight: 1,
+                        cursor: voiceLoadingTs !== null && voiceLoadingTs !== m.ts ? 'not-allowed' : 'pointer',
+                        opacity: voiceLoadingTs !== null && voiceLoadingTs !== m.ts ? 0.45 : 1,
+                      }}
+                    >
+                      {voiceLoadingTs === m.ts ? '…' : speakingTs === m.ts ? '■' : '▶'}
+                    </button>
+
+                    {voiceFeedbackTs === m.ts && voiceFeedbackMessage && (
+                      <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: theme.mute }}>
+                        {voiceFeedbackMessage}
+                      </div>
+                    )}
+
+                    {m.readyToMoveOn && tutorTurnCount >= 5 && (
+                      <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#7ad08b' }}>
+                        lesson objective covered
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2009,11 +2558,9 @@ function LearnContent({ course }: { course: Course }) {
             <div
               style={{
                 borderRadius: 16,
-                background: listening ? 'rgba(210,34,26,0.10)' : panelFillStrong,
-                border: `1px solid ${listening ? 'rgba(210,34,26,0.55)' : theme.ruleFaint}`,
-                boxShadow: listening ? '0 0 0 4px rgba(210,34,26,0.10)' : 'none',
+                background: panelFillStrong,
+                border: `1px solid ${theme.ruleFaint}`,
                 padding: 8,
-                transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
               }}
             >
               <textarea
@@ -2042,34 +2589,6 @@ function LearnContent({ course }: { course: Course }) {
                 }}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                {voiceStatus && (
-                  <span style={{ flex: 1, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: listening ? theme.red : theme.mute }}>
-                    {voiceStatus}
-                  </span>
-                )}
-                <button
-                  onClick={() => { if (!isPremium) { alert('Voice mode is a Premium feature. Upgrade to unlock.'); return; } unlockVoiceMode(); }}
-                  title={!isPremium ? 'Premium — upgrade to unlock voice' : voiceMode ? 'Voice on — click to toggle' : 'Voice off'}
-                  style={{
-                    width: 34, height: 34, borderRadius: '50%',
-                    border: `1px solid ${!isPremium ? theme.ruleFaint : voiceMode ? 'rgba(122,208,139,0.35)' : theme.ruleFaint}`,
-                    background: voiceMode && isPremium ? (dark ? 'rgba(122,208,139,0.12)' : 'rgba(45,106,63,0.08)') : 'transparent',
-                    color: !isPremium ? theme.mute : voiceMode ? theme.green : theme.mute,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 14, flexShrink: 0, opacity: !isPremium ? 0.45 : 1,
-                  }}
-                >
-                  {listening ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
-                  ) : (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="9" y="2" width="6" height="13" rx="3"/>
-                      <path d="M5 10a7 7 0 0 0 14 0"/>
-                      <line x1="12" y1="19" x2="12" y2="22"/>
-                      <line x1="9" y1="22" x2="15" y2="22"/>
-                    </svg>
-                  )}
-                </button>
                 <button
                   onClick={handleSend}
                   disabled={aiLoading || generatingNotes || msgLimitReached}
@@ -2090,65 +2609,118 @@ function LearnContent({ course }: { course: Course }) {
         </section>
 
         <section style={{ background: theme.bg, color: theme.ink, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '18px 22px 0', flexShrink: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.red }}>
-                  Chapter {String(course.currentModule + 1).padStart(2, '0')} · Lesson {String(course.currentLesson + 1).padStart(2, '0')}
+          <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: narrow ? 18 : 22,
+                padding: narrow ? '2px 2px 18px' : '4px 2px 20px',
+                borderBottom: `1px solid ${theme.ruleFaint}`,
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: narrow ? '1fr' : 'minmax(0, 1.35fr) minmax(260px, 0.65fr)',
+                  gap: narrow ? 18 : 20,
+                  alignItems: 'start',
+                }}
+              >
+                <div>
+                  <div style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: theme.red }}>
+                    Chapter {String(course.currentModule + 1).padStart(2, '0')} · Lesson {String(course.currentLesson + 1).padStart(2, '0')}
+                  </div>
+                  <div style={{ marginTop: 8, fontFamily: HC.serif, fontSize: narrow ? 34 : 42, lineHeight: 0.98, letterSpacing: '-0.035em', color: theme.ink, maxWidth: 760 }}>
+                    {lessonHeading}
+                  </div>
+                  <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    {showModuleHeading ? (
+                      <div style={{ padding: '6px 10px', borderRadius: 999, border: `1px solid ${theme.ruleFaint}`, background: panelFill, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: subtleText }}>
+                        Module · {moduleHeading}
+                      </div>
+                    ) : null}
+                    <div style={{ fontFamily: HC.sans, fontSize: 14, lineHeight: 1.5, color: subtleText }}>
+                      {course.paused ? 'Course paused. Resume whenever you are ready.' : 'Tutor on the left, workspace on the right. Finish the lesson when it clicks.'}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ marginTop: 6, fontFamily: HC.serif, fontSize: 26, lineHeight: 1.05, letterSpacing: '-0.02em', color: theme.ink }}>
-                  {mod?.title}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+                  <div style={{ padding: narrow ? '14px 14px 12px' : '16px 16px 14px', borderRadius: 22, border: `1px solid ${theme.ruleFaint}`, background: panelFillStrong, minWidth: 0 }}>
+                    <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: faintText }}>
+                      Progress
+                    </div>
+                    <div style={{ marginTop: 8, fontFamily: HC.serif, fontSize: narrow ? 28 : 34, lineHeight: 0.95, letterSpacing: '-0.03em', color: theme.ink }}>
+                      {completionPercent}%
+                    </div>
+                    <div style={{ marginTop: 10, height: 6, borderRadius: 999, background: dark ? 'rgba(250,247,240,0.08)' : 'rgba(26,21,16,0.08)', overflow: 'hidden' }}>
+                      <div style={{ width: `${completionPercent}%`, minWidth: completionPercent > 0 ? 10 : 0, height: '100%', borderRadius: 999, background: theme.red }} />
+                    </div>
+                    <div style={{ marginTop: 8, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.10em', textTransform: 'uppercase', color: subtleText }}>
+                      course completed
+                    </div>
+                  </div>
+
+                  <div style={{ padding: narrow ? '14px 14px 12px' : '16px 16px 14px', borderRadius: 22, border: `1px solid ${theme.ruleFaint}`, background: panelFillStrong, minWidth: 0 }}>
+                    <div style={{ fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: faintText }}>
+                      Time left
+                    </div>
+                    <div style={{ marginTop: 10, minHeight: narrow ? 34 : 40, display: 'flex', alignItems: 'center' }}>
+                      <Countdown deadline={course.deadline} paused={course.paused} size={narrow ? 26 : 30} />
+                    </div>
+                    <div style={{ marginTop: 8, fontFamily: HC.mono, fontSize: 9, letterSpacing: '0.10em', textTransform: 'uppercase', color: subtleText }}>
+                      {course.paused ? 'clock is frozen' : 'remaining before expiry'}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <button onClick={() => setCurriculumOpen(true)} style={headerButtonBase}>
-                  Curriculum
-                </button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button onClick={() => setCurriculumOpen(true)} style={headerButtonBase}>
+                    Curriculum
+                  </button>
+                  {course.paused ? (
+                    <button onClick={() => dispatch({ type: 'RESUME_COURSE', id: course.id })} style={headerButtonBase}>
+                      Resume
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => dispatch({ type: 'PAUSE_COURSE', id: course.id })}
+                      disabled={course.pauseUsed}
+                      style={{
+                        ...headerButtonBase,
+                        borderColor: course.pauseUsed ? theme.ruleFaint : 'rgba(210,34,26,0.36)',
+                        background: course.pauseUsed ? 'transparent' : 'rgba(210,34,26,0.08)',
+                        color: course.pauseUsed ? theme.mute : theme.red,
+                        opacity: course.pauseUsed ? 0.4 : 1,
+                      }}
+                    >
+                      Pause
+                    </button>
+                  )}
+                </div>
+
                 <button
                   onClick={handleLessonDone}
                   disabled={aiLoading || generatingNotes}
                   style={{
                     ...headerPrimaryButton,
+                    padding: narrow ? '13px 18px' : '14px 22px',
+                    minWidth: narrow ? '100%' : 220,
+                    justifyContent: 'center',
+                    display: 'inline-flex',
+                    alignItems: 'center',
                     opacity: aiLoading || generatingNotes ? 0.45 : 1,
                     cursor: aiLoading || generatingNotes ? 'not-allowed' : 'pointer',
                   }}
                 >
                   Mark completed →
                 </button>
-                <div style={{ padding: '10px 12px', borderRadius: 999, background: panelFillStrong, border: `1px solid ${theme.ruleFaint}`, fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.ink }}>
-                  {Math.round(course.progress * 100)}% done
-                </div>
-                <div style={{ padding: '10px 12px', borderRadius: 999, background: panelFillStrong, border: `1px solid ${theme.ruleFaint}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: HC.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.mute }}>
-                    Time
-                  </span>
-                  <CountdownInline deadline={course.deadline} paused={course.paused} />
-                </div>
-                {course.paused ? (
-                  <button onClick={() => dispatch({ type: 'RESUME_COURSE', id: course.id })} style={headerButtonBase}>
-                    Resume
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => dispatch({ type: 'PAUSE_COURSE', id: course.id })}
-                    disabled={course.pauseUsed}
-                    style={{
-                      ...headerButtonBase,
-                      borderColor: course.pauseUsed ? theme.ruleFaint : 'rgba(210,34,26,0.36)',
-                      background: course.pauseUsed ? 'transparent' : 'rgba(210,34,26,0.08)',
-                      color: course.pauseUsed ? theme.mute : theme.red,
-                      opacity: course.pauseUsed ? 0.4 : 1,
-                    }}
-                  >
-                    Pause
-                  </button>
-                )}
               </div>
             </div>
-          </div>
 
-          <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px 22px' }}>
             {mod && lesson && (
               <LessonCanvas
                 key={`${course.currentModule}:${course.currentLesson}`}

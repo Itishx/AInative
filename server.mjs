@@ -418,6 +418,194 @@ function repairQuizJson(raw) {
   return null;
 }
 
+function decodeJsonishString(value) {
+  return String(value || '')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
+    .trim();
+}
+
+function extractJsonValueSegment(cleaned, key, nextKeys = []) {
+  const keyMatch = new RegExp(`"${key}"\\s*:\\s*`, 'i').exec(cleaned);
+  if (!keyMatch) return '';
+
+  const valueStart = keyMatch.index + keyMatch[0].length;
+  const tail = cleaned.slice(valueStart);
+  let valueEnd = cleaned.length;
+
+  for (const nextKey of nextKeys) {
+    const nextIdx = tail.search(new RegExp(`,\\s*"${nextKey}"\\s*:`, 'i'));
+    if (nextIdx !== -1) {
+      valueEnd = Math.min(valueEnd, valueStart + nextIdx);
+    }
+  }
+
+  return cleaned.slice(valueStart, valueEnd).trim();
+}
+
+function extractJsonishStringField(cleaned, key, nextKeys = []) {
+  const segment = extractJsonValueSegment(cleaned, key, nextKeys);
+  if (!segment) return '';
+
+  const firstQuote = segment.indexOf('"');
+  if (firstQuote === -1) return '';
+
+  const trimmedSegment = segment.trim();
+  const hasClosingQuote = /"\s*(,|})?\s*$/.test(trimmedSegment);
+  let rawValue = trimmedSegment.slice(firstQuote + 1);
+
+  if (hasClosingQuote) {
+    const lastQuote = rawValue.lastIndexOf('"');
+    if (lastQuote !== -1) rawValue = rawValue.slice(0, lastQuote);
+  } else {
+    rawValue = rawValue.replace(/\s*}\s*$/, '').trim();
+  }
+
+  return decodeJsonishString(rawValue);
+}
+
+function extractStringItemsFromArraySegment(segment) {
+  const arrayStart = segment.indexOf('[');
+  if (arrayStart === -1) return [];
+
+  const arrayText = segment.slice(arrayStart + 1);
+  const items = [];
+  let inString = false;
+  let escape = false;
+  let current = '';
+
+  for (let i = 0; i < arrayText.length; i++) {
+    const ch = arrayText[i];
+
+    if (inString) {
+      if (escape) {
+        current += ch;
+        escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        current += ch;
+        escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        const value = decodeJsonishString(current);
+        if (value) items.push(value);
+        current = '';
+        inString = false;
+        continue;
+      }
+      current += ch;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      current = '';
+      continue;
+    }
+
+    if (ch === ']') break;
+  }
+
+  return items;
+}
+
+function repairHandsOnQuestionsJson(raw) {
+  const cleaned = cleanJson(String(raw || ''));
+
+  try { return JSON.parse(cleaned); } catch {}
+
+  const objectMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    try { return JSON.parse(objectMatch[0]); } catch {}
+  }
+
+  const questions = extractStringItemsFromArraySegment(extractJsonValueSegment(cleaned, 'questions'));
+  if (questions.length > 0) return { questions };
+
+  return null;
+}
+
+function normalizeHandsOnResult(result) {
+  const rawScore = Number(result?.score);
+  let score = Number.isFinite(rawScore) ? rawScore : (result?.correct ? 100 : 0);
+  if (score >= 0 && score <= 1) score *= 100;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  return {
+    score,
+    correct: typeof result?.correct === 'boolean' ? result.correct : score >= 65,
+    whatWasRight: String(result?.whatWasRight || '').trim(),
+    whatWasMissing: String(result?.whatWasMissing || '').trim(),
+    betterAnswer: String(result?.betterAnswer || '').trim(),
+  };
+}
+
+function repairHandsOnCheckJson(raw) {
+  const cleaned = cleanJson(String(raw || ''));
+
+  try {
+    return normalizeHandsOnResult(JSON.parse(cleaned));
+  } catch {}
+
+  const objectMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    try {
+      return normalizeHandsOnResult(JSON.parse(objectMatch[0]));
+    } catch {}
+  }
+
+  const scoreMatch = cleaned.match(/"score"\s*:\s*(-?\d+(?:\.\d+)?)/i);
+  const correctMatch = cleaned.match(/"correct"\s*:\s*(true|false)/i);
+  const recovered = normalizeHandsOnResult({
+    score: scoreMatch ? Number(scoreMatch[1]) : undefined,
+    correct: correctMatch ? correctMatch[1].toLowerCase() === 'true' : undefined,
+    whatWasRight: extractJsonishStringField(cleaned, 'whatWasRight', ['whatWasMissing', 'betterAnswer']),
+    whatWasMissing: extractJsonishStringField(cleaned, 'whatWasMissing', ['betterAnswer']),
+    betterAnswer: extractJsonishStringField(cleaned, 'betterAnswer'),
+  });
+
+  if (recovered.whatWasRight || recovered.whatWasMissing || recovered.betterAnswer || scoreMatch || correctMatch) {
+    return recovered;
+  }
+
+  return null;
+}
+
+function repairGradeJson(raw) {
+  const cleaned = cleanJson(String(raw || ''));
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  const objectMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    try {
+      return JSON.parse(objectMatch[0]);
+    } catch {}
+  }
+
+  const passedMatch = cleaned.match(/"passed"\s*:\s*(true|false)/i);
+  const scoreMatch = cleaned.match(/"score"\s*:\s*(-?\d+(?:\.\d+)?)/i);
+  const feedback = extractJsonishStringField(cleaned, 'feedback');
+
+  if (passedMatch || scoreMatch || feedback) {
+    const score = scoreMatch ? Number(scoreMatch[1]) : 0;
+    return {
+      passed: passedMatch ? passedMatch[1].toLowerCase() === 'true' : score >= 0.7,
+      score,
+      feedback,
+    };
+  }
+
+  return null;
+}
+
 function normalizeQuizCorrectIndex(question, options) {
   const raw = question?.correct ?? question?.answerIndex ?? question?.correctIndex ?? question?.correct_answer;
   if (Number.isInteger(raw) && raw >= 0 && raw < options.length) return raw;
@@ -842,6 +1030,27 @@ function buildStudyUsage(studySessions, isPremium, nowMs = Date.now()) {
   };
 }
 
+function studyTopicKey(topic) {
+  return String(topic || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function dedupeStudySessions(studySessions) {
+  const sorted = [...(Array.isArray(studySessions) ? studySessions : [])]
+    .sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime());
+  const seen = new Set();
+  const deduped = [];
+
+  for (const session of sorted) {
+    if (!session?.id) continue;
+    const key = studyTopicKey(session.topic) || `id:${session.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(session);
+  }
+
+  return deduped.slice(0, 50);
+}
+
 async function getStudyAccessState(userId) {
   if (!userId) {
     return {
@@ -863,7 +1072,7 @@ async function getStudyAccessState(userId) {
   }
 
   const profile = row.profile || {};
-  const studySessions = Array.isArray(row.study_sessions) ? row.study_sessions : [];
+  const studySessions = dedupeStudySessions(Array.isArray(row.study_sessions) ? row.study_sessions : []);
   const isPremium = profile.plan === 'premium';
 
   return {
@@ -876,9 +1085,7 @@ async function getStudyAccessState(userId) {
 
 async function persistStudySession(userId, studySessions, session) {
   if (!userId) return session;
-  const nextStudySessions = [session, ...(Array.isArray(studySessions) ? studySessions : [])]
-    .filter((item, index, arr) => arr.findIndex((entry) => entry.id === item.id) === index)
-    .slice(0, 50);
+  const nextStudySessions = dedupeStudySessions([session, ...(Array.isArray(studySessions) ? studySessions : [])]);
   await patchUserCourseRow(userId, {
     study_sessions: nextStudySessions,
     updated_at: new Date().toISOString(),
@@ -2014,10 +2221,12 @@ Return ONLY valid JSON:
       }],
       300,
     );
-    res.json(JSON.parse(text.trim().replace(/^```json\n?|```$/g, '')));
+    const parsed = repairGradeJson(text);
+    if (!parsed) throw new Error('Could not parse grade response');
+    res.json(parsed);
   } catch (err) {
     console.error('[grade]', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Could not grade that answer right now. Please try again.' });
   }
 });
 
@@ -2025,62 +2234,52 @@ Return ONLY valid JSON:
 const CODING_TOPICS = /\b(sql|query|queries|join|select|python|javascript|typescript|java|c\+\+|golang|rust|code|coding|programming|function|algorithm|data structure|api|react|html|css|bash|shell|regex|database|schema|orm|git|docker|kubernetes|recursion|sorting|linked list|tree|graph|dynamic programming)\b/i;
 
 app.post('/api/handson', async (req, res) => {
-  const { courseTitle, moduleTitle, lessonTitle, chatHistory } = req.body;
+  const { courseTitle, moduleTitle, lessonTitle, chatHistory, forceCoding, questionCount } = req.body;
   const taughtContent = (chatHistory || [])
     .filter((m) => m.who === 'tutor')
-    .map((m) => m.text)
+    .map((m) => {
+      const visual = typeof m.visual === 'string' && m.visual.trim() ? `\n\nVisual shown:\n${m.visual.trim()}` : '';
+      return `${m.text}${visual}`;
+    })
     .join('\n\n');
 
-  const isCoding = CODING_TOPICS.test(`${courseTitle} ${moduleTitle} ${lessonTitle}`);
+  const isCoding = !!forceCoding || CODING_TOPICS.test(`${courseTitle} ${moduleTitle} ${lessonTitle} ${taughtContent}`);
+  const requestedCount = Number.isFinite(Number(questionCount)) ? Math.max(1, Math.min(5, Number(questionCount))) : 5;
+  const desiredCount = isCoding ? requestedCount : 5;
 
   try {
     const text = await callGemini(
       'You are a practice question writer. Respond ONLY with valid JSON, no markdown fences.',
       [{
         role: 'user',
-        content: [{ type: 'text', text: `Generate exactly 5 hands-on practice questions for lesson "${lessonTitle}" (module "${moduleTitle}", course "${courseTitle}").
+        content: [{ type: 'text', text: `Generate exactly ${desiredCount} hands-on practice questions for lesson "${lessonTitle}" (module "${moduleTitle}", course "${courseTitle}").
 
 ${taughtContent
   ? `====== WHAT WAS TAUGHT ======\n${taughtContent.slice(0, 3000)}\n============================\n\nAll questions MUST be based on what was actually taught above.`
   : `Base questions on what a student would have learned in "${lessonTitle}".`}
 
 ${isCoding ? `THIS IS A CODING LESSON. Rules:
-- At least 3 of the 5 must be write-the-code problems with a specific scenario.
+- Every question must be a write-the-code problem with a specific scenario.
 - Example: "Write a SQL query that returns all customers from the 'customers' table sorted by signup date descending."
-- 1-2 can be conceptual (explain X, difference between X and Y).
 - Base problems only on syntax/concepts that were actually taught.
-- Vary difficulty: 2 easy, 2 medium, 1 hard.
-- Keep each question SHORT — one sentence max.` : `Rules:
+- Keep each question SHORT — one sentence max.
+- If generating 2 questions, make one easier and one more applied.
+- If generating more than 2, vary difficulty across the set.` : `Rules:
 - Free-text answers only (not MCQ).
 - Vary difficulty: 2 easy, 2 application, 1 synthesis.
 - One sentence per question.`}
 
 IMPORTANT: Keep each question under 25 words. Return ONLY this JSON with no extra text:
-{"questions": ["q1", "q2", "q3", "q4", "q5"]}` }],
+{"questions": [${Array.from({ length: desiredCount }).map((_, idx) => `"q${idx + 1}"`).join(', ')}]}` }],
       }],
       2500,
     );
-    const clean = text.replace(/```json[\s\S]*?```|```/g, '').trim();
-    let parsed;
-    try {
-      parsed = JSON.parse(clean);
-    } catch {
-      // Try to extract the array from partial JSON
-      const match = clean.match(/"questions"\s*:\s*(\[[\s\S]*)/);
-      if (match) {
-        const raw = match[1];
-        // Close the array if truncated
-        const closed = raw.replace(/,?\s*"[^"]*$/, '').replace(/,\s*$/, '') + (raw.trimEnd().endsWith(']') ? '' : ']');
-        parsed = { questions: JSON.parse(`{"questions":${closed}}`).questions };
-      } else {
-        throw new Error('Could not parse questions from response');
-      }
-    }
-    if (!Array.isArray(parsed.questions) || parsed.questions.length === 0) throw new Error('No questions returned');
-    res.json({ questions: parsed.questions.slice(0, 5), isCoding });
+    const parsed = repairHandsOnQuestionsJson(text);
+    if (!parsed || !Array.isArray(parsed.questions) || parsed.questions.length === 0) throw new Error('No questions returned');
+    res.json({ questions: parsed.questions.slice(0, desiredCount), isCoding });
   } catch (err) {
     console.error('[handson]', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Could not generate hands-on questions right now. Please try again.' });
   }
 });
 
@@ -2116,12 +2315,12 @@ Return ONLY valid JSON (no markdown fences):
       }],
       800,
     );
-    const clean = text.replace(/```json\n?|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+    const parsed = repairHandsOnCheckJson(text);
+    if (!parsed) throw new Error('Could not parse hands-on feedback');
     res.json(parsed);
   } catch (err) {
     console.error('[handson-check]', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Could not check that answer right now. Please try again.' });
   }
 });
 

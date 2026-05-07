@@ -7,10 +7,12 @@ import { useStore } from '../store';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { useTypingPlaceholder } from '../lib/useTypingPlaceholder';
+import { buildBrowseRecommendations, buildGenericLearningSuggestions } from '../lib/onboarding';
 import type { Course, QuizAttempt, UsageSnapshot } from '../types';
 
-type Filter = 'all' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
+type Filter = 'all' | 'suggested' | 'not-started' | 'in-progress' | 'done' | 'urgent' | 'archived';
 type DashboardMode = 'courses' | 'quizzes';
+type StudyTab = 'sessions' | 'quizzes';
 
 const D = {
   bg: 'var(--dash-bg)',
@@ -37,7 +39,7 @@ function courseHasStarted(course: Course) {
   return course.progress > 0 || Object.values(course.lessonChats ?? {}).some((msgs) => msgs.length > 0);
 }
 
-function getCourseFilter(course: Course): Exclude<Filter, 'all' | 'urgent'> {
+function getCourseFilter(course: Course): Exclude<Filter, 'all' | 'urgent' | 'suggested'> {
   if (course.status === 'tombstone' || course.status === 'expired') return 'archived';
   if (course.status === 'completed') return 'done';
   if (!courseHasStarted(course)) return 'not-started';
@@ -89,6 +91,35 @@ function formatTimeUntil(target: string, now = Date.now()) {
   if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}h`;
   if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
   return `${Math.max(1, totalMinutes)}m`;
+}
+
+function seededShuffle<T>(items: T[], seed: number) {
+  const shuffled = [...items];
+  let cursor = Math.max(1, seed + 1);
+  const random = () => {
+    const x = Math.sin(cursor++) * 10000;
+    return x - Math.floor(x);
+  };
+
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+function studyPreview(notes: string) {
+  return notes
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\|/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 132);
 }
 
 function buildConsistency(courses: Course[]) {
@@ -704,14 +735,15 @@ function FilterTabs({ filters, filter, setFilter }: {
 }
 
 export default function Dashboard() {
-  const { state, dispatch } = useStore();
+  const { state, dispatch, remoteLoaded } = useStore();
   const { user } = useAuth();
   const { dark } = useTheme();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
+  const [suggestedRefreshTick, setSuggestedRefreshTick] = useState(0);
 
-  const [mode, setMode] = useState<DashboardMode>('courses');
   const [appMode, setAppMode] = useState<'learn' | 'study'>('learn');
+  const [studyTab, setStudyTab] = useState<StudyTab>('sessions');
   const [topic, setTopic] = useState('');
   const [studyFile, setStudyFile] = useState<File | null>(null);
   const [studyUploading, setStudyUploading] = useState(false);
@@ -749,7 +781,26 @@ export default function Dashboard() {
     return { notStarted, inProgress, done, urgent, archived };
   }, [state.courses]);
 
+  const suggestionPool = useMemo(() => {
+    const primary = remoteLoaded && state.profile?.onboardingCompleted
+      ? buildBrowseRecommendations(state.profile)
+      : [];
+    const fallback = buildGenericLearningSuggestions();
+    const seen = new Set<string>();
+
+    return [...primary, ...fallback].filter((item) => {
+      if (seen.has(item.title)) return false;
+      seen.add(item.title);
+      return true;
+    });
+  }, [remoteLoaded, state.profile]);
+
+  const suggestedCards = useMemo(() => {
+    return seededShuffle(suggestionPool, suggestedRefreshTick).slice(0, Math.min(8, suggestionPool.length));
+  }, [suggestedRefreshTick, suggestionPool]);
+
   const filteredCourses = useMemo(() => {
+    if (filter === 'suggested') return [];
     return state.courses.filter((course) => {
       if (filter === 'urgent' && course.status !== 'active-urgent') return false;
       if (filter !== 'all' && filter !== 'urgent' && getCourseFilter(course) !== filter) return false;
@@ -819,6 +870,7 @@ export default function Dashboard() {
 
   const filters: { key: Filter; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: state.courses.length },
+    { key: 'suggested', label: 'Suggested', count: suggestedCards.length },
     { key: 'not-started', label: 'Not started', count: stats.notStarted },
     { key: 'in-progress', label: 'In progress', count: stats.inProgress },
     { key: 'urgent', label: 'Urgent', count: stats.urgent },
@@ -872,6 +924,7 @@ export default function Dashboard() {
                   key={m}
                   onClick={() => {
                     setAppMode(m);
+                    setStudyTab('sessions');
                     setTopic('');
                     setStudyFile(null);
                     setStudyGateError('');
@@ -1031,78 +1084,114 @@ export default function Dashboard() {
 
         {appMode === 'study' ? (
           <section style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 40 }}>
-            <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: D.mute, marginBottom: 24 }}>
-              — past sessions
-            </div>
-            {(state.studySessions ?? []).length === 0 ? (
-              <p style={{ fontFamily: `"Instrument Serif", Georgia, serif`, fontStyle: 'italic', fontSize: 22, color: D.mute, margin: 0 }}>
-                Your study sessions will appear here.
-              </p>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-                {(state.studySessions ?? []).map((session) => (
-                  <div
-                    key={session.id}
-                    style={{ border: `1px solid ${D.faint}`, padding: '20px 22px', cursor: 'pointer', transition: 'border-color 140ms ease', position: 'relative' }}
-                    onClick={() => navigate(`/study?topic=${encodeURIComponent(session.topic)}&sessionId=${session.id}`)}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = D.ink)}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = D.faint)}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', paddingBottom: 24, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {([
+                  ['sessions', 'Past study sessions', (state.studySessions ?? []).length],
+                  ['quizzes', 'Your quizzes', state.quizAttempts.length],
+                ] as const).map(([tab, label, count]) => (
+                  <button
+                    key={tab}
+                    onClick={() => setStudyTab(tab)}
+                    style={{
+                      border: `1px solid ${studyTab === tab ? D.ink : D.faint}`,
+                      borderRadius: 999,
+                      background: studyTab === tab ? D.ink : D.softer,
+                      color: studyTab === tab ? D.bg : D.ink,
+                      cursor: 'pointer',
+                      padding: '11px 16px',
+                      fontFamily: D.mono,
+                      fontSize: 9.5,
+                      letterSpacing: '0.13em',
+                      textTransform: 'uppercase',
+                    }}
                   >
-                    <button
-                      onClick={e => { e.stopPropagation(); dispatch({ type: 'DELETE_STUDY_SESSION', id: session.id }); }}
-                      title="Delete session"
-                      style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', cursor: 'pointer', color: D.mute, fontFamily: D.mono, fontSize: 14, lineHeight: 1, padding: '2px 6px', opacity: 0.6 }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
-                    >
-                      ×
-                    </button>
-                    <div style={{ fontFamily: `"Instrument Serif", Georgia, serif`, fontSize: 20, fontWeight: 400, color: D.ink, marginBottom: 8, lineHeight: 1.2, paddingRight: 24 }}>
-                      {session.topic}
-                    </div>
-                    <div style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: D.mute }}>
-                      {new Date(session.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </div>
-                  </div>
+                    {label}
+                    <span style={{ marginLeft: 8, opacity: studyTab === tab ? 0.72 : 0.86 }}>{count}</span>
+                  </button>
                 ))}
               </div>
+            </div>
+
+            {studyTab === 'quizzes' ? (
+              <QuizHub
+                courses={state.courses}
+                attempts={state.quizAttempts}
+                onOpenLessonQuiz={(course, moduleIndex, lessonIndex) => navigate(`/quiz/${course.id}/${moduleIndex}/${lessonIndex}`)}
+                onOpenAnyQuiz={(topic) => navigate(`/quiz-any?topic=${encodeURIComponent(topic)}`)}
+              />
+            ) : (
+              <>
+                <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: D.mute, marginBottom: 24 }}>
+                  — past sessions
+                </div>
+                {(state.studySessions ?? []).length === 0 ? (
+                  <p style={{ fontFamily: `"Instrument Serif", Georgia, serif`, fontStyle: 'italic', fontSize: 22, color: D.mute, margin: 0 }}>
+                    Your study sessions will appear here.
+                  </p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+                    {(state.studySessions ?? []).map((session) => (
+                      <article
+                        key={session.id}
+                        style={{
+                          minHeight: 220,
+                          border: `1px solid ${D.faint}`,
+                          borderRadius: 28,
+                          padding: 22,
+                          background: 'linear-gradient(145deg, rgba(255,255,255,0.035), rgba(26,21,16,0.018))',
+                          boxShadow: '0 24px 80px rgba(26,21,16,0.06)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          gap: 18,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => navigate(`/study?topic=${encodeURIComponent(session.topic)}&sessionId=${session.id}`)}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 14 }}>
+                            <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: D.red }}>
+                              Study
+                            </span>
+                            <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: D.mute }}>
+                              {new Date(session.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          </div>
+                          <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 'clamp(22px, 2.4vw, 34px)', lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 400, color: D.ink }}>
+                            {session.topic}
+                          </h2>
+                          <p style={{ margin: '12px 0 0', fontFamily: D.sans, fontSize: 13, lineHeight: 1.55, color: D.mute }}>
+                            {studyPreview(session.notes) || 'Open the notes, quiz, and hands-on flow for this topic.'}
+                          </p>
+                        </div>
+                        <div style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/study?topic=${encodeURIComponent(session.topic)}&sessionId=${session.id}`);
+                            }}
+                            style={{ border: 'none', background: 'transparent', color: D.ink, cursor: 'pointer', padding: 0, fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase', borderBottom: `1px solid ${D.ink}`, paddingBottom: 2 }}
+                          >
+                            Open session →
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); dispatch({ type: 'DELETE_STUDY_SESSION', id: session.id }); }}
+                            title="Delete session"
+                            style={{ border: 'none', background: 'transparent', color: D.red, cursor: 'pointer', padding: 0, fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase' }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </section>
         ) : (
         <>
-        <section style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', padding: '28px 0 24px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {(['courses', 'quizzes'] as DashboardMode[]).map((item) => (
-              <button
-                key={item}
-                onClick={() => setMode(item)}
-                style={{
-                  border: `1px solid ${mode === item ? D.ink : D.faint}`,
-                  borderRadius: 999,
-                  background: mode === item ? D.ink : D.softer,
-                  color: mode === item ? D.bg : D.ink,
-                  cursor: 'pointer',
-                  padding: '11px 16px',
-                  fontFamily: D.mono,
-                  fontSize: 9.5,
-                  letterSpacing: '0.13em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                {item === 'courses' ? 'Your courses' : 'Your quizzes'}
-              </button>
-            ))}
-          </div>
-        </section>
-        {mode === 'quizzes' ? (
-          <QuizHub
-            courses={state.courses}
-            attempts={state.quizAttempts}
-            onOpenLessonQuiz={(course, moduleIndex, lessonIndex) => navigate(`/quiz/${course.id}/${moduleIndex}/${lessonIndex}`)}
-            onOpenAnyQuiz={(topic) => navigate(`/quiz-any?topic=${encodeURIComponent(topic)}`)}
-          />
-        ) : (
-          <>
         <section style={{ borderBottom: `1px solid ${D.faint}`, paddingBottom: 34 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 34, alignItems: 'start' }}>
             <div style={{ minWidth: 0 }}>
@@ -1145,13 +1234,140 @@ export default function Dashboard() {
 
 
         <section>
-          {state.courses.length === 0 ? (
+          {filter === 'suggested' ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'baseline', flexWrap: 'wrap', paddingTop: 18 }}>
+                <div>
+                  <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
+                    Suggested
+                  </div>
+                  <h2 style={{ margin: '10px 0 0', fontFamily: D.serif, fontSize: 40, fontWeight: 400, letterSpacing: '-0.055em', lineHeight: 0.94 }}>
+                    Start from a sharper prompt.
+                  </h2>
+                </div>
+                <div style={{ display: 'grid', gap: 12, justifyItems: 'start' }}>
+                  <p style={{ maxWidth: 520, margin: 0, fontFamily: D.sans, fontSize: 14, lineHeight: 1.65, color: D.mute }}>
+                    {state.profile?.onboardingCompleted
+                      ? 'These suggestions are shaped by your saved role, occupation, and learning goals.'
+                      : 'Suggested prompts live here now, and you can refresh them anytime for a different set.'}
+                  </p>
+                  <button
+                    onClick={() => setSuggestedRefreshTick((tick) => tick + 1)}
+                    style={{
+                      border: `1px solid ${D.faint}`,
+                      borderRadius: 999,
+                      background: D.softer,
+                      color: D.ink,
+                      cursor: 'pointer',
+                      padding: '10px 14px',
+                      fontFamily: D.mono,
+                      fontSize: 9.5,
+                      letterSpacing: '0.13em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Refresh prompts ↻
+                  </button>
+                </div>
+              </div>
+
+              {suggestedCards.length === 0 ? (
+                <div style={{ borderTop: `1px solid ${D.faint}`, padding: '44px 0', color: D.mute }}>
+                  No prompts yet.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                    gap: 18,
+                    paddingTop: 18,
+                  }}
+                >
+                  {suggestedCards.map((item) => (
+                    <button
+                      key={`${suggestedRefreshTick}-${item.title}`}
+                      onClick={() => navigate(`/new?topic=${encodeURIComponent(item.title)}`)}
+                      style={{
+                        minHeight: 220,
+                        border: `1px solid ${D.faint}`,
+                        borderRadius: 28,
+                        padding: 22,
+                        background: 'linear-gradient(145deg, rgba(255,255,255,0.035), rgba(26,21,16,0.018))',
+                        boxShadow: '0 24px 80px rgba(26,21,16,0.06)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: 18,
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        color: D.ink,
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+                          <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: D.red }}>
+                            Prompt
+                          </span>
+                          <span style={{ fontFamily: D.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: D.mute }}>
+                            create course
+                          </span>
+                        </div>
+                        <h3 style={{ margin: 0, fontFamily: D.serif, fontSize: 'clamp(22px, 2.4vw, 34px)', lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 400, color: D.ink }}>
+                          {item.title}
+                        </h3>
+                        <p style={{ margin: '12px 0 0', fontFamily: D.sans, fontSize: 13, lineHeight: 1.55, color: D.mute }}>
+                          {item.reason}
+                        </p>
+                      </div>
+
+                      <div style={{ borderTop: `1px solid ${D.faint}`, paddingTop: 14 }}>
+                        <span style={{ fontFamily: D.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase', color: D.ink }}>
+                          Start learning →
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : state.courses.length === 0 ? (
             <div style={{ borderTop: `1px solid ${D.faint}`, padding: '44px 0' }}>
               <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 42, fontWeight: 400, letterSpacing: '-0.06em' }}>No courses yet.</h2>
               <p style={{ margin: '12px 0 0', color: D.mute }}>Start one topic and Learnor will build the path.</p>
             </div>
           ) : filteredCourses.length === 0 ? (
-            <div style={{ borderTop: `1px solid ${D.faint}`, padding: '44px 0', color: D.mute }}>Nothing in this bucket.</div>
+            <div
+              style={{
+                borderTop: `1px solid ${D.faint}`,
+                padding: '34px 0 0',
+              }}
+            >
+              <div
+                style={{
+                  minHeight: 220,
+                  border: `1px solid ${D.faint}`,
+                  borderRadius: 28,
+                  padding: 26,
+                  background: 'linear-gradient(145deg, rgba(255,255,255,0.03), rgba(26,21,16,0.018))',
+                  boxShadow: '0 24px 80px rgba(26,21,16,0.04)',
+                  display: 'grid',
+                  alignItems: 'end',
+                }}
+              >
+                <div>
+                  <div style={{ fontFamily: D.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: D.red }}>
+                    {filters.find((item) => item.key === filter)?.label ?? 'Courses'}
+                  </div>
+                  <h2 style={{ margin: '12px 0 0', fontFamily: D.serif, fontSize: 'clamp(34px, 4vw, 52px)', lineHeight: 0.92, letterSpacing: '-0.06em', fontWeight: 400, color: D.ink }}>
+                    Nothing here.
+                  </h2>
+                  <p style={{ margin: '14px 0 0', maxWidth: 420, fontFamily: D.sans, fontSize: 14, lineHeight: 1.6, color: D.mute }}>
+                    This tab is empty right now. Try another bucket, or start a new course and it will show up here when it fits.
+                  </p>
+                </div>
+              </div>
+            </div>
           ) : (
             <div
               style={{
@@ -1179,7 +1395,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        {upcoming.length > 0 && (
+        {filter !== 'suggested' && upcoming.length > 0 && (
           <section style={{ marginTop: 56, borderTop: `1px solid ${D.faint}`, paddingTop: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'baseline', marginBottom: 18 }}>
               <h2 style={{ margin: 0, fontFamily: D.serif, fontSize: 34, fontWeight: 400, letterSpacing: '-0.055em' }}>Deadline line</h2>
@@ -1217,8 +1433,6 @@ export default function Dashboard() {
               })}
             </div>
           </section>
-        )}
-          </>
         )}
         </>
         )}
