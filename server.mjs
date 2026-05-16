@@ -2392,7 +2392,7 @@ async function extractPdfText(buffer) {
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-    .slice(0, 20000);
+    .slice(0, 40000);
 }
 
 app.post('/api/upload-materials', upload.array('files', 10), async (req, res) => {
@@ -3021,7 +3021,7 @@ Respond ONLY with the markdown content, no preamble.`;
 
 Document content:
 ---
-${notesContext.slice(0, 18000)}
+${notesContext.slice(0, 38000)}
 ---
 
 Rules:
@@ -3039,7 +3039,8 @@ Respond ONLY with the markdown study notes.`
 Structure:${structure}`;
 
   try {
-    const notes = await callGemini(systemPrompt, [{ role: 'user', content: [{ type: 'text', text: userPrompt }] }], 2400);
+    const notesMaxTokens = notesContext ? 6000 : 2400;
+    const notes = await callGemini(systemPrompt, [{ role: 'user', content: [{ type: 'text', text: userPrompt }] }], notesMaxTokens);
     let session = null;
 
     if (userId) {

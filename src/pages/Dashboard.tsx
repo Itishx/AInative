@@ -859,10 +859,22 @@ export default function Dashboard() {
         fd.append('files', studyFile);
         const res = await fetch(apiUrl('/api/upload-materials'), { method: 'POST', body: fd });
         const data = await res.json();
-        if (data.materialsContext) {
-          sessionStorage.setItem('study_notes_context', data.materialsContext);
+        if (!res.ok || data.error) {
+          setStudyGateError(data.error || 'Could not upload the file. Please try again.');
+          setStudyUploading(false);
+          return;
         }
-      } catch {}
+        if (!data.materialsContext?.trim()) {
+          setStudyGateError('Could not read text from this PDF. Try a different file or type your topic instead.');
+          setStudyUploading(false);
+          return;
+        }
+        sessionStorage.setItem('study_notes_context', data.materialsContext);
+      } catch {
+        setStudyGateError('Upload failed — check your connection and try again.');
+        setStudyUploading(false);
+        return;
+      }
       setStudyUploading(false);
     }
     navigate(`/study?topic=${encodeURIComponent(nextTopic || studyFile!.name.replace(/\.pdf$/i, ''))}`);
