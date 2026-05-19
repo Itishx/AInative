@@ -327,9 +327,9 @@ ${historyText}
 
 Did the student demonstrate genuine understanding — answered a question correctly, explained something in their own words, or showed applied knowledge? Saying "got it", "okay", "next", "continue", "i get it", or "you may continue" does NOT count.
 
-{"approved":true/false}` }],
+Respond ONLY with {"approved":true/false}` }],
       }],
-      80,
+      200,
     );
 
     const result = JSON.parse(text.trim().replace(/^```json\n?|```$/g, ''));
@@ -1677,7 +1677,15 @@ app.post('/api/chat', async (req, res) => {
       .map((m) => String(m.text).trim())
       .filter(Boolean);
     const alreadyCoveredSection = prevTutorTexts.length
-      ? `\n\n━━━ WHAT YOU HAVE ALREADY SAID (DO NOT REPEAT) ━━━\n${prevTutorTexts.map((t, i) => `[${i + 1}] ${t.slice(0, 300)}`).join('\n')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nThe above sentences are already in the student's chat. If you write any of these sentences again word-for-word or near-verbatim, you are hallucinating. Move forward to genuinely new content.`
+      ? `\n\n━━━ WHAT YOU HAVE ALREADY SAID (DO NOT REPEAT) ━━━\n${prevTutorTexts.map((t, i) => `[${i + 1}] ${t.slice(0, 600)}`).join('\n')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nThe above sentences are already in the student's chat. If you write any of these sentences again word-for-word or near-verbatim, you are hallucinating. Move forward to genuinely new content.`
+      : '';
+
+    const recentStudentMsgs = (Array.isArray(messages) ? messages : [])
+      .filter((m) => m?.who === 'user' && String(m.text || '').trim())
+      .slice(-8)
+      .map((m, i) => `[S${i + 1}] ${String(m.text).trim().slice(0, 300)}`);
+    const studentStateSection = recentStudentMsgs.length
+      ? `\n\n━━━ STUDENT RESPONSE LOG (last ${recentStudentMsgs.length} messages) ━━━\n${recentStudentMsgs.join('\n')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nUse this to judge: Are answers short/dismissive (low engagement)? Asking clarifying questions (vocabulary confusion)? Giving detailed answers (high confidence)? Repeating wrong ideas (concept gap)? Calibrate your depth, pace, and confusion-type diagnosis from this log.`
       : '';
 
     const systemPrompt = `# AI Tutor System Prompt — Master Version
@@ -1914,13 +1922,13 @@ Why it's good: Stakes first, real-world scale, curiosity gap, ends with a thinki
 
 This prompt was designed for maximum teaching quality. Runtime variables have been filled above.
 
-${materialsSection}${planSection}${alreadyCoveredSection}`;
+${materialsSection}${planSection}${alreadyCoveredSection}${studentStateSection}`;
 
     const apiMessages = buildTutorApiMessages(messages, starterText);
 
     let rawText;
     try {
-      rawText = await callGemini(systemPrompt, apiMessages, 3600, true);
+      rawText = await callGemini(systemPrompt, apiMessages, 8000, false);
     } catch (err) {
       const msg = String(err?.message || '');
       if (msg.includes('at least one message') || msg.includes('contents') || msg.includes('INVALID_ARGUMENT')) {
