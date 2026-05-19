@@ -207,7 +207,22 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, profile: { ...state.profile, ...action.profile } };
 
     case '_LOAD_FROM_DB': {
-      const courses = migrateCourses(action.courses ?? []);
+      const incomingCourses = migrateCourses(action.courses ?? []);
+      // Replica lag: Supabase Realtime fires immediately after our own write but
+      // the subsequent read can return a stale row. Guard by never letting incoming
+      // data shrink a lessonChats thread that is already larger in memory — chat
+      // only grows, so whichever side has more messages is always newer.
+      const courses = incomingCourses.map((incoming) => {
+        const local = state.courses.find((c) => c.id === incoming.id);
+        if (!local) return incoming;
+        const mergedChats: Record<string, import('./types').ChatMsg[]> = { ...incoming.lessonChats };
+        for (const [key, localMsgs] of Object.entries(local.lessonChats ?? {})) {
+          if (localMsgs.length > (mergedChats[key]?.length ?? 0)) {
+            mergedChats[key] = localMsgs;
+          }
+        }
+        return { ...incoming, lessonChats: mergedChats };
+      });
       const studySessions = action.studySessions
         ? dedupeStudySessions(action.studySessions)
         : state.studySessions;
