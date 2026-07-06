@@ -5,6 +5,7 @@ import { useEnrollCourse, useStore } from '../store';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import type { EnrolledCourse, Module, PublishedCourse } from '../types';
+import { fetchShelf, ShelfCourse } from '../lib/learnor';
 
 const B = {
   bg: 'var(--browse-bg)',
@@ -33,8 +34,12 @@ export default function Browse() {
   const { dark } = useTheme();
 
   const [courses, setCourses] = useState<PublishedCourse[]>([]);
+  const [shelf, setShelf] = useState<ShelfCourse[]>([]);
+  const [shelfCategory, setShelfCategory] = useState<string>('All');
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState<string | null>(null);
+
+  useEffect(() => { fetchShelf().then(setShelf).catch(() => {}); }, []);
 
   useEffect(() => {
     fetch('/api/published-courses')
@@ -195,6 +200,106 @@ export default function Browse() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* ── Learnor shelf — pre-built, reviewed reading courses ─────────── */}
+        <section style={{ marginTop: 34 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'baseline', marginBottom: 18, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontFamily: B.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: B.red }}>
+                The shelf
+              </div>
+              <h2 style={{ margin: '10px 0 0', fontFamily: B.serif, fontSize: 40, fontWeight: 400, letterSpacing: '-0.055em', lineHeight: 0.94 }}>
+                Ready when you land.
+              </h2>
+            </div>
+            <button
+              onClick={() => navigate('/request')}
+              style={{ ...shellButton, borderColor: B.ink, background: B.ink, color: B.bg }}
+            >
+              Request any topic →
+            </button>
+          </div>
+
+          {shelf.length === 0 ? (
+            <div style={{ border: `1px solid ${B.faint}`, borderRadius: 28, padding: '28px 30px' }}>
+              <div style={{ fontFamily: B.serif, fontSize: 26, letterSpacing: '-0.03em', marginBottom: 8 }}>
+                The shelf is being stocked.
+              </div>
+              <div style={{ fontFamily: B.sans, fontSize: 14, lineHeight: 1.6, color: B.mute }}>
+                Learnor is building the launch catalog right now. Meanwhile, request any topic and it'll be built for you.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+                {['All', ...Array.from(new Set(shelf.map((c) => c.category).filter(Boolean)))].map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => setShelfCategory(category as string)}
+                    style={{
+                      ...shellButton,
+                      padding: '8px 14px',
+                      borderColor: shelfCategory === category ? B.ink : B.faint,
+                      background: shelfCategory === category ? B.ink : 'transparent',
+                      color: shelfCategory === category ? B.bg : B.mute,
+                    }}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+                {shelf
+                  .filter((course) => shelfCategory === 'All' || course.category === shelfCategory)
+                  .map((course) => (
+                    <article
+                      key={course.slug}
+                      onClick={() => navigate(`/course/${course.slug}`)}
+                      style={{
+                        cursor: 'pointer',
+                        minHeight: 190,
+                        border: `1px solid ${B.faint}`,
+                        borderRadius: 28,
+                        padding: 22,
+                        background: 'linear-gradient(145deg, rgba(255,255,255,0.035), rgba(26,21,16,0.018))',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: 16,
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                          <span style={{ fontFamily: B.mono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: B.red }}>
+                            {course.category || 'Course'}
+                          </span>
+                          <span style={{ fontFamily: B.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: B.mute }}>
+                            {course.level || ''}
+                          </span>
+                        </div>
+                        <h3 style={{ margin: 0, fontFamily: B.serif, fontSize: 'clamp(22px, 2.2vw, 30px)', lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 400, color: B.ink }}>
+                          {course.title}
+                        </h3>
+                        {course.summary && (
+                          <p style={{ margin: '10px 0 0', fontFamily: B.sans, fontSize: 13, lineHeight: 1.55, color: B.mute }}>
+                            {course.summary}
+                          </p>
+                        )}
+                      </div>
+                      <div style={{ borderTop: `1px solid ${B.faint}`, paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                        <span style={{ fontFamily: B.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: B.mute }}>
+                          {course.stats.sections} sections · {course.stats.quiz} quiz · {course.stats.exercises} exercises
+                        </span>
+                        <span style={{ fontFamily: B.mono, fontSize: 9.5, letterSpacing: '0.13em', textTransform: 'uppercase', color: B.ink }}>
+                          Read →
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+              </div>
+            </>
+          )}
         </section>
 
         <section style={{ marginTop: 34 }}>

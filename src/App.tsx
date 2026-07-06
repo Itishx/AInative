@@ -21,6 +21,9 @@ import Import from './pages/Import';
 import Notes from './pages/Notes';
 import Study from './pages/Study';
 import Onboarding from './pages/Onboarding';
+import Request from './pages/Request';
+import Course from './pages/Course';
+import AdminReview from './pages/AdminReview';
 import { HC } from './theme';
 import { ThemeProvider } from './lib/theme';
 
@@ -73,6 +76,9 @@ function AppRoutes() {
           <Route path="/logos" element={<Logos />} />
           <Route path="/slides" element={<Slides />} />
           <Route path="/auth" element={user ? <Navigate to="/onboarding" replace /> : <Auth />} />
+          <Route path="/request" element={<Request />} />
+          <Route path="/course/:slug" element={<Course />} />
+          <Route path="/admin/review" element={<AdminReview />} />
 
           {/* Protected */}
           <Route path="/onboarding" element={<RequireAuth><Onboarding /></RequireAuth>} />

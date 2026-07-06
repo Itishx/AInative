@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
 import { Polar } from '@polar-sh/sdk';
+import learnorRouter from './learnor.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'ainative-server-data') : path.join(__dirname, 'server-data');
@@ -1140,6 +1141,8 @@ app.use((req, _res, next) => {
 });
 
 app.use(express.json({ limit: '4mb' }));
+
+app.use('/api/learnor', learnorRouter);
 
 app.get('/api/health', (_, res) => res.json({
   ok: true,
