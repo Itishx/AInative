@@ -28,6 +28,7 @@ const DARK: T = {
 const SERIF = '"Instrument Serif", "EB Garamond", Georgia, serif';
 const SANS = '"Inter", -apple-system, system-ui, sans-serif';
 const MONO  = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace';
+const BODY  = '"Newsreader", "Source Serif 4", "EB Garamond", Georgia, serif';
 const HERO_PLACEHOLDER_PHRASES = [
   'Learn SQL joins for analytics',
   'Master Python for automation',
@@ -95,7 +96,7 @@ function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark
   if (mob) return (
     <nav style={{ position: 'sticky', top: 0, zIndex: 50, padding: '12px 16px', background: t.bg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: `1px solid ${t.ruleFaint}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <a href="#home" onClick={(e) => { e.preventDefault(); onNav('home'); }} style={{ textDecoration: 'none' }}>
-        <b style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
+        <b style={{ fontFamily: BODY, fontSize: 22, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
       </a>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button onClick={onToggleDark} style={{ width: 36, height: 36, border: `1px solid ${t.ruleFaint}`, borderRadius: 999, background: 'none', color: t.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>{dark ? '☀' : '☾'}</button>
@@ -150,7 +151,7 @@ function SiteNav({ active, dark, loggedIn, avatarUrl, profileLabel, onToggleDark
             borderRadius: 999,
             flexShrink: 0,
           }}>
-            <b style={{ fontFamily: SERIF, fontSize: 25, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
+            <b style={{ fontFamily: BODY, fontSize: 25, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
           </a>
           {/* Links */}
           <div style={{
@@ -326,7 +327,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
 
         {/* Sub */}
         <p style={{
-          fontFamily: SERIF, fontSize: 20, lineHeight: 1.4,
+          fontFamily: BODY, fontSize: 20, lineHeight: 1.4,
           color: t.mute, fontStyle: 'italic', margin: '0 auto 42px', maxWidth: 500,
         }}>
           A shelf of complete, human-reviewed courses — ready to read now.
@@ -351,7 +352,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
                       position: 'absolute',
                       inset: 0,
                       pointerEvents: 'none',
-                      fontFamily: SERIF,
+                      fontFamily: BODY,
                       fontSize: 22,
                       lineHeight: 1.4,
                       color: t.mute,
@@ -381,7 +382,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
                     outline: 'none',
                     background: 'transparent',
                     resize: 'none',
-                    fontFamily: SERIF,
+                    fontFamily: BODY,
                     fontSize: 22,
                     lineHeight: 1.4,
                     color: t.ink,
@@ -599,13 +600,13 @@ function ComparisonSection() {
               <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: row.highlight ? t.red : t.mute }}>
                 {row.source}
               </div>
-              <div style={{ fontFamily: SERIF, fontSize: 22, color: row.highlight ? t.ink : t.inkSoft, fontStyle: row.highlight ? 'normal' : 'italic', lineHeight: 1.2 }}>
+              <div style={{ fontFamily: BODY, fontSize: 22, color: row.highlight ? t.ink : t.inkSoft, fontStyle: row.highlight ? 'normal' : 'italic', lineHeight: 1.2 }}>
                 {row.verdict}
               </div>
             </div>
           ))}
         </div>
-        <p style={{ fontFamily: SERIF, fontSize: 17, color: t.mute, lineHeight: 1.65, margin: '28px 0 0', fontStyle: 'italic', maxWidth: 600 }}>
+        <p style={{ fontFamily: BODY, fontSize: 17, color: t.mute, lineHeight: 1.65, margin: '28px 0 0', fontStyle: 'italic', maxWidth: 600 }}>
           Every Learnor course is a single clean page — read it, take the quiz, do the exercises. Understanding, not hours logged.
         </p>
       </div>
@@ -619,7 +620,7 @@ function PromptIllustration() {
   return (
     <div style={{ border: `1px solid ${t.ink}`, background: t.bg, padding: 18, minHeight: 220 }}>
       <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.14em' }}>$ learnor new</div>
-      <div style={{ fontFamily: SERIF, fontSize: 20, color: t.ink, marginTop: 10, fontStyle: 'italic', lineHeight: 1.3 }}>
+      <div style={{ fontFamily: BODY, fontSize: 20, color: t.ink, marginTop: 10, fontStyle: 'italic', lineHeight: 1.3 }}>
         "teach me conversational spanish,<br />intermediate, in 30 days"
       </div>
       <div style={{ marginTop: 18, borderTop: `1px dashed ${t.ruleDash}`, paddingTop: 12 }}>
@@ -686,8 +687,40 @@ function CountdownIllustration() {
       <div style={{ marginTop: 14, height: 4, background: t.ruleFaint, position: 'relative' }}>
         <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: '94%', background: t.red }} />
       </div>
-      <div style={{ marginTop: 14, fontFamily: SERIF, fontSize: 16, color: t.ink, fontStyle: 'italic' }}>
+      <div style={{ marginTop: 14, fontFamily: BODY, fontSize: 16, color: t.ink, fontStyle: 'italic' }}>
         One module left. 94% complete.
+      </div>
+    </div>
+  );
+}
+
+function IntakeIllustration() {
+  const { t } = useTheme();
+  const msgs = [
+    { who: 'ai', text: 'What do you want to learn?' },
+    { who: 'user', text: 'Pandas — for my new data job' },
+    { who: 'ai', text: 'Got it. Total beginner, or have you used it?' },
+    { who: 'user', text: 'Used it a little. Want real fluency.' },
+  ];
+  return (
+    <div style={{ border: `1px solid ${t.ink}`, background: t.bg, padding: 18, minHeight: 220 }}>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.14em' }}>$ learnor · intake</div>
+      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {msgs.map((m, i) => (
+          <div key={i} style={{
+            maxWidth: '86%', alignSelf: m.who === 'user' ? 'flex-end' : 'flex-start',
+            fontFamily: SANS, fontSize: 12, lineHeight: 1.45, padding: '8px 11px', borderRadius: 13,
+            background: m.who === 'user' ? t.ink : t.paper,
+            color: m.who === 'user' ? t.bg : t.ink,
+            border: m.who === 'user' ? 'none' : `1px solid ${t.ruleFaint}`,
+          }}>{m.text}</div>
+        ))}
+      </div>
+      <div style={{ marginTop: 12, borderTop: `1px dashed ${t.ruleDash}`, paddingTop: 12, background: t.paper, padding: '12px', borderLeft: `2px solid ${t.green}` }}>
+        <div style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.green, marginBottom: 6 }}>Your brief — approve to build</div>
+        <div style={{ fontFamily: BODY, fontStyle: 'italic', fontSize: 14, color: t.ink, lineHeight: 1.4 }}>
+          “Pandas to real fluency, coming in with a little experience — done when you can wrangle data on the job.”
+        </div>
       </div>
     </div>
   );
@@ -698,7 +731,7 @@ function ReviewIllustration() {
   return (
     <div style={{ border: `1px solid ${t.ink}`, background: t.bg, padding: 18, minHeight: 220 }}>
       <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.14em' }}>▸ PENDING REVIEW</div>
-      <div style={{ fontFamily: SERIF, fontSize: 22, color: t.ink, marginTop: 10, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+      <div style={{ fontFamily: BODY, fontSize: 22, color: t.ink, marginTop: 10, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
         Complete SQL — End to End
       </div>
       <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.06em' }}>
@@ -738,8 +771,8 @@ function ReadIllustration() {
           }}>{tab}</span>
         ))}
       </div>
-      <div style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 20, color: t.red, lineHeight: 0.9 }}>03</div>
-      <div style={{ fontFamily: SERIF, fontSize: 20, color: t.ink, marginTop: 2, letterSpacing: '-0.02em' }}>Joining tables</div>
+      <div style={{ fontFamily: BODY, fontStyle: 'italic', fontSize: 20, color: t.red, lineHeight: 0.9 }}>03</div>
+      <div style={{ fontFamily: BODY, fontSize: 20, color: t.ink, marginTop: 2, letterSpacing: '-0.02em' }}>Joining tables</div>
       <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
         {['A join stitches rows from two tables on a shared key.', 'INNER keeps only matches; LEFT keeps every left row.'].map((line) => (
           <div key={line} style={{ fontFamily: SANS, fontSize: 12.5, lineHeight: 1.5, color: t.inkSoft }}>
@@ -762,39 +795,42 @@ function HowSection() {
   const { t, mob } = useTheme();
   const steps = [
     {
-      n: '01', kicker: 'Step one', title: 'Ask for anything.',
-      body: 'Tell Learnor what you want to learn. It drafts a complete course — first principles to real, applied proficiency.',
-      art: <PromptIllustration />,
+      n: '01', kicker: 'You ask', title: 'Tell us exactly what you want.',
+      body: 'Say precisely what you want to learn. Learnor asks a few quick questions — your goal, your level, what "done" looks like for you — then reflects back a short brief for you to approve.',
+      art: <IntakeIllustration />,
     },
     {
-      n: '02', kicker: 'Step two', title: 'AI builds it. A human checks it.',
-      body: 'Every course is fact-checked, then reviewed by a person before it goes live. Nothing half-baked ever reaches you.',
-      art: <ReviewIllustration />,
-    },
-    {
-      n: '03', kicker: 'Step three', title: 'Read it. Prove it.',
-      body: 'One clean page: notes, a quiz, and hands-on exercises. Highlight any line to ask a follow-up. Twice as fast as video.',
+      n: '02', kicker: 'It builds', title: 'Approve it, and it runs itself.',
+      body: 'Once the brief matches your expectations, the whole build is automated: Learnor writes and fact-checks a complete course to fit exactly what you signed off on.',
       art: <ReadIllustration />,
+    },
+    {
+      n: '03', kicker: 'You get it', title: 'A human reviews. Then it’s yours.',
+      body: 'The one manual step — a person reviews it before it ships. Anywhere from 5 minutes to a day later it’s live and in your inbox: one clean page with notes, a quiz, and exercises.',
+      art: <ReviewIllustration />,
     },
   ];
   return (
     <Wrap id="how" bg={t.paper} pad="120px 32px" borderTop borderBottom>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 44 }}>
         <div>
-          <Kicker>How it works</Kicker>
+          <Kicker>Learn whatever you want · on demand</Kicker>
           <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 0', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-            Three steps.<br /><i>One</i> reviewed course.
+            You ask.<br />It gets <i>built for you.</i>
           </h2>
+          <p style={{ fontFamily: BODY, fontSize: 17, color: t.inkSoft, lineHeight: 1.6, margin: '20px 0 0', maxWidth: 520 }}>
+            Tell us precisely what you want to learn and we build it to order — automated end to end, with a single human review before it reaches you. Most land in minutes; the deepest take up to a day.
+          </p>
         </div>
       </div>
       <div style={{ borderTop: `2px solid ${t.ink}` }}>
         {steps.map((s) => (
           <div key={s.n} style={{ display: 'grid', gridTemplateColumns: mob ? '48px 1fr' : '96px 0.9fr 1.1fr', borderBottom: `1px solid ${t.ruleFaint}`, padding: mob ? '24px 0' : '34px 0', gap: mob ? 16 : 40, alignItems: 'start' }}>
-            <div style={{ fontFamily: SERIF, fontSize: mob ? 40 : 70, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', fontStyle: 'italic' }}>{s.n}</div>
+            <div style={{ fontFamily: BODY, fontSize: mob ? 40 : 70, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', fontStyle: 'italic' }}>{s.n}</div>
             <div style={{ gridColumn: mob ? undefined : undefined }}>
               <Kicker color={t.mute}>{s.kicker}</Kicker>
-              <h3 style={{ fontFamily: SERIF, fontSize: mob ? 26 : 38, margin: '10px 0 10px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1.05 }}>{s.title}</h3>
-              <p style={{ fontFamily: SERIF, fontSize: mob ? 16 : 18, lineHeight: 1.35, color: t.inkSoft, margin: 0 }}>{s.body}</p>
+              <h3 style={{ fontFamily: BODY, fontSize: mob ? 26 : 38, margin: '10px 0 10px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1.05 }}>{s.title}</h3>
+              <p style={{ fontFamily: BODY, fontSize: mob ? 16 : 18, lineHeight: 1.35, color: t.inkSoft, margin: 0 }}>{s.body}</p>
             </div>
             {!mob && <div>{s.art}</div>}
           </div>
@@ -913,14 +949,14 @@ function TombstoneViz() {
   return (
     <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, opacity: 0.75, background: t.paper }}>
       <div style={{ fontFamily: MONO, fontSize: 9, color: t.amber, letterSpacing: '0.18em' }}>↺ EXPIRED</div>
-      <div style={{ fontFamily: SERIF, fontSize: 22, color: t.ink, marginTop: 6, letterSpacing: '-0.01em' }}>
+      <div style={{ fontFamily: BODY, fontSize: 22, color: t.ink, marginTop: 6, letterSpacing: '-0.01em' }}>
         Conversational French
       </div>
       <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, marginTop: 4 }}>missed apr 19 · 61% saved · recommitting</div>
       <div style={{ marginTop: 12, display: 'flex', alignItems: 'baseline', gap: 4, color: t.amber, fontFamily: SERIF }}>
         <span style={{ fontSize: 42, letterSpacing: '-0.02em' }}>+14</span>
         <span style={{ fontFamily: MONO, fontSize: 10, color: t.mute }}>D</span>
-        <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 14, color: t.amber, marginLeft: 10 }}>new deadline</span>
+        <span style={{ fontFamily: BODY, fontStyle: 'italic', fontSize: 14, color: t.amber, marginLeft: 10 }}>new deadline</span>
       </div>
     </div>
   );
@@ -937,7 +973,7 @@ function PauseViz() {
         ))}
         <span style={{ fontFamily: MONO, fontSize: 10, color: t.mute, marginLeft: 4 }}>72H</span>
       </div>
-      <div style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 15, color: t.inkSoft, marginTop: 12, lineHeight: 1.4 }}>
+      <div style={{ fontFamily: BODY, fontStyle: 'italic', fontSize: 15, color: t.inkSoft, marginTop: 12, lineHeight: 1.4 }}>
         One shot. Cannot be used in the last 24h.
       </div>
     </div>
@@ -957,7 +993,7 @@ function LeaderboardViz() {
       <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>THIS MONTH</div>
       {rows.map((r, i) => (
         <div key={r.rank} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 0', borderBottom: i < 3 ? `1px dashed ${t.ruleFaint}` : 'none' }}>
-          <span style={{ fontFamily: SERIF, fontSize: i === 0 ? 26 : 16, color: i === 0 ? t.red : t.mute, letterSpacing: '-0.02em', width: 32 }}>{String(r.rank).padStart(2, '0')}</span>
+          <span style={{ fontFamily: BODY, fontSize: i === 0 ? 26 : 16, color: i === 0 ? t.red : t.mute, letterSpacing: '-0.02em', width: 32 }}>{String(r.rank).padStart(2, '0')}</span>
           <span style={{ flex: 1, fontFamily: MONO, fontSize: 11, color: t.ink }}>{r.user}</span>
           <span style={{ fontFamily: MONO, fontSize: 10, color: t.red, letterSpacing: '0.1em' }}>-{r.margin}</span>
         </div>
@@ -982,7 +1018,7 @@ function WeeklyRankViz() {
       </div>
       {rows.map((r, i) => (
         <div key={r.rank} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: i < rows.length - 1 ? `1px solid ${t.ruleFaint}` : 'none', background: r.self ? `${t.red}10` : 'transparent', marginLeft: r.self ? -8 : 0, paddingLeft: r.self ? 8 : 0, paddingRight: r.self ? 8 : 0 }}>
-          <span style={{ fontFamily: SERIF, fontSize: 15, color: i === 0 ? t.red : t.mute, width: 20, flexShrink: 0 }}>{r.rank}</span>
+          <span style={{ fontFamily: BODY, fontSize: 15, color: i === 0 ? t.red : t.mute, width: 20, flexShrink: 0 }}>{r.rank}</span>
           <span style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: r.self ? t.red : t.ink }}>{r.user}</span>
           <span style={{ fontFamily: MONO, fontSize: 9, color: t.mute }}>{r.courses} done</span>
           <span style={{ fontFamily: MONO, fontSize: 9, color: t.amber, letterSpacing: '0.06em' }}>{r.streak}d</span>
@@ -999,7 +1035,7 @@ function NotesViz() {
       <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>LESSON NOTES</div>
       <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {['Primary keys identify one row.', 'SQL filters rows before grouping.', 'Arrays keep values in order.'].map((note, i) => (
-          <div key={note} style={{ display: 'flex', gap: 9, alignItems: 'start', fontFamily: SERIF, fontSize: 15, lineHeight: 1.35, color: t.ink }}>
+          <div key={note} style={{ display: 'flex', gap: 9, alignItems: 'start', fontFamily: BODY, fontSize: 15, lineHeight: 1.35, color: t.ink }}>
             <span style={{ fontFamily: MONO, fontSize: 10, color: t.red, marginTop: 2 }}>{String(i + 1).padStart(2, '0')}</span>
             <span>{note}</span>
           </div>
@@ -1014,7 +1050,7 @@ function QuizViz() {
   return (
     <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
       <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>QUIZ GATE</div>
-      <div style={{ fontFamily: SERIF, fontSize: 17, color: t.ink, marginTop: 10, lineHeight: 1.25 }}>
+      <div style={{ fontFamily: BODY, fontSize: 17, color: t.ink, marginTop: 10, lineHeight: 1.25 }}>
         What does WHERE do?
       </div>
       {['Sorts columns', 'Filters rows', 'Renames a table'].map((option, i) => (
@@ -1046,7 +1082,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
           Read the page.<br />Ask the <span style={{ color: t.red }}>hard parts.</span>
         </h2>
-        <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
+        <p style={{ fontFamily: BODY, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
           Every course is one clean page — notes, examples, code, all in a single reading column. Highlight any line and the tutor answers in context. Coding topics open a practice surface with output checks, right there.
         </p>
       </div>
@@ -1057,7 +1093,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
           <h3 style={{ fontFamily: SERIF, fontSize: 54, margin: '12px 0 16px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1 }}>
             Read, then ask.
           </h3>
-          <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.inkSoft, margin: 0 }}>
+          <p style={{ fontFamily: BODY, fontSize: 20, lineHeight: 1.4, color: t.inkSoft, margin: 0 }}>
             You read at your own pace — every abstract idea followed by a concrete example. Stuck on a line? Highlight it and ask; the tutor answers in context and can read the answer aloud. When the topic turns to code, a practice surface opens with real output checks.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
@@ -1079,7 +1115,7 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
           }}>
             <div style={{ fontFamily: MONO, fontSize: 11, color: t.red, letterSpacing: '0.16em' }}>FEATURE {f.n}</div>
             <h4 style={{ fontFamily: SERIF, fontSize: 32, margin: '10px 0 10px', fontWeight: 400, letterSpacing: '-0.015em', color: t.ink }}>{f.title}</h4>
-            <p style={{ fontFamily: SERIF, fontSize: 17, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>{f.body}</p>
+            <p style={{ fontFamily: BODY, fontSize: 17, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>{f.body}</p>
             <div style={{ marginTop: 24 }}>{f.art}</div>
           </div>
         ))}
@@ -1096,10 +1132,10 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
           <div style={{ fontFamily: MONO, fontSize: 10, color: t.red, letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 10 }}>
             Already in a course?
           </div>
-          <h4 style={{ fontFamily: SERIF, fontSize: mob ? 22 : 30, margin: '0 0 12px', fontWeight: 400, letterSpacing: '-0.01em', color: t.ink }}>
+          <h4 style={{ fontFamily: BODY, fontSize: mob ? 22 : 30, margin: '0 0 12px', fontWeight: 400, letterSpacing: '-0.01em', color: t.ink }}>
             Import from anywhere.
           </h4>
-          <p style={{ fontFamily: SERIF, fontSize: mob ? 15 : 17, color: t.inkSoft, lineHeight: 1.6, margin: 0 }}>
+          <p style={{ fontFamily: BODY, fontSize: mob ? 15 : 17, color: t.inkSoft, lineHeight: 1.6, margin: 0 }}>
             Already watching a Udemy course? Click one bookmark. Learnor reads the full curriculum and teaches you through it — interactively, with a tutor, not just passive video.
           </p>
         </div>
@@ -1121,7 +1157,7 @@ function HandsOnViz() {
   return (
     <div style={{ border: `1px solid ${t.ruleFaint}`, padding: 16, background: t.paper }}>
       <div style={{ fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.18em' }}>HANDS-ON</div>
-      <div style={{ fontFamily: SERIF, fontSize: 15, color: t.ink, marginTop: 10, lineHeight: 1.3 }}>
+      <div style={{ fontFamily: BODY, fontSize: 15, color: t.ink, marginTop: 10, lineHeight: 1.3 }}>
         Write the SQL query that returns all orders placed after Jan 1st.
       </div>
       <div style={{ marginTop: 10, padding: '8px 10px', border: `1px dashed ${t.ruleFaint}`, fontFamily: MONO, fontSize: 11, color: t.mute, lineHeight: 1.6 }}>
@@ -1176,13 +1212,13 @@ function AfterLessonSection() {
             borderRight: !mob && i < steps.length - 1 ? `1px solid ${t.ruleFaint}` : 'none',
           }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
-              <span style={{ fontFamily: SERIF, fontSize: mob ? 40 : 52, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', fontStyle: 'italic' }}>{s.n}</span>
+              <span style={{ fontFamily: BODY, fontSize: mob ? 40 : 52, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', fontStyle: 'italic' }}>{s.n}</span>
               <Kicker color={t.mute}>{s.label}</Kicker>
             </div>
-            <h3 style={{ fontFamily: SERIF, fontSize: mob ? 26 : 32, margin: '0 0 10px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1.05 }}>
+            <h3 style={{ fontFamily: BODY, fontSize: mob ? 26 : 32, margin: '0 0 10px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1.05 }}>
               {s.title}
             </h3>
-            <p style={{ fontFamily: SERIF, fontSize: mob ? 15 : 17, lineHeight: 1.5, color: t.inkSoft, margin: '0 0 20px' }}>
+            <p style={{ fontFamily: BODY, fontSize: mob ? 15 : 17, lineHeight: 1.5, color: t.inkSoft, margin: '0 0 20px' }}>
               {s.body}
             </p>
             {s.art}
@@ -1280,7 +1316,7 @@ function StudyMockup() {
       {/* Notes content — single column, borderTop like the real page */}
       <div style={{ borderTop: `1px solid ${RULE}`, padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {/* h2 */}
-        <div style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 400, color: INK, letterSpacing: '-0.02em', borderBottom: `1px solid ${RULE}`, paddingBottom: 6, marginBottom: 4 }}>
+        <div style={{ fontFamily: BODY, fontSize: 20, fontWeight: 400, color: INK, letterSpacing: '-0.02em', borderBottom: `1px solid ${RULE}`, paddingBottom: 6, marginBottom: 4 }}>
           Overview
         </div>
 
@@ -1348,7 +1384,7 @@ function StudyModeSection() {
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
           Type a topic.<br />Get the <span style={{ color: t.red }}>notes.</span>
         </h2>
-        <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
+        <p style={{ fontFamily: BODY, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
           Or upload a PDF and skip the highlights. Learnor reads it, writes structured notes — with visual slides embedded where they help — then tests you on it.
         </p>
       </div>
@@ -1369,7 +1405,7 @@ function StudyModeSection() {
                 <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 38, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', flexShrink: 0 }}>{n}</span>
                 <div>
                   <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.ink, marginBottom: 5 }}>{title}</div>
-                  <p style={{ fontFamily: SERIF, fontSize: 17, lineHeight: 1.5, color: t.inkSoft, margin: 0 }}>{body}</p>
+                  <p style={{ fontFamily: BODY, fontSize: 17, lineHeight: 1.5, color: t.inkSoft, margin: 0 }}>{body}</p>
                 </div>
               </div>
             ))}
@@ -1484,7 +1520,7 @@ function NotesPageMockup() {
           <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 36, color: t.red, lineHeight: 0.9, letterSpacing: '-0.03em', flexShrink: 0 }}>01</span>
           <div>
             <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: muteCol, marginBottom: 3 }}>Module</div>
-            <div style={{ fontFamily: SERIF, fontSize: 18, letterSpacing: '-0.025em', color: inkCol, lineHeight: 1.1 }}>Foundations</div>
+            <div style={{ fontFamily: BODY, fontSize: 18, letterSpacing: '-0.025em', color: inkCol, lineHeight: 1.1 }}>Foundations</div>
           </div>
         </div>
 
@@ -1503,7 +1539,7 @@ function NotesPageMockup() {
               <div key={i} style={{ fontFamily: MONO, fontSize: 7, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.red, marginBottom: 2 }}>{line.text}</div>
             );
             if (line.type === 'h') return (
-              <div key={i} style={{ fontFamily: SERIF, fontSize: 16, letterSpacing: '-0.02em', color: inkCol, lineHeight: 1.15, marginBottom: 4 }}>{line.text}</div>
+              <div key={i} style={{ fontFamily: BODY, fontSize: 16, letterSpacing: '-0.02em', color: inkCol, lineHeight: 1.15, marginBottom: 4 }}>{line.text}</div>
             );
             if (line.type === 'bullet') return (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
@@ -1536,10 +1572,10 @@ function NotesSectionLanding({ onNav }: { onNav: (k: string) => void }) {
           <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(48px, 6vw, 88px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
             Every lesson,<br /><i>distilled.</i>
           </h2>
-          <p style={{ fontFamily: SERIF, fontSize: 20, color: t.inkSoft, lineHeight: 1.45, margin: '0 0 20px' }}>
+          <p style={{ fontFamily: BODY, fontSize: 20, color: t.inkSoft, lineHeight: 1.45, margin: '0 0 20px' }}>
             After each lesson the tutor writes you a clean set of notes — the key ideas, the gotchas, the examples that stuck. Organised by module and lesson, always there when you need them.
           </p>
-          <p style={{ fontFamily: SERIF, fontSize: 20, color: t.inkSoft, lineHeight: 1.45, margin: 0 }}>
+          <p style={{ fontFamily: BODY, fontSize: 20, color: t.inkSoft, lineHeight: 1.45, margin: 0 }}>
             Access from any course card. No hunting through chat history.
           </p>
           <div style={{ marginTop: 32, display: 'flex', gap: 12 }}>
@@ -1586,7 +1622,7 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 20px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
           Read for free.<br /><i>Upgrade for more.</i>
         </h2>
-        <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
+        <p style={{ fontFamily: BODY, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
           The whole shelf is free to read. Upgrade for unlimited requests, notes, and voice.
         </p>
       </div>
@@ -1697,7 +1733,7 @@ function FAQSection() {
           <h2 style={{ fontFamily: SERIF, fontSize: 64, margin: '16px 0 20px', fontWeight: 400, letterSpacing: '-0.03em', color: t.ink, lineHeight: 0.95 }}>
             The only questions that matter.
           </h2>
-          <p style={{ fontFamily: SERIF, fontSize: 18, color: t.mute, lineHeight: 1.5, margin: 0 }}>
+          <p style={{ fontFamily: BODY, fontSize: 18, color: t.mute, lineHeight: 1.5, margin: 0 }}>
             If your question isn't here, email us at ask@learnor.ai.
           </p>
         </div>
@@ -1712,7 +1748,7 @@ function FAQSection() {
                 <span style={{ flex: 1 }}>{q}</span>
                 <span style={{ fontFamily: MONO, fontSize: 16, color: t.mute }}>+</span>
               </summary>
-              <div style={{ fontFamily: SERIF, fontSize: 18, color: t.inkSoft, lineHeight: 1.55, marginTop: 12, paddingLeft: 48 }}>{a}</div>
+              <div style={{ fontFamily: BODY, fontSize: 18, color: t.inkSoft, lineHeight: 1.55, marginTop: 12, paddingLeft: 48 }}>{a}</div>
             </details>
           ))}
         </div>
@@ -1734,7 +1770,7 @@ function InstructorSection({ onNav }: { onNav: (k: string) => void }) {
           <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(44px, 6vw, 88px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
             Your knowledge.<br />AI delivery.<br /><i style={{ color: t.red }}>You still get paid.</i>
           </h2>
-          <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.4, margin: '0 0 32px' }}>
+          <p style={{ fontFamily: BODY, fontSize: 22, color: t.inkSoft, lineHeight: 1.4, margin: '0 0 32px' }}>
             Upload your notes. Learnor turns them into a deadline-driven course. Students learn from the AI. You review, publish, and get paid.
           </p>
           <div style={{ display: 'flex', gap: 12 }}>
@@ -1773,7 +1809,7 @@ function InstructorSection({ onNav }: { onNav: (k: string) => void }) {
                 <div style={{ fontFamily: SERIF, fontSize: 44, color: t.red, letterSpacing: '-0.02em', lineHeight: 1, fontStyle: 'italic', flexShrink: 0, width: 48 }}>{step.n}</div>
                 <div>
                   <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', color: t.ink, textTransform: 'uppercase', marginBottom: 6 }}>{step.title}</div>
-                  <div style={{ fontFamily: SERIF, fontSize: 17, color: t.inkSoft, lineHeight: 1.5 }}>{step.body}</div>
+                  <div style={{ fontFamily: BODY, fontSize: 17, color: t.inkSoft, lineHeight: 1.5 }}>{step.body}</div>
                 </div>
               </div>
             ))}
@@ -1783,7 +1819,7 @@ function InstructorSection({ onNav }: { onNav: (k: string) => void }) {
             <div style={{ fontFamily: MONO, fontSize: 10, color: t.red, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 8 }}>
               A word of caution
             </div>
-            <p style={{ fontFamily: SERIF, fontSize: 16, color: t.inkSoft, lineHeight: 1.55, margin: 0 }}>
+            <p style={{ fontFamily: BODY, fontSize: 16, color: t.inkSoft, lineHeight: 1.55, margin: 0 }}>
               It teaches your material, not your personality. Good for scale. Bad for performance art.
             </p>
           </div>
@@ -1807,7 +1843,7 @@ function FinalCTA({ onNav }: { onNav: (k: string) => void }) {
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(72px, 11vw, 160px)', margin: '20px 0', letterSpacing: '-0.035em', fontWeight: 400, color: t.bg, lineHeight: 0.9 }}>
           Pick a thing.<br />Start reading.<br /><i style={{ color: t.red }}>Today.</i>
         </h2>
-        <p style={{ fontFamily: SERIF, fontSize: 24, color: mutedText, fontStyle: 'italic', margin: '32px auto', maxWidth: 600, lineHeight: 1.4 }}>
+        <p style={{ fontFamily: BODY, fontSize: 24, color: mutedText, fontStyle: 'italic', margin: '32px auto', maxWidth: 600, lineHeight: 1.4 }}>
           The shelf is already full — complete courses, reviewed and waiting. Open one, or ask for the thing no one's built yet.
         </p>
         <button onClick={() => onNav('browse')} style={{
@@ -1843,7 +1879,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
                 <span style={{ width: 8, height: 8, background: t.red, display: 'inline-block', borderRadius: 999, transform: 'translateY(-3px)' }} />
                 <b style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
               </div>
-              <p style={{ fontFamily: SERIF, fontSize: 16, lineHeight: 1.4, color: t.mute, marginTop: 10, marginBottom: 0 }}>
+              <p style={{ fontFamily: BODY, fontSize: 16, lineHeight: 1.4, color: t.mute, marginTop: 10, marginBottom: 0 }}>
                 An AI learning platform. A shelf of complete courses, each reviewed by a human. Learn whatever you want.
               </p>
             </>
@@ -1857,7 +1893,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
                 <span style={{ width: 10, height: 10, background: t.red, display: 'inline-block', borderRadius: 999, transform: 'translateY(-4px)' }} />
                 <b style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
               </div>
-              <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
+              <p style={{ fontFamily: BODY, fontSize: 20, lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
                 An AI learning platform. A shelf of complete courses, each reviewed by a human. Learn whatever you want.
               </p>
               <div style={{ marginTop: 20, padding: '10px 14px', border: `1px solid ${t.ink}`, display: 'inline-flex', gap: 16, alignItems: 'center', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
@@ -1872,7 +1908,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
               <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.mute, marginBottom: 12 }}>{heading}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: mob ? 10 : 8 }}>
                 {links.map(([k, l]) => (
-                  <a key={l} href={`#${k}`} onClick={(e) => { e.preventDefault(); if (k !== '#') onNav(k); }} style={{ fontFamily: SERIF, fontSize: mob ? 15 : 16, color: t.ink, textDecoration: 'none', cursor: 'pointer' }}>{l}</a>
+                  <a key={l} href={`#${k}`} onClick={(e) => { e.preventDefault(); if (k !== '#') onNav(k); }} style={{ fontFamily: BODY, fontSize: mob ? 15 : 16, color: t.ink, textDecoration: 'none', cursor: 'pointer' }}>{l}</a>
                 ))}
               </div>
             </div>
