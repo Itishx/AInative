@@ -3,7 +3,7 @@ import type { LearnorContent } from '../lib/learnor';
 // Launch course — hand-authored, Itish-directed. Follows the Learnor pattern:
 // every section moves from an absolute definition → plain explanation →
 // concrete example → visual where it helps → hands-on code. Visuals are
-// inline SVG in ```svg fences (theme-aware via currentColor + --c-red).
+// hand-crafted diagrams referenced by viz fences (see courseVisuals.tsx).
 
 export const databricks: LearnorContent = {
   title: 'Databricks — End to End',
@@ -24,18 +24,7 @@ Databricks collapses those two into one. You keep all your data as cheap files i
 
 A concrete example: imagine a ride-hailing company. Raw GPS pings and app events land as files in cloud storage (the "lake" part). On Databricks, the same platform cleans those events, joins them into trip records, powers the analysts' dashboards, and trains the model that predicts surge pricing — no copying between systems.
 
-\`\`\`svg
-<svg viewBox="0 0 520 210" width="100%" style="max-width:520px;height:auto;font-family:monospace;font-size:11px">
-  <text x="10" y="18" fill="currentColor" opacity="0.6">THE LAKEHOUSE, TOP TO BOTTOM</text>
-  <g style="color:var(--c-red)"><rect x="10" y="30" width="500" height="34" rx="6" fill="currentColor" opacity="0.10" stroke="currentColor"/></g>
-  <text x="24" y="51" fill="currentColor">BI &amp; dashboards  ·  Data science  ·  Machine learning</text>
-  <rect x="10" y="74" width="500" height="34" rx="6" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/>
-  <text x="24" y="95" fill="currentColor">Apache Spark + Photon  —  the compute engine</text>
-  <g style="color:var(--c-red)"><rect x="10" y="118" width="500" height="34" rx="6" fill="currentColor" opacity="0.10" stroke="currentColor"/></g>
-  <text x="24" y="139" fill="currentColor">Delta Lake  —  reliability, ACID, time travel over files</text>
-  <rect x="10" y="162" width="500" height="34" rx="6" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/>
-  <text x="24" y="183" fill="currentColor">Cloud object storage  —  cheap files (Parquet) on S3 / ADLS / GCS</text>
-</svg>
+\`\`\`viz lakehouse
 \`\`\`
 
 Read the stack bottom-up: cheap files at the base, a reliability layer (Delta) over them, a fast engine (Spark) over that, and every kind of workload — dashboards, notebooks, ML — sharing the exact same data at the top.`,
@@ -101,23 +90,7 @@ The key mental model: a notebook cell doesn't run *on your laptop*. It runs on a
 
 When you run a cell, the driver splits the work into tasks and hands them to the workers. Ten workers can each crunch a tenth of your data at the same time — that parallelism is the whole reason big data is fast here.
 
-\`\`\`svg
-<svg viewBox="0 0 520 180" width="100%" style="max-width:520px;height:auto;font-family:monospace;font-size:11px">
-  <g style="color:var(--c-red)"><rect x="200" y="14" width="120" height="40" rx="6" fill="currentColor" opacity="0.12" stroke="currentColor"/></g>
-  <text x="228" y="38" fill="currentColor">DRIVER</text>
-  <line x1="130" y1="90" x2="260" y2="54" stroke="currentColor" stroke-opacity="0.4"/>
-  <line x1="260" y1="54" x2="260" y2="90" stroke="currentColor" stroke-opacity="0.4"/>
-  <line x1="390" y1="90" x2="260" y2="54" stroke="currentColor" stroke-opacity="0.4"/>
-  <g fill="currentColor" font-family="monospace">
-    <rect x="80" y="90" width="100" height="40" rx="6" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/>
-    <rect x="210" y="90" width="100" height="40" rx="6" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/>
-    <rect x="340" y="90" width="100" height="40" rx="6" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/>
-  </g>
-  <text x="104" y="114" fill="currentColor">worker</text>
-  <text x="234" y="114" fill="currentColor">worker</text>
-  <text x="364" y="114" fill="currentColor">worker</text>
-  <text x="80" y="160" fill="currentColor" opacity="0.6">driver splits work → workers run tasks in parallel → results return</text>
-</svg>
+\`\`\`viz cluster
 \`\`\`
 
 There are two kinds of clusters, and picking the wrong one wastes money:
@@ -138,20 +111,7 @@ Two more terms you'll see:
 
 The single most important idea in Spark is **lazy evaluation**. When you write transformations — \`filter\`, \`select\`, \`join\`, \`groupBy\` — Spark does *not* run them. It just records your recipe as a plan. Nothing actually computes until you call an **action** — something that needs a real result, like \`show()\`, \`count()\`, or writing to a table.
 
-\`\`\`svg
-<svg viewBox="0 0 520 150" width="100%" style="max-width:520px;height:auto;font-family:monospace;font-size:11px">
-  <text x="10" y="16" fill="currentColor" opacity="0.6">TRANSFORMATIONS (lazy — just a plan)</text>
-  <rect x="10" y="26" width="90" height="30" rx="5" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/><text x="26" y="45" fill="currentColor">read</text>
-  <rect x="120" y="26" width="90" height="30" rx="5" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/><text x="132" y="45" fill="currentColor">filter</text>
-  <rect x="230" y="26" width="90" height="30" rx="5" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/><text x="238" y="45" fill="currentColor">groupBy</text>
-  <line x1="100" y1="41" x2="120" y2="41" stroke="currentColor" stroke-opacity="0.4"/>
-  <line x1="210" y1="41" x2="230" y2="41" stroke="currentColor" stroke-opacity="0.4"/>
-  <line x1="320" y1="41" x2="360" y2="41" stroke="currentColor" stroke-opacity="0.4" stroke-dasharray="3 3"/>
-  <g style="color:var(--c-red)"><rect x="360" y="26" width="150" height="30" rx="5" fill="currentColor" opacity="0.12" stroke="currentColor"/></g>
-  <text x="374" y="45" fill="currentColor">.show()  ← ACTION</text>
-  <text x="10" y="95" fill="currentColor" opacity="0.85">Only the action triggers real computation. Spark then optimises</text>
-  <text x="10" y="112" fill="currentColor" opacity="0.85">the whole recipe at once (e.g. pushing the filter down first).</text>
-</svg>
+\`\`\`viz spark-dag
 \`\`\`
 
 Why this matters: because Spark sees your whole recipe before running it, it can **optimise** — for instance, applying a \`filter\` *before* an expensive \`join\` so it moves less data. You get that for free.
@@ -174,22 +134,7 @@ A common beginner trap: wondering why a cell "did nothing." It's because you onl
 
 Raw files are fragile: if a job crashes mid-write, you're left with half a table. Delta fixes this with **ACID transactions**: a write either fully happens or not at all. It does this by keeping a folder called \`_delta_log\` next to your data. Every change appends a new entry describing exactly which files are now part of the table.
 
-\`\`\`svg
-<svg viewBox="0 0 520 170" width="100%" style="max-width:520px;height:auto;font-family:monospace;font-size:11px">
-  <text x="10" y="16" fill="currentColor" opacity="0.6">A DELTA TABLE ON DISK</text>
-  <rect x="10" y="28" width="240" height="120" rx="6" fill="currentColor" opacity="0.04" stroke="currentColor" stroke-opacity="0.3"/>
-  <text x="24" y="50" fill="currentColor" opacity="0.7">data files (Parquet)</text>
-  <rect x="24" y="60" width="90" height="24" rx="4" fill="currentColor" opacity="0.08"/><text x="34" y="76" fill="currentColor">part-001</text>
-  <rect x="124" y="60" width="90" height="24" rx="4" fill="currentColor" opacity="0.08"/><text x="134" y="76" fill="currentColor">part-002</text>
-  <rect x="24" y="92" width="90" height="24" rx="4" fill="currentColor" opacity="0.08"/><text x="34" y="108" fill="currentColor">part-003</text>
-  <g style="color:var(--c-red)">
-  <rect x="270" y="28" width="240" height="120" rx="6" fill="currentColor" opacity="0.08" stroke="currentColor"/>
-  <text x="284" y="50" fill="currentColor" opacity="0.85">_delta_log/</text>
-  <text x="284" y="74" fill="currentColor">000.json → +part-001,002</text>
-  <text x="284" y="96" fill="currentColor">001.json → +part-003</text>
-  <text x="284" y="118" fill="currentColor">002.json → -part-001 (deleted)</text>
-  </g>
-</svg>
+\`\`\`viz delta-table
 \`\`\`
 
 Because every version is logged, you get superpowers ordinary files can't offer:
@@ -301,21 +246,7 @@ Use whichever language fits the moment: SQL for quick aggregations and dashboard
 
 Rather than one giant messy transformation, you build a clean assembly line. Raw data comes in as bronze, gets cleaned into silver, and is aggregated into gold for consumption. Each layer is a Delta table.
 
-\`\`\`svg
-<svg viewBox="0 0 520 150" width="100%" style="max-width:520px;height:auto;font-family:monospace;font-size:11px">
-  <rect x="10" y="40" width="150" height="60" rx="8" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.35"/>
-  <text x="50" y="66" fill="currentColor" opacity="0.85">BRONZE</text>
-  <text x="26" y="86" fill="currentColor" opacity="0.6">raw, as-ingested</text>
-  <rect x="185" y="40" width="150" height="60" rx="8" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.35"/>
-  <text x="228" y="66" fill="currentColor" opacity="0.85">SILVER</text>
-  <text x="200" y="86" fill="currentColor" opacity="0.6">cleaned, joined</text>
-  <g style="color:var(--c-red)"><rect x="360" y="40" width="150" height="60" rx="8" fill="currentColor" opacity="0.12" stroke="currentColor"/></g>
-  <text x="404" y="66" fill="currentColor">GOLD</text>
-  <text x="374" y="86" fill="currentColor" opacity="0.7">business-ready</text>
-  <text x="168" y="74" fill="currentColor" opacity="0.5">→</text>
-  <text x="343" y="74" fill="currentColor" opacity="0.5">→</text>
-  <text x="10" y="130" fill="currentColor" opacity="0.6">clean once, reuse everywhere — dashboards &amp; ML read gold</text>
-</svg>
+\`\`\`viz medallion
 \`\`\`
 
 Walk it through with our trips example:
@@ -345,21 +276,7 @@ Why bother with three layers? Because when the dashboard looks wrong, you can tr
 
 Without governance, "who can see the salary table?" becomes a nightmare. Unity Catalog answers it with a clear three-level naming hierarchy and permissions you grant with plain SQL.
 
-\`\`\`svg
-<svg viewBox="0 0 520 165" width="100%" style="max-width:520px;height:auto;font-family:monospace;font-size:11px">
-  <g style="color:var(--c-red)"><rect x="10" y="14" width="180" height="30" rx="5" fill="currentColor" opacity="0.10" stroke="currentColor"/></g>
-  <text x="24" y="34" fill="currentColor">metastore (per region)</text>
-  <line x1="30" y1="44" x2="30" y2="60" stroke="currentColor" stroke-opacity="0.4"/>
-  <rect x="30" y="60" width="180" height="28" rx="5" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/>
-  <text x="44" y="79" fill="currentColor">catalog  (e.g. prod)</text>
-  <line x1="50" y1="88" x2="50" y2="104" stroke="currentColor" stroke-opacity="0.4"/>
-  <rect x="50" y="104" width="180" height="28" rx="5" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.3"/>
-  <text x="64" y="123" fill="currentColor">schema  (e.g. sales)</text>
-  <line x1="70" y1="132" x2="70" y2="148" stroke="currentColor" stroke-opacity="0.4"/>
-  <rect x="70" y="148" width="180" height="14" rx="4" fill="currentColor" opacity="0.08"/>
-  <text x="300" y="112" fill="currentColor" opacity="0.85">full name:</text>
-  <text x="300" y="132" fill="currentColor">prod.sales.trips</text>
-</svg>
+\`\`\`viz unity-catalog
 \`\`\`
 
 The hierarchy is **catalog → schema → table**, so every table has a three-part name like \`prod.sales.trips\`. A **metastore** sits above catalogs and is shared across all the workspaces in a region, so one definition of a table is visible everywhere — no more copies drifting apart.
@@ -382,20 +299,7 @@ Beyond access control, Unity Catalog also tracks **lineage** (which tables feed 
 
 Exploring in a notebook is step one. Production means it runs every night without you clicking anything. A **Workflow** lets you chain **tasks** (each task is a notebook or script) into a dependency graph, so bronze runs, then silver, then gold — in order, automatically.
 
-\`\`\`svg
-<svg viewBox="0 0 520 120" width="100%" style="max-width:520px;height:auto;font-family:monospace;font-size:11px">
-  <rect x="10" y="40" width="110" height="40" rx="6" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.35"/>
-  <text x="30" y="64" fill="currentColor">ingest→bronze</text>
-  <rect x="170" y="40" width="110" height="40" rx="6" fill="currentColor" opacity="0.05" stroke="currentColor" stroke-opacity="0.35"/>
-  <text x="188" y="64" fill="currentColor">clean→silver</text>
-  <g style="color:var(--c-red)"><rect x="330" y="40" width="110" height="40" rx="6" fill="currentColor" opacity="0.12" stroke="currentColor"/></g>
-  <text x="345" y="64" fill="currentColor">aggregate→gold</text>
-  <line x1="120" y1="60" x2="170" y2="60" stroke="currentColor" stroke-opacity="0.5" marker-end=""/>
-  <text x="140" y="55" fill="currentColor" opacity="0.6">→</text>
-  <line x1="280" y1="60" x2="330" y2="60" stroke="currentColor" stroke-opacity="0.5"/>
-  <text x="300" y="55" fill="currentColor" opacity="0.6">→</text>
-  <text x="10" y="104" fill="currentColor" opacity="0.6">runs nightly on a job cluster · retries on failure · alerts on error</text>
-</svg>
+\`\`\`viz job-workflow
 \`\`\`
 
 You configure a job in the Workflows UI (or as code): pick the notebook, set the schedule (e.g. daily at 2am), choose a **job cluster** (created just for this run, then destroyed), and add alerts on failure. Tasks can depend on each other, retry automatically, and pass parameters.

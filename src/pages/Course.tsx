@@ -3,10 +3,44 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../lib/theme';
 import { askInCourse, fetchCourse, isLocalCourse, LearnorCourse } from '../lib/learnor';
 import { apiUrl } from '../api';
+import { VISUALS } from './courseVisuals';
 
 const SERIF = '"Instrument Serif", "EB Garamond", Georgia, serif';
 const SANS = '"Inter", -apple-system, system-ui, sans-serif';
 const MONO = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace';
+
+// ── Lightweight syntax highlighting for dark code blocks ──────────────────────
+const CODE_KW = new Set([
+  // SQL
+  'SELECT', 'FROM', 'WHERE', 'GROUP', 'ORDER', 'BY', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'ON', 'USING', 'AS', 'AND', 'OR', 'NOT', 'NULL', 'IS', 'IN', 'CREATE', 'REPLACE', 'TABLE', 'VIEW', 'TEMP', 'GLOBAL', 'CATALOG', 'SCHEMA', 'INSERT', 'INTO', 'UPDATE', 'DELETE', 'MERGE', 'MATCHED', 'THEN', 'WHEN', 'VALUES', 'SET', 'VERSION', 'TIMESTAMP', 'OF', 'DESCRIBE', 'HISTORY', 'RESTORE', 'TO', 'GRANT', 'REVOKE', 'USE', 'DISTINCT', 'LIMIT', 'OVERWRITE', 'DATE', 'ROUND', 'AVG', 'SUM', 'COUNT', 'MAX', 'MIN', 'DESC', 'ASC',
+  // Python / PySpark
+  'def', 'return', 'import', 'for', 'while', 'with', 'if', 'elif', 'else', 'True', 'False', 'None', 'class', 'lambda', 'and', 'or', 'not', 'in',
+]);
+const CODE_COLORS = { kw: '#84b8a8', str: '#dda15e', com: 'rgba(243,238,226,0.42)', num: '#8fbf7f', ink: '#f3eee2' };
+
+function highlightLine(line: string, keyIdx: number): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  const re = /(--[^\n]*|#[^\n]*)|('[^']*'|"[^"]*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let k = 0;
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > last) out.push(line.slice(last, m.index));
+    const key = `${keyIdx}-${k++}`;
+    if (m[1]) out.push(<span key={key} style={{ color: CODE_COLORS.com, fontStyle: 'italic' }}>{m[1]}</span>);
+    else if (m[2]) out.push(<span key={key} style={{ color: CODE_COLORS.str }}>{m[2]}</span>);
+    else if (m[3]) out.push(<span key={key} style={{ color: CODE_COLORS.num }}>{m[3]}</span>);
+    else if (m[4]) {
+      const w = m[4];
+      out.push(CODE_KW.has(w) || CODE_KW.has(w.toUpperCase())
+        ? <span key={key} style={{ color: CODE_COLORS.kw }}>{w}</span>
+        : w);
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) out.push(line.slice(last));
+  return out;
+}
 
 const C = {
   bg: 'var(--c-bg)',
@@ -57,27 +91,27 @@ export function Markdown({ text }: { text: string }) {
       i++;
       while (i < lines.length && !lines[i].trim().startsWith('```')) { code.push(lines[i]); i++; }
       i++;
-      // ```svg → render the authored inline SVG as a theme-aware visual
-      if (lang === 'svg') {
-        out.push(
-          <figure
-            key={`svg-${i}`}
-            aria-hidden="true"
-            style={{ margin: '22px 0', padding: '18px', border: `1px solid ${C.faint}`, borderRadius: 12, background: C.softer, color: C.ink, display: 'flex', justifyContent: 'center' }}
-            dangerouslySetInnerHTML={{ __html: code.join('\n') }}
-          />,
-        );
+      // ```viz <id> → render a hand-crafted diagram component
+      if (lang.startsWith('viz')) {
+        const id = lang.slice(3).trim();
+        const Comp = VISUALS[id];
+        if (Comp) {
+          out.push(<figure key={`viz-${i}`} style={{ margin: '24px 0' }}><Comp /></figure>);
+        }
         continue;
       }
+      // Dark terminal-style code block with light syntax highlighting
       out.push(
-        <div key={`code-${i}`} style={{ margin: '16px 0 20px', borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.faint}` }}>
+        <div key={`code-${i}`} style={{ margin: '18px 0 22px', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(243,238,226,0.10)', background: '#100e0b' }}>
           {lang && (
-            <div style={{ padding: '6px 14px', background: C.softer, borderBottom: `1px solid ${C.faint}`, fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.mute }}>
+            <div style={{ padding: '8px 16px', borderBottom: '1px solid rgba(243,238,226,0.08)', fontFamily: MONO, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#84b8a8' }}>
               {lang}
             </div>
           )}
-          <pre style={{ margin: 0, padding: '14px 18px', background: C.softer, fontFamily: MONO, fontSize: 13, lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre', color: C.ink }}>
-            <code>{code.join('\n')}</code>
+          <pre style={{ margin: 0, padding: '16px 18px', fontFamily: MONO, fontSize: 12.5, lineHeight: 1.7, overflowX: 'auto', whiteSpace: 'pre', color: CODE_COLORS.ink }}>
+            <code>{code.map((line, li) => (
+              <span key={li}>{highlightLine(line, li)}{'\n'}</span>
+            ))}</code>
           </pre>
         </div>,
       );
@@ -362,11 +396,11 @@ function AskPanel({ course, previewKey, selection, context, onClose }: {
 
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, bottom: 0, width: 'min(400px, 92vw)', zIndex: 60,
-      background: C.paper, borderRight: `1px solid ${C.faint}`, boxShadow: '24px 0 80px rgba(0,0,0,0.18)',
+      position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(400px, 92vw)', zIndex: 60,
+      background: C.paper, borderLeft: `1px solid ${C.faint}`, boxShadow: '-24px 0 80px rgba(0,0,0,0.18)',
       display: 'flex', flexDirection: 'column', animation: 'askSlideIn 0.22s ease',
     }}>
-      <style>{'@keyframes askSlideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}'}</style>
+      <style>{'@keyframes askSlideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}'}</style>
       <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.faint}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.red }}>
           ✦ Learnor explains
@@ -614,8 +648,9 @@ export default function Course() {
         </nav>
       </aside>
 
-      {/* Main column */}
-      <div ref={contentRef} style={{ marginLeft: 280, minHeight: '100vh', padding: '48px clamp(32px, 6vw, 96px) 120px', maxWidth: 980 }} className="course-main">
+      {/* Main column — centered reading measure in the space beside the sidebar */}
+      <div ref={contentRef} style={{ marginLeft: 280, minHeight: '100vh', display: 'flex', justifyContent: 'center', padding: '48px clamp(24px, 4vw, 56px) 120px' }} className="course-main">
+       <div style={{ width: '100%', maxWidth: 768 }}>
         {/* Header */}
         <div style={{ marginBottom: 40, paddingBottom: 32, borderBottom: `2px solid ${C.ink}` }}>
           <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.2em', textTransform: 'uppercase', color: C.red, marginBottom: 12 }}>
@@ -671,6 +706,7 @@ export default function Course() {
 
         {tab === 'quiz' && <QuizTab course={course} />}
         {tab === 'exercises' && <ExercisesTab course={course} />}
+       </div>
       </div>
 
       {/* Floating "explain" button on selection */}
