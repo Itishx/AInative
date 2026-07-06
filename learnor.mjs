@@ -598,26 +598,36 @@ router.get('/course/:slug', async (req, res) => {
 // Highlight-to-ask: answer a question about a selected passage, in course context.
 router.post('/ask', async (req, res) => {
   const { slug, key, selection, question } = req.body || {};
-  if (!slug || !selection) return res.status(400).json({ error: 'slug and selection required' });
+  if (!selection) return res.status(400).json({ error: 'selection required' });
   try {
-    const rows = await sbSelect(
-      'courses',
-      `slug=eq.${encodeURIComponent(String(slug))}&select=title,subject,published_at,preview_token,content&limit=1`,
-    );
-    const course = rows[0];
-    if (!course || (!course.published_at && key !== course.preview_token)) {
-      return res.status(404).json({ error: 'Course not found' });
-    }
     const sel = String(selection).slice(0, 1500);
-    const context = (course.content?.sections || [])
-      .filter((s) => s.body?.includes(sel.slice(0, 80)))
-      .map((s) => `## ${s.heading}\n${s.body}`)
-      .join('\n\n')
-      .slice(0, 12000)
-      || (course.content?.sections || []).map((s) => `## ${s.heading}`).join('\n');
+    let title = String(req.body?.title || 'this course').slice(0, 160);
+    let subject = String(req.body?.subject || '').slice(0, 80);
+    // Bundled/static courses send their own context so no DB lookup is needed.
+    let context = String(req.body?.context || '').slice(0, 12000);
+
+    if (!context) {
+      if (!slug) return res.status(400).json({ error: 'slug or context required' });
+      const rows = await sbSelect(
+        'courses',
+        `slug=eq.${encodeURIComponent(String(slug))}&select=title,subject,published_at,preview_token,content&limit=1`,
+      );
+      const course = rows[0];
+      if (!course || (!course.published_at && key !== course.preview_token)) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+      title = course.title;
+      subject = course.subject || '';
+      context = (course.content?.sections || [])
+        .filter((s) => s.body?.includes(sel.slice(0, 80)))
+        .map((s) => `## ${s.heading}\n${s.body}`)
+        .join('\n\n')
+        .slice(0, 12000)
+        || (course.content?.sections || []).map((s) => `## ${s.heading}`).join('\n');
+    }
 
     const answer = await callLLM(
-      `You are Learnor's in-course tutor. The learner highlighted a passage in the course "${course.title}" (${course.subject}) and asked about it. Answer in plain, warm prose — 2 to 5 sentences, a short code snippet only if it genuinely helps. Stay grounded in the course content provided.`,
+      `You are Learnor's in-course tutor. The learner highlighted a passage in the course "${title}"${subject ? ` (${subject})` : ''} and asked about it. Answer in plain, warm prose — 2 to 5 sentences, a short code snippet only if it genuinely helps. Stay grounded in the course content provided.`,
       `Highlighted passage:\n"""${sel}"""\n\nTheir question: ${String(question || 'Explain this to me.').slice(0, 500)}\n\nRelevant course content:\n${context}`,
       900,
       0.5,

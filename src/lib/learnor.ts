@@ -1,4 +1,5 @@
 import { apiJson } from '../api';
+import { getLocalCourse, localShelfCourses } from '../content';
 
 export type LearnorSection = { heading: string; intent?: string; body: string };
 export type LearnorQuizItem = { q: string; options: string[]; correct: number; why: string };
@@ -69,13 +70,30 @@ export type ReviewRequest = {
   updated_at: string;
 };
 
-export function fetchShelf(): Promise<ShelfCourse[]> {
-  return apiJson<ShelfCourse[]>('/api/learnor/shelf');
+export async function fetchShelf(): Promise<ShelfCourse[]> {
+  const local = localShelfCourses();
+  let remote: ShelfCourse[] = [];
+  try {
+    remote = await apiJson<ShelfCourse[]>('/api/learnor/shelf');
+  } catch {
+    remote = [];
+  }
+  // Bundled courses first, then DB courses, de-duped by slug.
+  const seen = new Set(local.map((c) => c.slug));
+  return [...local, ...remote.filter((c) => !seen.has(c.slug))];
 }
 
-export function fetchCourse(slug: string, key?: string | null): Promise<LearnorCourse> {
+export async function fetchCourse(slug: string, key?: string | null): Promise<LearnorCourse> {
+  const bundled = getLocalCourse(slug);
+  if (bundled) return bundled;
   const query = key ? `?key=${encodeURIComponent(key)}` : '';
   return apiJson<LearnorCourse>(`/api/learnor/course/${encodeURIComponent(slug)}${query}`);
+}
+
+// Is a slug served from the bundled repo (so the ask endpoint needs the
+// client to supply the surrounding context)?
+export function isLocalCourse(slug: string): boolean {
+  return getLocalCourse(slug) !== null;
 }
 
 export function sendIntake(messages: IntakeMessage[]): Promise<IntakeResult> {
@@ -106,6 +124,9 @@ export function askInCourse(payload: {
   key?: string | null;
   selection: string;
   question: string;
+  title?: string;
+  subject?: string;
+  context?: string;
 }): Promise<{ answer: string }> {
   return apiJson('/api/learnor/ask', {
     method: 'POST',

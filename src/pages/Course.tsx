@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../lib/theme';
-import { askInCourse, fetchCourse, LearnorCourse } from '../lib/learnor';
+import { askInCourse, fetchCourse, isLocalCourse, LearnorCourse } from '../lib/learnor';
 import { apiUrl } from '../api';
 
 const SERIF = '"Instrument Serif", "EB Garamond", Georgia, serif';
@@ -57,6 +57,18 @@ export function Markdown({ text }: { text: string }) {
       i++;
       while (i < lines.length && !lines[i].trim().startsWith('```')) { code.push(lines[i]); i++; }
       i++;
+      // ```svg → render the authored inline SVG as a theme-aware visual
+      if (lang === 'svg') {
+        out.push(
+          <figure
+            key={`svg-${i}`}
+            aria-hidden="true"
+            style={{ margin: '22px 0', padding: '18px', border: `1px solid ${C.faint}`, borderRadius: 12, background: C.softer, color: C.ink, display: 'flex', justifyContent: 'center' }}
+            dangerouslySetInnerHTML={{ __html: code.join('\n') }}
+          />,
+        );
+        continue;
+      }
       out.push(
         <div key={`code-${i}`} style={{ margin: '16px 0 20px', borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.faint}` }}>
           {lang && (
@@ -67,6 +79,23 @@ export function Markdown({ text }: { text: string }) {
           <pre style={{ margin: 0, padding: '14px 18px', background: C.softer, fontFamily: MONO, fontSize: 13, lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre', color: C.ink }}>
             <code>{code.join('\n')}</code>
           </pre>
+        </div>,
+      );
+      continue;
+    }
+
+    // Blockquote → definition / key-idea callout
+    if (trimmed.startsWith('>')) {
+      const quote: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('>')) {
+        quote.push(lines[i].trim().replace(/^>\s?/, ''));
+        i++;
+      }
+      out.push(
+        <div key={`quote-${i}`} style={{ margin: '18px 0', padding: '16px 20px', background: C.softer, borderLeft: `3px solid ${C.red}`, borderRadius: '0 10px 10px 0' }}>
+          <div style={{ fontFamily: SERIF, fontSize: 17, fontStyle: 'italic', lineHeight: 1.6, color: C.ink }}>
+            {renderInline(quote.join(' '))}
+          </div>
         </div>,
       );
       continue;
@@ -273,8 +302,8 @@ function ExercisesTab({ course }: { course: LearnorCourse }) {
 
 // ── Highlight-to-ask ──────────────────────────────────────────────────────────
 
-function AskPanel({ course, previewKey, selection, onClose }: {
-  course: LearnorCourse; previewKey: string | null; selection: string; onClose: () => void;
+function AskPanel({ course, previewKey, selection, context, onClose }: {
+  course: LearnorCourse; previewKey: string | null; selection: string; context: string; onClose: () => void;
 }) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
@@ -287,7 +316,17 @@ function AskPanel({ course, previewKey, selection, onClose }: {
     setBusy(true);
     setError('');
     try {
-      const result = await askInCourse({ slug: course.slug, key: previewKey, selection, question: q });
+      const result = await askInCourse({
+        slug: course.slug,
+        key: previewKey,
+        selection,
+        question: q,
+        title: course.title,
+        subject: course.subject,
+        // Bundled courses aren't in the DB — send the surrounding section so
+        // the tutor can answer in context without a lookup.
+        context: isLocalCourse(course.slug) ? context : undefined,
+      });
       setAnswer(result.answer);
     } catch (err) {
       setError((err as Error).message);
@@ -295,6 +334,9 @@ function AskPanel({ course, previewKey, selection, onClose }: {
       setBusy(false);
     }
   }
+
+  // Open → explain the highlighted passage straight away.
+  useEffect(() => { ask('Explain this to me in context.'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function readAloud() {
     if (!answer || speaking) return;
@@ -320,13 +362,14 @@ function AskPanel({ course, previewKey, selection, onClose }: {
 
   return (
     <div style={{
-      position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(400px, 92vw)', zIndex: 60,
-      background: C.paper, borderLeft: `1px solid ${C.faint}`, boxShadow: '-24px 0 80px rgba(0,0,0,0.18)',
-      display: 'flex', flexDirection: 'column',
+      position: 'fixed', top: 0, left: 0, bottom: 0, width: 'min(400px, 92vw)', zIndex: 60,
+      background: C.paper, borderRight: `1px solid ${C.faint}`, boxShadow: '24px 0 80px rgba(0,0,0,0.18)',
+      display: 'flex', flexDirection: 'column', animation: 'askSlideIn 0.22s ease',
     }}>
+      <style>{'@keyframes askSlideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}'}</style>
       <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.faint}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.red }}>
-          Ask Learnor
+          ✦ Learnor explains
         </div>
         <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mute, fontFamily: MONO, fontSize: 13 }}>✕</button>
       </div>
@@ -399,6 +442,9 @@ export default function Course() {
   const [selection, setSelection] = useState('');
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number } | null>(null);
   const [askOpen, setAskOpen] = useState(false);
+  const [bookmark, setBookmark] = useState<{ y: number; label: string } | null>(null);
+  const [showResume, setShowResume] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -407,6 +453,41 @@ export default function Course() {
       .then(setCourse)
       .catch((err) => setError((err as Error).message));
   }, [slug, previewKey]);
+
+  // Load a saved bookmark for this course → offer to resume.
+  useEffect(() => {
+    if (!slug) return;
+    try {
+      const raw = localStorage.getItem(`learnor-bookmark-${slug}`);
+      if (raw) { setBookmark(JSON.parse(raw)); setShowResume(true); }
+    } catch { /* ignore */ }
+  }, [slug]);
+
+  function saveBookmark() {
+    const label = course?.content.sections[activeSection]?.heading || 'your spot';
+    const next = { y: window.scrollY, label };
+    try { localStorage.setItem(`learnor-bookmark-${slug}`, JSON.stringify(next)); } catch { /* ignore */ }
+    setBookmark(next);
+    setShowResume(false);
+    setJustSaved(true);
+    window.setTimeout(() => setJustSaved(false), 1800);
+  }
+
+  function jumpToBookmark() {
+    if (bookmark) window.scrollTo({ top: bookmark.y, behavior: 'smooth' });
+    setShowResume(false);
+  }
+
+  // For bundled courses, hand the ask endpoint the section the selection lives in.
+  function contextForSelection(sel: string): string {
+    const sections = course?.content.sections || [];
+    const needle = sel.slice(0, 60);
+    const hit = sections.find((s) => s.body.includes(needle));
+    return (hit ? [hit] : sections)
+      .map((s) => `## ${s.heading}\n${s.body}`)
+      .join('\n\n')
+      .slice(0, 12000);
+  }
 
   // Scroll-spy for the section nav
   useEffect(() => {
@@ -592,23 +673,58 @@ export default function Course() {
         {tab === 'exercises' && <ExercisesTab course={course} />}
       </div>
 
-      {/* Floating "ask" button on selection */}
+      {/* Floating "explain" button on selection */}
       {selectionRect && !askOpen && (
         <button
           onClick={() => { setAskOpen(true); setSelectionRect(null); }}
           style={{
-            position: 'fixed', left: Math.min(Math.max(selectionRect.x - 60, 12), window.innerWidth - 140),
+            position: 'fixed', left: Math.min(Math.max(selectionRect.x - 48, 12), window.innerWidth - 130),
             top: Math.max(selectionRect.y - 44, 12), zIndex: 55,
             background: C.ink, color: C.bg, border: 'none', borderRadius: 999,
             padding: '9px 16px', fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase',
             cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
           }}
         >
-          ✦ Ask Learnor
+          ✦ Explain
         </button>
       )}
       {askOpen && (
-        <AskPanel course={course} previewKey={previewKey} selection={selection} onClose={() => setAskOpen(false)} />
+        <AskPanel course={course} previewKey={previewKey} selection={selection} context={contextForSelection(selection)} onClose={() => setAskOpen(false)} />
+      )}
+
+      {/* Resume-from-bookmark pill */}
+      {showResume && bookmark && !askOpen && (
+        <div style={{
+          position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 24, zIndex: 54,
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px 10px 18px',
+          background: C.paper, border: `1px solid ${C.faint}`, borderRadius: 999, boxShadow: '0 10px 40px rgba(0,0,0,0.22)',
+        }}>
+          <span style={{ fontFamily: SANS, fontSize: 13, color: C.ink }}>
+            Resume where you left off — <span style={{ color: C.mute }}>{bookmark.label}</span>
+          </span>
+          <button onClick={jumpToBookmark} style={{ background: C.ink, color: C.bg, border: 'none', borderRadius: 999, padding: '8px 14px', fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}>
+            Jump →
+          </button>
+          <button onClick={() => setShowResume(false)} style={{ background: 'none', border: 'none', color: C.mute, fontFamily: MONO, fontSize: 12, cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+
+      {/* Bookmark this spot */}
+      {!askOpen && (
+        <button
+          onClick={saveBookmark}
+          title="Bookmark your spot — resume here next time"
+          style={{
+            position: 'fixed', right: 24, bottom: 24, zIndex: 54,
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: justSaved ? C.green : C.paper, color: justSaved ? C.bg : C.ink,
+            border: `1px solid ${justSaved ? C.green : C.faint}`, borderRadius: 999,
+            padding: '11px 16px', fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase',
+            cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.16)',
+          }}
+        >
+          {justSaved ? '✓ Bookmarked' : '⚑ Bookmark'}
+        </button>
       )}
 
       <style>{`
