@@ -18,6 +18,15 @@ const CODE_KW = new Set([
 ]);
 const CODE_COLORS = { kw: '#84b8a8', str: '#dda15e', com: 'rgba(243,238,226,0.42)', num: '#8fbf7f', ink: '#f3eee2' };
 
+// Typed callouts: `> [!star] Title` → coloured box. Colours are theme vars.
+const CALLOUTS: Record<string, { color: string; icon: string; label: string }> = {
+  star: { color: 'var(--c-amber)', icon: '★', label: 'Key fact' },
+  warn: { color: 'var(--c-red)', icon: '▲', label: 'Watch out' },
+  tech: { color: 'var(--c-red)', icon: '▲', label: 'Technical note' },
+  tip: { color: 'var(--c-green)', icon: '◆', label: 'Tip' },
+  note: { color: 'var(--c-mute)', icon: '●', label: 'Note' },
+};
+
 function highlightLine(line: string, keyIdx: number): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   const re = /(--[^\n]*|#[^\n]*)|('[^']*'|"[^"]*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)/g;
@@ -118,12 +127,33 @@ export function Markdown({ text }: { text: string }) {
       continue;
     }
 
-    // Blockquote → definition / key-idea callout
+    // Blockquote → callout. `> [!star] …` etc. give typed colour callouts;
+    // a plain `>` is the italic definition/key-idea callout.
     if (trimmed.startsWith('>')) {
       const quote: string[] = [];
       while (i < lines.length && lines[i].trim().startsWith('>')) {
         quote.push(lines[i].trim().replace(/^>\s?/, ''));
         i++;
+      }
+      const typed = quote[0]?.match(/^\[!(\w+)\]\s*(.*)$/);
+      if (typed) {
+        const cfg = CALLOUTS[typed[1].toLowerCase()] || CALLOUTS.note;
+        const rest = typed[2].trim();
+        const more = quote.slice(1).join(' ').trim();
+        // Body may be inline (`> [!star] text`) or on following lines with an
+        // optional title on the marker line.
+        const title = more ? (rest || cfg.label) : cfg.label;
+        const body = more || rest;
+        out.push(
+          <div key={`co-${i}`} style={{ margin: '20px 0', padding: '14px 18px', background: C.softer, borderRadius: 12, border: `1px solid ${C.faint}`, borderLeft: `3px solid ${cfg.color}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: body ? 8 : 0 }}>
+              <span style={{ color: cfg.color, fontSize: 12 }}>{cfg.icon}</span>
+              <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: cfg.color, fontWeight: 600 }}>{title}</span>
+            </div>
+            {body && <div style={{ fontFamily: SANS, fontSize: 14, lineHeight: 1.65, color: C.ink }}>{renderInline(body)}</div>}
+          </div>,
+        );
+        continue;
       }
       out.push(
         <div key={`quote-${i}`} style={{ margin: '18px 0', padding: '16px 20px', background: C.softer, borderLeft: `3px solid ${C.red}`, borderRadius: '0 10px 10px 0' }}>
@@ -467,7 +497,7 @@ export default function Course() {
   const [searchParams] = useSearchParams();
   const previewKey = searchParams.get('key');
   const navigate = useNavigate();
-  const { dark } = useTheme();
+  const { dark, toggle } = useTheme();
 
   const [course, setCourse] = useState<LearnorCourse | null>(null);
   const [error, setError] = useState('');
@@ -666,23 +696,32 @@ export default function Course() {
           )}
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 44, position: 'sticky', top: course.published ? 0 : 34, background: C.bg, padding: '12px 0', zIndex: 20 }}>
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              style={{
-                border: `1px solid ${tab === t.key ? C.ink : C.faint}`,
-                background: tab === t.key ? C.ink : 'transparent',
-                color: tab === t.key ? C.bg : C.mute,
-                borderRadius: 999, padding: '10px 18px', cursor: 'pointer',
-                fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase',
-              }}
-            >
-              {t.label} · {t.count}
-            </button>
-          ))}
+        {/* Tabs + theme toggle */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginBottom: 44, position: 'sticky', top: course.published ? 0 : 34, background: C.bg, padding: '12px 0', zIndex: 20 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                style={{
+                  border: `1px solid ${tab === t.key ? C.ink : C.faint}`,
+                  background: tab === t.key ? C.ink : 'transparent',
+                  color: tab === t.key ? C.bg : C.mute,
+                  borderRadius: 999, padding: '10px 18px', cursor: 'pointer',
+                  fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase',
+                }}
+              >
+                {t.label} · {t.count}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={toggle}
+            title={dark ? 'Light mode' : 'Dark mode'}
+            style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 999, border: `1px solid ${C.faint}`, background: 'transparent', color: C.ink, cursor: 'pointer', fontFamily: MONO, fontSize: 14, display: 'grid', placeItems: 'center' }}
+          >
+            {dark ? '☀' : '☾'}
+          </button>
         </div>
 
         {tab === 'notes' && content.sections.map((section, i) => (
