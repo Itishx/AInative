@@ -264,8 +264,6 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
     enabled: !focused && !input.trim(),
   });
   const finishers = state.courses.filter((c) => c.status === 'completed').length;
-  const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length;
-
   async function handleStart(e: React.FormEvent) {
     e.preventDefault();
     const v = input.trim();
@@ -312,7 +310,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
 
         {/* Kicker */}
         <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: t.red, marginBottom: 32 }}>
-          — active learning. not passive watching.
+          — an ai learning platform · reading, not watching
         </div>
 
         {/* Headline */}
@@ -323,15 +321,16 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
         }}>
           Learn whatever<br />
           you want —{' '}
-          <span style={{ fontStyle: 'italic', color: t.red }}>for real.</span>
+          <span style={{ fontStyle: 'italic', color: t.red }}>already built.</span>
         </h1>
 
         {/* Sub */}
         <p style={{
           fontFamily: SERIF, fontSize: 20, lineHeight: 1.4,
-          color: t.mute, fontStyle: 'italic', margin: '0 auto 42px', maxWidth: 460,
+          color: t.mute, fontStyle: 'italic', margin: '0 auto 42px', maxWidth: 500,
         }}>
-          Type a topic. Get a tiny course. Finish before it disappears.
+          A shelf of complete, human-reviewed courses — ready to read now.
+          Or type any topic below and get a fresh one in minutes.
         </p>
 
         {/* Big input box */}
@@ -488,7 +487,7 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
           </div>
           <span style={{ color: t.ruleFaint, fontFamily: MONO, fontSize: 14 }}>·</span>
           <div style={{ fontFamily: MONO, fontSize: 11, color: t.mute, letterSpacing: '0.1em' }}>
-            <span style={{ color: t.amber }}>↺</span> {recommitted.toLocaleString()} recommitted
+            <span style={{ color: t.red }}>✓</span> every course human-reviewed
           </div>
           <span style={{ color: t.ruleFaint, fontFamily: MONO, fontSize: 14 }}>·</span>
           <div style={{ fontFamily: MONO, fontSize: 11, color: t.mute, letterSpacing: '0.1em' }}>no card required</div>
@@ -504,9 +503,9 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
           )}
         </div>
 
-<div style={{ marginTop: 24 }}>
+<div style={{ marginTop: 24, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
-            onClick={() => navigate('/anything')}
+            onClick={() => navigate('/browse')}
             style={{
               background: 'transparent',
               border: `1px solid ${t.ruleFaint}`,
@@ -520,7 +519,24 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
               textTransform: 'uppercase',
             }}
           >
-            Or wander through everything it can teach →
+            Browse the shelf →
+          </button>
+          <button
+            onClick={() => navigate('/request')}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${t.ruleFaint}`,
+              color: t.ink,
+              cursor: 'pointer',
+              padding: '12px 18px',
+              borderRadius: 999,
+              fontFamily: MONO,
+              fontSize: 11,
+              letterSpacing: '0.16em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Request any topic →
           </button>
         </div>
       </div>
@@ -530,14 +546,14 @@ function HeroSection({ onNav }: { onNav: (k: string) => void }) {
 
 // ── Ticker ────────────────────────────────────────────────────────────────────
 const TICKER_ITEMS = [
-  '↺ conversational french — dani.w — expired, new deadline set',
-  '✓ docker in anger — mira.k — finished 14d 02h early',
-  '↺ rust ownership — anon_99 — recommitted day 2',
-  '✓ linear algebra — yael — finished 04d 22h early',
-  '↺ color theory — nikoj — missed deadline, back on track',
-  '✓ public speaking — aleks — finished 01d 16h early',
-  '↺ react hooks — pin22 — second attempt underway',
-  '✓ intro to probability — ojo_22 — finished 11d 19h early',
+  '✓ complete python — published to the shelf · reviewed',
+  '✎ machine learning — end to end — in review',
+  '✓ complete sql — 9 sections · 8-question quiz · live',
+  '✎ prompt engineering — building now',
+  '✓ git & github — reviewed and published',
+  '✎ statistics for data science — in review',
+  '✓ data analysis with pandas — live on the shelf',
+  '✎ complete react — end to end — building now',
 ];
 
 function TickerStrip() {
@@ -552,7 +568,7 @@ function TickerStrip() {
         fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase',
       }}>
         {all.map((s, i) => (
-          <span key={i} style={{ color: s.startsWith('↺') ? '#d99b45' : t.bg, flexShrink: 0 }}>{s}</span>
+          <span key={i} style={{ color: s.startsWith('✎') ? '#d99b45' : t.bg, flexShrink: 0 }}>{s}</span>
         ))}
       </div>
     </div>
@@ -563,16 +579,16 @@ function TickerStrip() {
 function ComparisonSection() {
   const { t, mob } = useTheme();
   const rows = [
-    { source: 'YouTube', verdict: 'You watch. You forget.' },
-    { source: 'A textbook', verdict: 'You read. You zone out.' },
-    { source: 'Learnor', verdict: 'You explain it back. You keep it.', highlight: true },
+    { source: 'A video course', verdict: 'You watch at 1x. Two hours gone.' },
+    { source: 'A textbook', verdict: 'You read — but no one checks you got it.' },
+    { source: 'Learnor', verdict: 'You read in half the time, then prove it.', highlight: true },
   ];
   return (
     <Wrap bg={t.paperAlt} pad="80px 32px" borderBottom>
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
-        <Kicker>Why it works</Kicker>
+        <Kicker>Why reading</Kicker>
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(38px, 5vw, 68px)', margin: '16px 0 40px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-          Built for understanding,<br /><i>not watching.</i>
+          Twice as fast as video.<br /><i>Half the drifting.</i>
         </h2>
         <div style={{ borderTop: `2px solid ${t.ink}` }}>
           {rows.map((row) => (
@@ -590,7 +606,7 @@ function ComparisonSection() {
           ))}
         </div>
         <p style={{ fontFamily: SERIF, fontSize: 17, color: t.mute, lineHeight: 1.65, margin: '28px 0 0', fontStyle: 'italic', maxWidth: 600 }}>
-          If you actually want to understand something — not just watch it — this is for you.
+          Every Learnor course is a single clean page — read it, take the quiz, do the exercises. Understanding, not hours logged.
         </p>
       </div>
     </Wrap>
@@ -677,23 +693,88 @@ function CountdownIllustration() {
   );
 }
 
+function ReviewIllustration() {
+  const { t } = useTheme();
+  return (
+    <div style={{ border: `1px solid ${t.ink}`, background: t.bg, padding: 18, minHeight: 220 }}>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.14em' }}>▸ PENDING REVIEW</div>
+      <div style={{ fontFamily: SERIF, fontSize: 22, color: t.ink, marginTop: 10, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+        Complete SQL — End to End
+      </div>
+      <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 10, color: t.mute, letterSpacing: '0.06em' }}>
+        9 sections · 8-question quiz · 3 exercises
+      </div>
+      <div style={{ marginTop: 16, borderTop: `1px dashed ${t.ruleDash}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {[['Structure', 'all sections present'], ['Fact-check', 'skeptic pass · clean'], ['Fits the brief', 'end-to-end · verified']].map(([label, note]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 15, height: 15, borderRadius: '50%', background: t.green, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <span style={{ fontFamily: MONO, fontSize: 8, color: t.bg }}>✓</span>
+            </span>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: t.ink, letterSpacing: '0.06em' }}>{label}</span>
+            <span style={{ marginLeft: 'auto', fontFamily: MONO, fontSize: 9, color: t.mute, letterSpacing: '0.04em' }}>{note}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+        <div style={{ flex: 1, textAlign: 'center', background: t.ink, color: t.bg, padding: '9px 0', fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Approve &amp; publish</div>
+        <div style={{ flex: 1, textAlign: 'center', border: `1px solid ${t.ink}`, color: t.ink, padding: '9px 0', fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Request changes</div>
+      </div>
+    </div>
+  );
+}
+
+function ReadIllustration() {
+  const { t } = useTheme();
+  return (
+    <div style={{ border: `1px solid ${t.ink}`, background: t.bg, padding: 18, minHeight: 220 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+        {['Notes', 'Quiz', 'Exercises'].map((tab, i) => (
+          <span key={tab} style={{
+            fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
+            padding: '6px 10px', borderRadius: 999,
+            background: i === 0 ? t.ink : 'transparent',
+            color: i === 0 ? t.bg : t.mute,
+            border: i === 0 ? 'none' : `1px solid ${t.ruleFaint}`,
+          }}>{tab}</span>
+        ))}
+      </div>
+      <div style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 20, color: t.red, lineHeight: 0.9 }}>03</div>
+      <div style={{ fontFamily: SERIF, fontSize: 20, color: t.ink, marginTop: 2, letterSpacing: '-0.02em' }}>Joining tables</div>
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {['A join stitches rows from two tables on a shared key.', 'INNER keeps only matches; LEFT keeps every left row.'].map((line) => (
+          <div key={line} style={{ fontFamily: SANS, fontSize: 12.5, lineHeight: 1.5, color: t.inkSoft }}>
+            {line}
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10, padding: '9px 12px', background: t.paper, borderLeft: `2px solid ${t.red}`, fontFamily: MONO, fontSize: 10, color: t.ink, lineHeight: 1.5 }}>
+        SELECT * FROM orders o<br />JOIN customers c ON c.id = o.customer_id;
+      </div>
+      <div style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8, border: `1px solid ${t.ruleFaint}`, borderRadius: 999, padding: '6px 12px' }}>
+        <span style={{ fontFamily: MONO, fontSize: 9, color: t.red, letterSpacing: '0.12em' }}>✦ ASK LEARNOR</span>
+        <span style={{ fontFamily: SANS, fontSize: 11, color: t.mute, fontStyle: 'italic' }}>“why o and c?”</span>
+      </div>
+    </div>
+  );
+}
+
 function HowSection() {
   const { t, mob } = useTheme();
   const steps = [
     {
-      n: '01', kicker: 'Step one', title: 'Say it out loud.',
-      body: 'Name the thing. Learnor turns it into short lessons.',
+      n: '01', kicker: 'Step one', title: 'Ask for anything.',
+      body: 'Tell Learnor what you want to learn. It drafts a complete course — first principles to real, applied proficiency.',
       art: <PromptIllustration />,
     },
     {
-      n: '02', kicker: 'Step two', title: 'Pick a deadline.',
-      body: 'Choose the date. The clock starts when you commit.',
-      art: <CalendarIllustration />,
+      n: '02', kicker: 'Step two', title: 'AI builds it. A human checks it.',
+      body: 'Every course is fact-checked, then reviewed by a person before it goes live. Nothing half-baked ever reaches you.',
+      art: <ReviewIllustration />,
     },
     {
-      n: '03', kicker: 'Step three', title: 'Commit. Recommit if needed.',
-      body: 'The tutor teaches step by step. Miss the deadline, set a new one, and keep going.',
-      art: <CountdownIllustration />,
+      n: '03', kicker: 'Step three', title: 'Read it. Prove it.',
+      body: 'One clean page: notes, a quiz, and hands-on exercises. Highlight any line to ask a follow-up. Twice as fast as video.',
+      art: <ReadIllustration />,
     },
   ];
   return (
@@ -702,7 +783,7 @@ function HowSection() {
         <div>
           <Kicker>How it works</Kicker>
           <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 0', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-            Three steps.<br /><i>One</i> commitment.
+            Three steps.<br /><i>One</i> reviewed course.
           </h2>
         </div>
       </div>
@@ -951,33 +1032,33 @@ function FeaturesSection({ onNav }: { onNav: (k: string) => void }) {
   const { t, mob } = useTheme();
   const navigate = useNavigate();
   const trio = [
-    { n: '02', title: 'Recommit.', body: 'Miss a deadline and set a new one. Progress saves. The clock restarts.', art: <TombstoneViz /> },
-    { n: '03', title: 'One pause.', body: 'A single 72-hour save. Spend it carefully.', art: <PauseViz /> },
-    { n: '04', title: 'Finishers.', body: 'Beat the clock and show up on the wall.', art: <LeaderboardViz /> },
-    { n: '05', title: 'Notes.', body: 'Each lesson leaves clean notes behind.', art: <NotesViz /> },
-    { n: '06', title: 'Quizzes.', body: 'MCQs check recall before you move on.', art: <QuizViz /> },
+    { n: '02', title: 'Reviewed by a human.', body: 'No course auto-publishes. A person signs off on every one before it hits the shelf.', art: <ReviewIllustration /> },
+    { n: '03', title: 'Highlight to ask.', body: 'Select any line and the tutor answers in context — right where you got stuck.', art: <ReadIllustration /> },
+    { n: '04', title: 'Finishers.', body: 'Finish a course and show up on the wall.', art: <LeaderboardViz /> },
+    { n: '05', title: 'Notes.', body: 'Each course leaves clean notes behind.', art: <NotesViz /> },
+    { n: '06', title: 'Quizzes & exercises.', body: 'Check recall, then write it yourself with worked solutions.', art: <QuizViz /> },
     { n: '07', title: 'Weekly rankings.', body: 'See where you stand against other learners. Streak days, courses finished, live every week.', art: <WeeklyRankViz /> },
   ];
   return (
     <Wrap id="features" pad="120px 32px">
       <div style={{ maxWidth: 720, marginBottom: 48 }}>
-        <Kicker>The product</Kicker>
+        <Kicker>Inside a course</Kicker>
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 24px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-          Chat on the left.<br />Workspace on the <span style={{ color: t.red }}>right.</span>
+          Read the page.<br />Ask the <span style={{ color: t.red }}>hard parts.</span>
         </h2>
         <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
-          Learn by conversation, but never stare at a wall of text. The workspace shifts with the lesson: visuals when you need clarity, and for coding lessons it opens built-in practice with code and output checks right there.
+          Every course is one clean page — notes, examples, code, all in a single reading column. Highlight any line and the tutor answers in context. Coding topics open a practice surface with output checks, right there.
         </p>
       </div>
-      {/* Tutor feature */}
+      {/* Reading + ask feature */}
       <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '0.72fr 1.28fr', gap: mob ? 32 : 48, alignItems: 'start', marginBottom: mob ? 48 : 96 }}>
         <div>
           <Kicker color={t.mute}>Feature 01</Kicker>
           <h3 style={{ fontFamily: SERIF, fontSize: 54, margin: '12px 0 16px', fontWeight: 400, letterSpacing: '-0.02em', color: t.ink, lineHeight: 1 }}>
-            The course room.
+            Read, then ask.
           </h3>
           <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.inkSoft, margin: 0 }}>
-            The tutor teaches one step at a time in chat. The workspace carries the heavy stuff: examples, tables, diagrams, notes, and when the lesson turns coding-related, it opens a mini practice surface with code and output checks on the spot.
+            You read at your own pace — every abstract idea followed by a concrete example. Stuck on a line? Highlight it and ask; the tutor answers in context and can read the answer aloud. When the topic turns to code, a practice surface opens with real output checks.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
             <button onClick={() => navigate('/auth')} style={{
@@ -1503,10 +1584,10 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
       <div style={{ maxWidth: 780, marginBottom: 56 }}>
         <Kicker>Pricing</Kicker>
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px, 7vw, 108px)', margin: '16px 0 20px', letterSpacing: '-0.03em', fontWeight: 400, color: t.ink, lineHeight: 0.95 }}>
-          The only thing we won't <i>give up on.</i>
+          Read for free.<br /><i>Upgrade for more.</i>
         </h2>
         <p style={{ fontFamily: SERIF, fontSize: 22, color: t.inkSoft, lineHeight: 1.35, margin: 0 }}>
-          Start free. Upgrade when the clock starts working.
+          The whole shelf is free to read. Upgrade for unlimited requests, notes, and voice.
         </p>
       </div>
 
@@ -1600,10 +1681,10 @@ function PricingSection({ onNav, isIndia }: { onNav: (k: string) => void; isIndi
 
 // ── FAQ ───────────────────────────────────────────────────────────────────────
 const FAQS: [string, string][] = [
-  ['What happens if I miss the deadline?', 'The course expires. Your progress is saved. Set a new deadline and keep going. Nothing is permanently lost.'],
-  ['Can I extend a deadline?', 'Not mid-course. But if you miss it, you can recommit with a fresh deadline. You also get one 72-hour pause per course.'],
-  ['What if I finish early?', 'You keep the course, get the certificate, and hit the finisher wall.'],
-  ['Does the AI teach well?', 'It teaches in tiny steps, checks understanding, and uses the workspace for visuals, practice, and coding checks when useful.'],
+  ['Are the courses actually good?', 'Every course is fact-checked, then reviewed by a human before it publishes. Nothing goes live automatically — if it\'s on the shelf, a person signed off on it.'],
+  ['What if the course I want isn\'t there?', 'Ask for it. A short chat captures what you\'re after, Learnor builds a course to fit, a human reviews it, and you get an email when it\'s live — usually within a day.'],
+  ['Why reading instead of video?', 'Reading is about twice as fast as watching, and you drift less. Each course is a single clean page you can skim, search, and revisit — with a quiz and exercises to make it stick.'],
+  ['Does the AI teach well?', 'It explains in plain language, puts a concrete example after every idea, and lets you highlight any line to ask a follow-up in context. Coding topics come with hands-on practice.'],
 ];
 
 function FAQSection() {
@@ -1724,17 +1805,17 @@ function FinalCTA({ onNav }: { onNav: (k: string) => void }) {
           One last thing
         </div>
         <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(72px, 11vw, 160px)', margin: '20px 0', letterSpacing: '-0.035em', fontWeight: 400, color: t.bg, lineHeight: 0.9 }}>
-          Pick a thing.<br />Pick a date.<br /><i style={{ color: t.red }}>Or don't.</i>
+          Pick a thing.<br />Start reading.<br /><i style={{ color: t.red }}>Today.</i>
         </h2>
         <p style={{ fontFamily: SERIF, fontSize: 24, color: mutedText, fontStyle: 'italic', margin: '32px auto', maxWidth: 600, lineHeight: 1.4 }}>
-          The courses you'll never take are already gathering dust. At least this way they go out with a bang.
+          The shelf is already full — complete courses, reviewed and waiting. Open one, or ask for the thing no one's built yet.
         </p>
-        <button onClick={() => onNav('new')} style={{
+        <button onClick={() => onNav('browse')} style={{
           background: t.red, color: '#faf7f0', border: 'none', padding: '20px 40px',
           fontFamily: MONO, fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', cursor: 'pointer', marginTop: 16,
-        }}>Start course →</button>
+        }}>Browse the shelf →</button>
         <div style={{ marginTop: 24, fontFamily: MONO, fontSize: 11, color: softText, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-          no card required · first course is free
+          no card required · the whole shelf is free to read
         </div>
       </div>
     </section>
@@ -1745,10 +1826,8 @@ function FinalCTA({ onNav }: { onNav: (k: string) => void }) {
 function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
   const { t, mob } = useTheme();
   const { state } = useStore();
-  const finishers = state.courses.filter((c) => c.status === 'completed').length;
-  const recommitted = state.courses.filter((c) => c.status === 'tombstone' || c.status === 'expired').length;
-  const footerLinks: [string, [string, string][]][] = [
-    ['Product', [['how', 'How it works'], ['features', 'Features'], /* ['instructors', 'Teach here'], */ ['pricing', 'Pricing'], ['new', 'Start a course']]],
+  const finishers = state.courses.filter((c) => c.status === 'completed').length;  const footerLinks: [string, [string, string][]][] = [
+    ['Product', [['browse', 'Browse the shelf'], ['request', 'Request a course'], ['how', 'How it works'], ['features', 'Features'], ['pricing', 'Pricing']]],
     ['Social proof', [['leaderboard', 'Leaderboard'], ['leaderboard-page', 'Full wall'], ['dashboard', 'Sample dashboard']]],
     ['Company', [['#', 'About'], ['#', 'Manifesto'], ['#', 'Careers'], ['#', 'Press']]],
     ['Legal', [['#', 'Terms'], ['#', 'Privacy'], ['#', 'Security'], ['#', 'Contact']]],
@@ -1765,7 +1844,7 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
                 <b style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
               </div>
               <p style={{ fontFamily: SERIF, fontSize: 16, lineHeight: 1.4, color: t.mute, marginTop: 10, marginBottom: 0 }}>
-                A learning platform with stakes. Commit to a deadline. Miss it? Recommit.
+                An AI learning platform. A shelf of complete courses, each reviewed by a human. Learn whatever you want.
               </p>
             </>
           )}
@@ -1779,12 +1858,12 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
                 <b style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, letterSpacing: '-0.055em', color: t.ink }}>Learnor</b>
               </div>
               <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.4, color: t.ink, marginTop: 18, maxWidth: 320 }}>
-                A learning platform with stakes. Commit to a deadline. Miss it? Recommit.
+                An AI learning platform. A shelf of complete courses, each reviewed by a human. Learn whatever you want.
               </p>
               <div style={{ marginTop: 20, padding: '10px 14px', border: `1px solid ${t.ink}`, display: 'inline-flex', gap: 16, alignItems: 'center', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
                 <span style={{ color: t.green }}>● {finishers} finished</span>
                 <span style={{ color: t.mute }}>·</span>
-                <span style={{ color: t.amber }}>↺ {recommitted.toLocaleString()} recommitted</span>
+                <span style={{ color: t.red }}>✓ human-reviewed</span>
               </div>
             </div>
           )}
@@ -1800,12 +1879,12 @@ function SiteFooter({ onNav }: { onNav: (k: string) => void }) {
           ))}
         </div>
         <div style={{ display: 'flex', flexDirection: mob ? 'column' : 'row', justifyContent: 'space-between', alignItems: mob ? 'flex-start' : 'center', gap: mob ? 4 : 0, marginTop: 24, fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.mute }}>
-          <span>© 2026 LEARNOR · no progress is permanently lost</span>
-          <span>made with stakes</span>
+          <span>© 2026 LEARNOR · every course reviewed before it ships</span>
+          <span>reading, not watching</span>
         </div>
         {/* Giant closing wordmark */}
         <div style={{ fontFamily: SERIF, fontSize: 'clamp(36px, 5vw, 72px)', letterSpacing: '-0.04em', lineHeight: 1, color: t.ink, marginTop: 32, textAlign: 'center', opacity: 0.5 }}>
-          <i>commit.</i> or <span style={{ color: t.red }}>recommit.</span>
+          <i>read it.</i> then <span style={{ color: t.red }}>prove it.</span>
         </div>
       </div>
     </footer>
@@ -1880,6 +1959,7 @@ export default function Landing() {
     if (target === 'profile') { navigate(user ? '/profile' : '/auth'); return; }
     if (target === 'leaderboard' || target === 'leaderboard-page') { navigate('/leaderboard'); return; }
     if (target === 'browse') { navigate('/browse'); return; }
+    if (target === 'request') { navigate('/request'); return; }
     if (target === 'create') { navigate('/create'); return; }
     if (target === 'home') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     const el = document.getElementById(target);
